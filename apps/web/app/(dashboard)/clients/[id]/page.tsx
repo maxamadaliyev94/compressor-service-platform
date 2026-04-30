@@ -130,7 +130,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
             <AddBranchButton clientId={client.id} />
           </div>
           <div className="space-y-3">
-            {client.branches.map(branch => (
+            {client.branches.map((branch: (typeof client.branches)[0]) => (
               <div key={branch.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
                 <div className="flex justify-between items-start mb-2">
                   <div className="font-medium text-sm">{branch.name}</div>
