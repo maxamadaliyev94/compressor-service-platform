@@ -5,6 +5,30 @@ import AddBranchButton from './AddBranchButton'
 import ClientActions from './ClientActions'
 import { auth } from '@/auth'
 
+type Branch = {
+  id: string
+  name: string
+  address?: string | null
+  contactPerson?: string | null
+  phone?: string | null
+  workingHours?: string | null
+  objects: {
+    id: string
+    name: string
+    equipment: {
+      id: string
+      brand: string
+      model: string
+      serialNumber?: string | null
+      currentHours: number
+      nextServiceHours?: number | null
+      warrantyUntil?: Date | null
+      warrantyVoided: boolean
+      tasks: { id: string }[]
+    }[]
+  }[]
+}
+
 export default async function ClientPage({ params }: { params: { id: string } }) {
   const session = await auth()
   const isAdmin = session?.user?.role === 'ADMIN'
@@ -27,8 +51,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   })
   if (!client) notFound()
 
-  const allEquipment = client.branches.flatMap((b: (typeof client.branches)[0]) => b.objects.flatMap((o: (typeof b.objects)[0]) => o.equipment))
-  const allTasks = allEquipment.flatMap((e: (typeof allEquipment)[0]) => e.tasks)
+  const allEquipment = client.branches.flatMap((b: Branch) => b.objects.flatMap((o) => o.equipment))
+  const allTasks = allEquipment.flatMap((e) => e.tasks)
 
   const statusColors: Record<string, string> = {
     VIP: 'bg-purple-100 text-purple-800',
@@ -130,7 +154,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
             <AddBranchButton clientId={client.id} />
           </div>
           <div className="space-y-3">
-            {client.branches.map((branch: (typeof client.branches)[0]) => (
+            {client.branches.map((branch: Branch) => (
               <div key={branch.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
                 <div className="flex justify-between items-start mb-2">
                   <div className="font-medium text-sm">{branch.name}</div>
@@ -164,7 +188,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                 </div>
                 {branch.objects.length > 0 && (
                   <div className="flex gap-1 mt-2 flex-wrap">
-                    {branch.objects.map((obj: (typeof branch.objects)[0]) => (
+                    {branch.objects.map((obj) => (
                       <span key={obj.id} className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
                         {obj.name}
                       </span>
