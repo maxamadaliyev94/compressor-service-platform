@@ -1,0 +1,36 @@
+{
+  "name": "@csp/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "expo-router": "~3.5.0",
+    "expo-camera": "~15.0.0",
+    "expo-image-picker": "~15.0.0",
+    "expo-file-system": "~17.0.0",
+    "expo-sharing": "~12.0.0",
+    "react": "18.2.0",
+    "react-native": "0.74.0",
+    "nativewind": "^4.0.0",
+    "react-native-mmkv": "^2.12.0",
+    "react-native-signature-canvas": "^4.7.0",
+    "@tanstack/react-query": "^5.40.0",
+    "@trpc/client": "^11.0.0",
+    "@trpc/react-query": "^11.0.0",
+    "zod": "^3.23.0",
+    "date-fns": "^3.6.0",
+    "@csp/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.0",
+    "typescript": "^5.4.0",
+    "tailwindcss": "^3.4.0"
+  }
+}

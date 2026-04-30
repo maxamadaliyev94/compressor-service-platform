@@ -1,0 +1,104 @@
+# Compressor Service Platform — Cursor Rules
+
+## Контекст проекта
+Это FSM-система (Field Service Management) для сервисного обслуживания компрессорного оборудования.
+Три интерфейса: веб-панель (Next.js), мобилка для инженеров (Expo), клиентский кабинет.
+
+## Стек
+- Монорепо: pnpm workspaces + Turborepo
+- Веб: Next.js 14 (App Router) + Tailwind CSS + shadcn/ui
+- Мобилка: Expo (React Native) + NativeWind
+- Backend: tRPC (в packages/api)
+- БД: PostgreSQL + Prisma ORM (в packages/db)
+- Типы: Shared в packages/shared
+- Auth: NextAuth.js v5 с role-based access
+
+## Роли пользователей
+- ADMIN — полный доступ
+- MANAGER — клиенты, объекты, задачи, отчёты
+- CHIEF_ENGINEER — распределение задач инженерам, проверка отчётов
+- ENGINEER — только свои задачи, чек-листы, фото, подпись
+- CLIENT — только свои объекты и история
+
+## Критические бизнес-правила
+1. Плановое ТО каждые 2000 моточасов (MAINTENANCE_INTERVAL)
+2. Статусы ТО: NORMAL (>300 м/ч), WARNING (100-300), URGENT (<100), OVERDUE (просрочено)
+3. Статусы гарантии: ACTIVE, EXPIRING (≤30 дней), EXPIRED, VOIDED
+4. Задача не закрывается без указания следующего ТО (моточасы или дата)
+5. Инженер не может удалять историю работ и менять гарантийные сроки
+6. Все изменения гарантии и моточасов логируются с указанием пользователя
+
+## Иерархия данных
+Client → Branch → Object → Equipment → ServiceTask → WorkReport
+
+## Правила генерации кода
+
+### Общие
+- Всегда используй TypeScript со строгой типизацией
+- Импортируй типы из @csp/shared
+- Используй Prisma через @csp/db
+- Все API вызовы через tRPC (не fetch напрямую)
+- Zod для валидации всех входящих данных
+
+### Компоненты (веб)
+- Server Components по умолчанию, 'use client' только при необходимости
+- shadcn/ui компоненты из components/ui
+- Просроченное ТО: красный бейдж bg-red-100 text-red-800
+- Скоро ТО: жёлтый бейдж bg-yellow-100 text-yellow-800
+- Гарантия истекает: оранжевый бейдж bg-orange-100 text-orange-800
+
+### Мобилка (Expo)
+- NativeWind для стилей
+- react-query для серверного стейта
+- MMKV для оффлайн хранилища
+- Оффлайн-first: сначала сохраняй локально, потом синхронизируй
+
+### Называние файлов
+- Компоненты: PascalCase.tsx
+- Утилиты/хуки: camelCase.ts
+- API роутеры: kebab-case.ts
+
+### Структура tRPC роутера
+```typescript
+export const equipmentRouter = createTRPCRouter({
+  getAll: protectedProcedure
+    .input(z.object({ clientId: z.string().optional() }))
+    .query(async ({ ctx, input }) => { ... }),
+  getById: protectedProcedure
+    .input(z.string())
+    .query(async ({ ctx, input }) => { ... }),
+  create: protectedProcedure
+    .input(createEquipmentSchema)
+    .mutation(async ({ ctx, input }) => { ... }),
+});
+```
+
+### Расчёт статуса ТО (всегда используй эту функцию из @csp/shared)
+```typescript
+export function getMaintenanceStatus(currentHours: number, nextServiceHours: number) {
+  const diff = nextServiceHours - currentHours;
+  if (diff < 0) return 'OVERDUE';
+  if (diff < 100) return 'URGENT';
+  if (diff < 300) return 'WARNING';
+  return 'NORMAL';
+}
+```
+
+### Расчёт статуса гарантии (всегда используй эту функцию из @csp/shared)
+```typescript
+export function getWarrantyStatus(warrantyUntil: Date | null, isVoided: boolean) {
+  if (isVoided) return 'VOIDED';
+  if (!warrantyUntil) return 'EXPIRED';
+  const daysLeft = differenceInDays(warrantyUntil, new Date());
+  if (daysLeft < 0) return 'EXPIRED';
+  if (daysLeft <= 30) return 'EXPIRING';
+  return 'ACTIVE';
+}
+```
+
+## Что НЕ делать
+- Не использовать any в TypeScript
+- Не делать прямые fetch запросы в компонентах (только tRPC)
+- Не давать инженеру права на удаление или изменение завершённых актов
+- Не закрывать задачу без заполнения поля nextServiceHours или nextServiceDate
+- Не хранить пароли в открытом виде

@@ -1,0 +1,16 @@
+{
+  "name": "compressor-service-platform",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "db:migrate": "pnpm --filter @csp/db migrate",
+    "db:seed": "pnpm --filter @csp/db seed",
+    "db:studio": "pnpm --filter @csp/db studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

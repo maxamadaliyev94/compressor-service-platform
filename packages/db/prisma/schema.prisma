@@ -1,0 +1,365 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CHIEF_ENGINEER
+  ENGINEER
+  CLIENT
+}
+
+enum ClientStatus {
+  VIP
+  STANDART
+  PASSIVE
+}
+
+enum EquipmentType {
+  COMPRESSOR
+  DRYER
+  RECEIVER
+  FILTER
+  NITROGEN_GENERATOR
+  OTHER
+}
+
+enum EquipmentStatus {
+  WORKING
+  STOPPED
+  REPAIR
+  PRESERVED
+  DECOMMISSIONED
+}
+
+enum WarrantyVoidReason {
+  LATE_MAINTENANCE
+  NON_ORIGINAL_PARTS
+  SELF_REPAIR
+  POOR_VENTILATION
+  OVERHEATING
+  VOLTAGE_SURGE
+  DIRTY_RADIATOR
+  OPERATION_VIOLATION
+  OTHER
+}
+
+enum TaskType {
+  PLANNED_MAINTENANCE
+  DIAGNOSTICS
+  WARRANTY_REPAIR
+  EMERGENCY
+  INSTALLATION
+  COMMISSIONING
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum TaskStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  DRAFT
+  REVIEW
+  DONE
+  REVISION
+  CANCELLED
+}
+
+enum AttachmentType {
+  BEFORE
+  AFTER
+  NAMEPLATE
+  PROBLEM_AREA
+  OTHER
+}
+
+enum ChecklistItemType {
+  CONTROL
+  WORK
+  PART
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String
+  name       String
+  role       Role     @default(ENGINEER)
+  phone      String?
+  telegramId String?
+  isActive   Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  assignedTasks ServiceTask[] @relation("AssignedEngineer")
+  createdTasks  ServiceTask[] @relation("TaskCreator")
+  workReports   WorkReport[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Client {
+  id            String       @id @default(cuid())
+  name          String
+  inn           String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  status        ClientStatus @default(STANDART)
+  comment       String?
+  country       String       @default("Узбекистан")
+  city          String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  branches Branch[]
+
+  @@map("clients")
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  clientId      String
+  name          String
+  address       String?
+  latitude      Float?
+  longitude     Float?
+  contactPerson String?
+  phone         String?
+  workingHours  String?
+  createdAt     DateTime @default(now())
+
+  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  objects Object[]
+
+  @@map("branches")
+}
+
+model Object {
+  id            String   @id @default(cuid())
+  branchId      String
+  name          String
+  description   String?
+  contactPerson String?
+  createdAt     DateTime @default(now())
+
+  branch    Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  equipment Equipment[]
+
+  @@map("objects")
+}
+
+model Equipment {
+  id                 String              @id @default(cuid())
+  objectId           String
+  type               EquipmentType
+  brand              String
+  model              String
+  serialNumber       String              @unique
+  yearOfManufacture  Int?
+  saleDate           DateTime?
+  installDate        DateTime?
+  warrantyUntil      DateTime?
+  warrantyVoided     Boolean             @default(false)
+  warrantyVoidReason WarrantyVoidReason?
+  currentHours       Int                 @default(0)
+  lastServiceHours   Int?
+  lastServiceDate    DateTime?
+  nextServiceHours   Int?
+  nextServiceDate    DateTime?
+  status             EquipmentStatus     @default(WORKING)
+  qrCode             String?             @unique
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  object Object        @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  tasks  ServiceTask[]
+
+  @@map("equipment")
+}
+
+model ServiceTask {
+  id           String       @id @default(cuid())
+  equipmentId  String
+  assignedToId String?
+  createdById  String
+  type         TaskType
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(NEW)
+  scheduledAt  DateTime?
+  completedAt  DateTime?
+  comment      String?
+  cancelReason String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  equipment  Equipment   @relation(fields: [equipmentId], references: [id])
+  assignedTo User?       @relation("AssignedEngineer", fields: [assignedToId], references: [id])
+  createdBy  User        @relation("TaskCreator", fields: [createdById], references: [id])
+  report     WorkReport?
+
+  @@map("service_tasks")
+}
+
+model WorkReport {
+  id                String    @id @default(cuid())
+  taskId            String    @unique
+  engineerId        String
+  startedAt         DateTime
+  finishedAt        DateTime?
+  currentHours      Int
+  pressure          Float?
+  oilTemp           Float?
+  airTemp           Float?
+  roomCondition     String?
+  notes             String?
+  recommendations   String?
+  nextServiceHours  Int?
+  nextServiceDate   DateTime?
+  clientSignature   String?
+  engineerSignature String?
+  pdfUrl            String?
+  actNumber         String?   @unique
+  createdAt         DateTime  @default(now())
+
+  task           ServiceTask     @relation(fields: [taskId], references: [id])
+  engineer       User            @relation(fields: [engineerId], references: [id])
+  checklistItems ChecklistItem[]
+  partsUsed      PartUsed[]
+  attachments    Attachment[]
+
+  @@map("work_reports")
+}
+
+model ChecklistItem {
+  id       String            @id @default(cuid())
+  reportId String
+  label    String
+  checked  Boolean           @default(false)
+  itemType ChecklistItemType @default(CONTROL)
+  order    Int               @default(0)
+
+  report WorkReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_items")
+}
+
+model PartUsed {
+  id       String  @id @default(cuid())
+  reportId String
+  name     String
+  article  String?
+  unit     String  @default("шт")
+  quantity Float
+
+  report WorkReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("parts_used")
+}
+
+model Attachment {
+  id        String         @id @default(cuid())
+  reportId  String
+  url       String
+  type      AttachmentType @default(OTHER)
+  caption   String?
+  createdAt DateTime       @default(now())
+
+  report WorkReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model MaintenanceRegulation {
+  id            String        @id @default(cuid())
+  name          String
+  equipmentType EquipmentType
+  intervalHours Int
+  taskType      TaskType      @default(PLANNED_MAINTENANCE)
+  description   String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  items         MaintenanceRegulationItem[]
+
+  @@map("maintenance_regulations")
+}
+
+model MaintenanceRegulationItem {
+  id           String            @id @default(cuid())
+  regulationId String
+  label        String
+  itemType     ChecklistItemType @default(CONTROL)
+  order        Int               @default(0)
+  isRequired   Boolean           @default(true)
+
+  regulation MaintenanceRegulation @relation(fields: [regulationId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_regulation_items")
+}
+
+model EquipmentBrandRef {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("equipment_brand_refs")
+}
+
+model EquipmentTypeRef {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  nameRu    String
+  isSystem  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("equipment_type_refs")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  oldValue  String?
+  newValue  String?
+  comment   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}

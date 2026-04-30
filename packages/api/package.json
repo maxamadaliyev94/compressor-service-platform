@@ -1,0 +1,17 @@
+{
+  "name": "@csp/api",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@trpc/server": "^11.0.0",
+    "zod": "^3.23.0",
+    "@csp/db": "workspace:*",
+    "@csp/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

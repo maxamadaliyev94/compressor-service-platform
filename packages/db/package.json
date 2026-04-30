@@ -1,0 +1,25 @@
+{
+  "name": "@csp/db",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "migrate": "prisma migrate dev",
+    "migrate:prod": "prisma migrate deploy",
+    "seed": "tsx prisma/seed.ts",
+    "studio": "prisma studio",
+    "generate": "prisma generate"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0",
+    "bcryptjs": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "prisma": "^5.14.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0"
+  }
+}
