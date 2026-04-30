@@ -164,7 +164,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                 </div>
                 {branch.objects.length > 0 && (
                   <div className="flex gap-1 mt-2 flex-wrap">
-                    {branch.objects.map(obj => (
+                    {branch.objects.map((obj: (typeof branch.objects)[0]) => (
                       <span key={obj.id} className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
                         {obj.name}
                       </span>
