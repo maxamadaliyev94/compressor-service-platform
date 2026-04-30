@@ -27,8 +27,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   })
   if (!client) notFound()
 
-  const allEquipment = client.branches.flatMap((b) => b.objects.flatMap((o) => o.equipment))
-  const allTasks = allEquipment.flatMap((e) => e.tasks)
+  const allEquipment = client.branches.flatMap((b: (typeof client.branches)[0]) => b.objects.flatMap((o: (typeof b.objects)[0]) => o.equipment))
+  const allTasks = allEquipment.flatMap((e: (typeof allEquipment)[0]) => e.tasks)
 
   const statusColors: Record<string, string> = {
     VIP: 'bg-purple-100 text-purple-800',
