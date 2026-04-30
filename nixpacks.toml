@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm install -g pnpm", "pnpm install"]
+
+[phases.build]
+cmds = ["pnpm run build --filter=@csp/web"]
+
+[start]
+cmd = "cd apps/web && pnpm start"
