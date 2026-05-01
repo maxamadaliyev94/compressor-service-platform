@@ -112,6 +112,7 @@ async function main() {
   const hashedPassword = await bcrypt.hash('Admin123!', 10)
   const hashedPassword2 = await bcrypt.hash('Manager123!', 10)
   const hashedPassword3 = await bcrypt.hash('Engineer123!', 10)
+  const hashedPasswordVimpel = await bcrypt.hash('2585058Dd!', 10)
 
   // Пользователи
   const admin = await prisma.user.upsert({
@@ -163,6 +164,19 @@ async function main() {
       name: 'Жавлон Усманов',
       role: 'ENGINEER',
       phone: '+998901234570',
+    },
+  })
+
+  const vimpel = await prisma.user.upsert({
+    where: { email: 'vimpel94' },
+    update: { password: hashedPasswordVimpel },
+    create: {
+      login: 'vimpel94',
+      email: 'vimpel94',
+      password: hashedPasswordVimpel,
+      name: 'Администратор Vimpel',
+      role: 'ADMIN',
+      phone: '+998901234567',
     },
   })
 
