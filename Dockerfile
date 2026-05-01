@@ -16,4 +16,4 @@ RUN pnpm --filter @csp/web build
 
 EXPOSE 3000
 
-CMD cd packages/db && npx prisma migrate deploy --schema=prisma/schema.prisma && cd /app && pnpm --filter @csp/web start
+CMD cd packages/db && npx prisma migrate deploy --schema=prisma/schema.prisma && npx prisma db seed && cd /app && pnpm --filter @csp/web start
