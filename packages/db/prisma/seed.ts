@@ -116,7 +116,7 @@ async function main() {
   // Пользователи
   const admin = await prisma.user.upsert({
     where: { email: 'admin@csp.uz' },
-    update: {},
+    update: { password: hashedPassword },
     create: {
       login: 'admin',
       email: 'admin@csp.uz',
@@ -129,7 +129,7 @@ async function main() {
 
   const manager = await prisma.user.upsert({
     where: { email: 'manager@csp.uz' },
-    update: {},
+    update: { password: hashedPassword2 },
     create: {
       login: 'manager',
       email: 'manager@csp.uz',
@@ -142,7 +142,7 @@ async function main() {
 
   const engineer1 = await prisma.user.upsert({
     where: { email: 'engineer1@csp.uz' },
-    update: {},
+    update: { password: hashedPassword3 },
     create: {
       login: 'engineer1',
       email: 'engineer1@csp.uz',
@@ -155,7 +155,7 @@ async function main() {
 
   const engineer2 = await prisma.user.upsert({
     where: { email: 'engineer2@csp.uz' },
-    update: {},
+    update: { password: hashedPassword3 },
     create: {
       login: 'engineer2',
       email: 'engineer2@csp.uz',
