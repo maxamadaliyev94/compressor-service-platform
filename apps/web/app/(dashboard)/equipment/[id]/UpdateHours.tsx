@@ -141,9 +141,9 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
                     </label>
                     <select value={daysPerWeek} onChange={e => setDaysPerWeek(e.target.value)}
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="7">7 дней (24/7)</option>
+                      <option value="7">7 дней</option>
                       <option value="6">6 дней</option>
-                      <option value="5">5 дней (пн-пт)</option>
+                      <option value="5">5 дней</option>
                       <option value="4">4 дня</option>
                       <option value="3">3 дня</option>
                       <option value="2">2 дня</option>
