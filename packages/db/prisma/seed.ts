@@ -168,11 +168,11 @@ async function main() {
   })
 
   const vimpel = await prisma.user.upsert({
-    where: { email: 'vimpel94' },
+    where: { email: 'makdastin@gmail.com' },
     update: { password: hashedPasswordVimpel },
     create: {
       login: 'vimpel94',
-      email: 'vimpel94',
+      email: 'makdastin@gmail.com',
       password: hashedPasswordVimpel,
       name: 'Администратор Vimpel',
       role: 'ADMIN',
