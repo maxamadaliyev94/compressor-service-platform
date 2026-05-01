@@ -6,7 +6,7 @@ cmds = ["pnpm install --frozen-lockfile"]
 
 [phases.build]
 cmds = [
-  "pnpm --filter @csp/db exec prisma generate",
+  "cd packages/db && npx prisma generate",
   "pnpm --filter @csp/web build"
 ]
 
