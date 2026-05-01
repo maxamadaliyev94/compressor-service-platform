@@ -16,4 +16,4 @@ RUN pnpm --filter @csp/web build
 
 EXPOSE 3000
 
-CMD sh -c "cd /app/packages/db && DATABASE_URL=$DATABASE_URL npx prisma migrate deploy --schema=prisma/schema.prisma && npx prisma db seed && cd /app && pnpm --filter @csp/web start"
+ENTRYPOINT ["/bin/sh", "-c", "cd /app/packages/db && npx prisma migrate deploy --schema=prisma/schema.prisma && npx prisma db seed && cd /app && pnpm --filter @csp/web start"]
