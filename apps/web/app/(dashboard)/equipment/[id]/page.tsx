@@ -6,6 +6,7 @@ import PrintQR from './PrintQR'
 import UpdateHours from './UpdateHours'
 import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
+import EquipmentPhotoGallery from './EquipmentPhotoGallery'
 import { auth } from '@/auth'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
@@ -189,20 +190,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
             {eq.photos.length === 0 ? (
               <p className="text-sm text-gray-400">Фото пока не добавлены</p>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {eq.photos.map((photo, idx) => (
-                  <a
-                    key={photo.id}
-                    href={photo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block border rounded-lg overflow-hidden bg-gray-50 hover:opacity-90 transition-opacity"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photo.url} alt={`Фото оборудования ${idx + 1}`} className="w-full h-36 object-cover" />
-                  </a>
-                ))}
-              </div>
+              <EquipmentPhotoGallery photos={eq.photos.map((photo) => ({ id: photo.id, url: photo.url }))} />
             )}
           </div>
 
