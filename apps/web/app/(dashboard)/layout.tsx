@@ -2,6 +2,7 @@ import { auth, signOut } from '@/auth'
 import { redirect } from 'next/navigation'
 import { getSessionPermissions } from '@/lib/permissions'
 import DashboardSidebarClient from './DashboardSidebarClient'
+import { db } from '@/lib/db'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -47,6 +48,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   ].filter((item) => item.roles.includes(role) && hasPermission(item.key))
   const userName = session.user?.name ?? 'Пользователь'
   const userRole = session.user.role
+  const profile = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { avatarUrl: true },
+  })
   const roleLabel = roleLabels[userRole as string] || userRole || '—'
   const logoutAction = async () => {
     'use server'
@@ -58,6 +63,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       navItems={navItems}
       userName={userName}
       roleLabel={roleLabel}
+      userAvatarUrl={profile?.avatarUrl ?? null}
       logoutAction={logoutAction}
     >
       {children}

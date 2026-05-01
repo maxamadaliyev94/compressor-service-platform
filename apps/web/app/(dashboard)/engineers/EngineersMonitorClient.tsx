@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 type Engineer = {
   id: string
   name: string
+  avatarUrl: string | null
   role: string
   engineerStatus: string
   isOnline: boolean
@@ -54,9 +55,18 @@ export default function EngineersMonitorClient() {
       {engineers.map((eng) => (
         <div key={eng.id} className="bg-white border rounded-2xl overflow-hidden shadow-sm">
           <div className="h-28 bg-gradient-to-r from-blue-600 to-cyan-500 p-4 flex items-end">
-            <div className="w-12 h-12 rounded-full bg-white/95 text-blue-700 font-bold flex items-center justify-center text-lg">
-              {eng.name.trim().charAt(0).toUpperCase()}
-            </div>
+            {eng.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={eng.avatarUrl}
+                alt={eng.name}
+                className="w-12 h-12 rounded-full object-cover border-2 border-white/90 bg-white"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-white/95 text-blue-700 font-bold flex items-center justify-center text-lg">
+                {eng.name.trim().charAt(0).toUpperCase()}
+              </div>
+            )}
           </div>
 
           <div className="p-4 space-y-2">

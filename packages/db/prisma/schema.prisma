@@ -98,6 +98,7 @@ model User {
   email      String?  @unique
   password   String
   name       String
+  avatarUrl  String?
   role       Role     @default(ENGINEER)
   phone      String?
   telegramId String?
