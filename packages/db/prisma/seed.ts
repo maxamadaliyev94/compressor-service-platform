@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -108,6 +109,9 @@ async function seedRolePermissions() {
 
 async function main() {
   console.log('Seeding database...')
+  const hashedPassword = await bcrypt.hash('Admin123!', 10)
+  const hashedPassword2 = await bcrypt.hash('Manager123!', 10)
+  const hashedPassword3 = await bcrypt.hash('Engineer123!', 10)
 
   // Пользователи
   const admin = await prisma.user.upsert({
@@ -116,7 +120,7 @@ async function main() {
     create: {
       login: 'admin',
       email: 'admin@csp.uz',
-      password: 'hashed_password',
+      password: hashedPassword,
       name: 'Администратор',
       role: 'ADMIN',
       phone: '+998901234567',
@@ -129,7 +133,7 @@ async function main() {
     create: {
       login: 'manager',
       email: 'manager@csp.uz',
-      password: 'hashed_password',
+      password: hashedPassword2,
       name: 'Алишер Каримов',
       role: 'MANAGER',
       phone: '+998901234568',
@@ -142,7 +146,7 @@ async function main() {
     create: {
       login: 'engineer1',
       email: 'engineer1@csp.uz',
-      password: 'hashed_password',
+      password: hashedPassword3,
       name: 'Бобур Рахимов',
       role: 'ENGINEER',
       phone: '+998901234569',
@@ -155,7 +159,7 @@ async function main() {
     create: {
       login: 'engineer2',
       email: 'engineer2@csp.uz',
-      password: 'hashed_password',
+      password: hashedPassword3,
       name: 'Жавлон Усманов',
       role: 'ENGINEER',
       phone: '+998901234570',
