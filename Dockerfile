@@ -6,9 +6,13 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-COPY . .
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/db/package.json ./packages/db/
 
 RUN pnpm install --frozen-lockfile
+
+COPY . .
 
 RUN cd packages/db && npx prisma generate --schema=prisma/schema.prisma
 
