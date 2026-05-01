@@ -4,6 +4,7 @@ import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import AddBranchButton from './AddBranchButton'
 import ClientActions from './ClientActions'
 import { auth } from '@/auth'
+import ClientManagerCard from './ClientManagerCard'
 
 type Branch = {
   id: string
@@ -31,11 +32,14 @@ type Branch = {
 
 export default async function ClientPage({ params }: { params: { id: string } }) {
   const session = await auth()
+  if (!session) notFound()
+  const role = session.user.role
   const isAdmin = session?.user?.role === 'ADMIN'
 
   const client = await db.client.findUnique({
     where: { id: params.id },
     include: {
+      manager: { select: { id: true, name: true, email: true, phone: true } },
       branches: {
         include: {
           objects: {
@@ -50,6 +54,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     },
   })
   if (!client) notFound()
+  if (role === 'MANAGER' && client.managerId !== session.user.id) notFound()
 
   const allEquipment = client.branches.flatMap((b: Branch) => b.objects.flatMap((o) => o.equipment))
   const allTasks = allEquipment.flatMap((e) => e.tasks)
@@ -78,8 +83,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   }
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-4 md:p-8 max-w-5xl">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-6">
         <a href="/clients" className="text-gray-400 hover:text-gray-600">
           ← Клиенты
         </a>
@@ -91,7 +96,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-6">
         <div className="bg-white border rounded-xl p-4">
           <p className="text-xs text-gray-500 mb-1">Оборудования</p>
           <p className="text-2xl font-bold">{allEquipment.length}</p>
@@ -106,7 +111,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-6">
+      <ClientManagerCard
+        clientId={client.id}
+        manager={client.manager}
+        canManage={isAdmin}
+      />
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 mb-6">
         <div className="bg-white border rounded-xl p-5">
           <h2 className="font-semibold mb-3">Контакты</h2>
           <div className="space-y-2 text-sm">
@@ -201,14 +212,47 @@ export default async function ClientPage({ params }: { params: { id: string } })
         </div>
       </div>
 
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <div className="flex justify-between items-center p-4 border-b">
+      <div className="md:hidden space-y-3 mb-4">
+        {allEquipment.map((eq) => {
+          const ms = eq.nextServiceHours ? getMaintenanceStatus(eq.currentHours, eq.nextServiceHours) : 'NORMAL'
+          const ws = getWarrantyStatus(eq.warrantyUntil, eq.warrantyVoided)
+          const wsColors: Record<string, string> = {
+            ACTIVE: 'bg-green-100 text-green-800',
+            EXPIRING: 'bg-orange-100 text-orange-800',
+            EXPIRED: 'bg-gray-100 text-gray-600',
+            VOIDED: 'bg-red-100 text-red-800',
+          }
+          const wsLabels: Record<string, string> = {
+            ACTIVE: 'На гарантии',
+            EXPIRING: 'Истекает',
+            EXPIRED: 'Истекла',
+            VOIDED: 'Аннулирована',
+          }
+          return (
+            <a key={eq.id} href={`/equipment/${eq.id}`} className="block bg-white border rounded-xl p-3">
+              <div className="font-medium text-sm">{eq.brand} {eq.model}</div>
+              <div className="text-xs text-gray-500">{eq.serialNumber}</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${msColors[ms]}`}>{msLabels[ms]}</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${wsColors[ws]}`}>{wsLabels[ws]}</span>
+              </div>
+              <div className="mt-2 text-xs text-gray-600">
+                {eq.currentHours} м/ч{eq.nextServiceHours ? ` · след: ${eq.nextServiceHours} м/ч` : ''}
+              </div>
+            </a>
+          )
+        })}
+      </div>
+
+      <div className="hidden md:block bg-white border rounded-xl overflow-hidden">
+        <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center p-4 border-b">
           <h2 className="font-semibold">Оборудование</h2>
           <a href={`/equipment/new`} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">
             + Добавить
           </a>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[680px] text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left p-3 font-medium">Оборудование</th>
@@ -256,6 +300,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

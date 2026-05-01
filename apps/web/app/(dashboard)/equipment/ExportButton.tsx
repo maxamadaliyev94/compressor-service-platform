@@ -61,7 +61,7 @@ export default function ExportButton({ equipment }: { equipment: any[] }) {
   }
 
   return (
-    <button onClick={exportExcel} className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
+    <button onClick={exportExcel} className="w-full md:w-auto min-h-11 border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center justify-center gap-2">
       📥 Экспорт Excel
     </button>
   )

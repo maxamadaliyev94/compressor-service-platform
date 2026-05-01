@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 interface Props {
   equipmentId: string
   createdById: string
+  role?: string
 }
 
 const typeLabels: Record<string, string> = {
@@ -16,7 +17,7 @@ const typeLabels: Record<string, string> = {
   COMMISSIONING: 'Пусконаладка',
 }
 
-export default function QuickTaskButton({ equipmentId, createdById }: Props) {
+export default function QuickTaskButton({ equipmentId, createdById, role }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [regulations, setRegulations] = useState<any[]>([])
@@ -65,6 +66,10 @@ export default function QuickTaskButton({ equipmentId, createdById }: Props) {
       setOpen(false)
       router.refresh()
     }
+  }
+
+  if (role === 'ENGINEER') {
+    return null
   }
 
   return (

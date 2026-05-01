@@ -1,7 +1,14 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/auth'
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const body = await req.json()
   const equipment = await db.equipment.update({
     where: { id: params.id },
@@ -17,4 +24,27 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     },
   })
   return NextResponse.json(equipment)
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const eq = await db.equipment.findUnique({
+    where: { id: params.id },
+    include: { tasks: { where: { deletedAt: null }, select: { id: true } } },
+  })
+  if (!eq) return NextResponse.json({ error: 'Оборудование не найдено' }, { status: 404 })
+  if (eq.tasks.length > 0) {
+    return NextResponse.json(
+      { error: 'Нельзя удалить оборудование с существующими задачами. Сначала удалите или перенесите задачи.' },
+      { status: 400 }
+    )
+  }
+
+  await db.equipment.delete({ where: { id: params.id } })
+  return NextResponse.json({ ok: true })
 }

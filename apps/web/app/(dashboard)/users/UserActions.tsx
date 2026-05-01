@@ -2,10 +2,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export default function UserActions({ user, currentUserEmail }: { user: any, currentUserEmail?: string }) {
+export default function UserActions({ user, currentUserId }: { user: any, currentUserId?: string }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const isSelf = user.email === currentUserEmail
+  const isSelf = user.id === currentUserId
 
   async function toggle() {
     if (isSelf) { alert('Нельзя деактивировать свой аккаунт'); return }

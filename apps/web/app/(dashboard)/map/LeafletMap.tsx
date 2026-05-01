@@ -28,10 +28,11 @@ const CITY_COORDS: Record<string, [number, number]> = {
 
 interface Props {
   cityData: any[]
+  branchPoints: any[]
   onCityClick: (data: any) => void
 }
 
-export default function LeafletMap({ cityData, onCityClick }: Props) {
+export default function LeafletMap({ cityData, branchPoints, onCityClick }: Props) {
   const mapRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -133,6 +134,19 @@ export default function LeafletMap({ cityData, onCityClick }: Props) {
           circle.openPopup()
         })
       })
+
+      branchPoints.forEach((point: any) => {
+        if (typeof point.latitude !== 'number' || typeof point.longitude !== 'number') return
+        const marker = L.marker([point.latitude, point.longitude]).addTo(map)
+        marker.bindPopup(`
+          <div style="font-family:system-ui,sans-serif;min-width:210px">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px">📌 ${point.name}</div>
+            <div style="font-size:12px;color:#374151;margin-bottom:4px">${point.clientName}</div>
+            <div style="font-size:11px;color:#6b7280;margin-bottom:6px">${point.address || 'Адрес не указан'}</div>
+            <div style="font-size:11px;color:#6b7280">${point.equipmentCount} ед. оборудования</div>
+          </div>
+        `)
+      })
     }
 
     init()
@@ -143,7 +157,7 @@ export default function LeafletMap({ cityData, onCityClick }: Props) {
         mapRef.current = null
       }
     }
-  }, [cityData, maxClients, onCityClick])
+  }, [cityData, branchPoints, maxClients, onCityClick])
 
   return (
     <div

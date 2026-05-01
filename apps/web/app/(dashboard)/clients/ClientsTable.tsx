@@ -2,6 +2,26 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+type Manager = {
+  id: string
+  name: string
+  email?: string | null
+  phone?: string | null
+}
+
+type ClientRow = {
+  id: string
+  name: string
+  inn?: string | null
+  contactPerson?: string | null
+  phone?: string | null
+  city?: string | null
+  status: 'VIP' | 'STANDART' | 'PASSIVE'
+  managerId?: string | null
+  manager?: Manager | null
+  branches?: { objects: { equipment: { id: string }[] }[] }[]
+}
+
 const statusColors: Record<string, string> = {
   VIP: 'bg-purple-100 text-purple-800',
   STANDART: 'bg-blue-100 text-blue-800',
@@ -13,7 +33,74 @@ const statusLabels: Record<string, string> = {
   PASSIVE: 'Пассивный',
 }
 
-function StatusToggle({ client, isAdmin }: { client: any, isAdmin: boolean }) {
+function ManagerAssignModal({
+  open,
+  client,
+  managers,
+  loading,
+  onClose,
+  onAssign,
+  onRemove,
+}: {
+  open: boolean
+  client: ClientRow | null
+  managers: Manager[]
+  loading: boolean
+  onClose: () => void
+  onAssign: (managerId: string) => Promise<void>
+  onRemove: () => Promise<void>
+}) {
+  const [selectedManagerId, setSelectedManagerId] = useState<string>('')
+
+  if (!open || !client) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-0 md:p-4">
+      <div className="w-full md:max-w-md rounded-t-2xl md:rounded-xl bg-white border p-4">
+        <h3 className="text-base font-semibold mb-2">Назначить менеджера</h3>
+        <p className="text-sm text-gray-600 mb-3">Клиент: {client.name}</p>
+        <select
+          value={selectedManagerId}
+          onChange={(e) => setSelectedManagerId(e.target.value)}
+          className="w-full border rounded-lg px-3 py-2 text-sm mb-3"
+        >
+          <option value="">Выберите менеджера</option>
+          {managers.map((manager) => (
+            <option key={manager.id} value={manager.id}>
+              {manager.name}
+            </option>
+          ))}
+        </select>
+        <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+          {client.managerId && (
+            <button
+              onClick={() => onRemove()}
+              disabled={loading}
+              className="w-full sm:w-auto min-h-11 px-3 py-2 rounded-lg text-sm border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60"
+            >
+              Снять менеджера
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="w-full sm:w-auto min-h-11 px-3 py-2 rounded-lg text-sm border hover:bg-gray-50"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={() => selectedManagerId && onAssign(selectedManagerId)}
+            disabled={loading || !selectedManagerId}
+            className="w-full sm:w-auto min-h-11 px-3 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            Сохранить
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -92,15 +179,21 @@ function StatusToggle({ client, isAdmin }: { client: any, isAdmin: boolean }) {
   )
 }
 
-export default function ClientsTable({ clients, isAdmin }: { clients: any[], isAdmin: boolean }) {
+export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[], isAdmin: boolean }) {
   const [search, setSearch] = useState('')
   const [filterCity, setFilterCity] = useState('ALL')
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [showArchived, setShowArchived] = useState(false)
+  const [managers, setManagers] = useState<Manager[]>([])
+  const [loadingManagers, setLoadingManagers] = useState(false)
+  const [managerSaving, setManagerSaving] = useState(false)
+  const [managerModalOpen, setManagerModalOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null)
+  const router = useRouter()
 
-  const cities = [...new Set(clients.map((c: any) => c.city).filter(Boolean))] as string[]
+  const cities = [...new Set(clients.map((c) => c.city).filter(Boolean))] as string[]
 
-  const filtered = clients.filter((c: any) => {
+  const filtered = clients.filter((c) => {
     const q = search.toLowerCase()
     const matchSearch = !search ||
       c.name.toLowerCase().includes(q) ||
@@ -115,21 +208,57 @@ export default function ClientsTable({ clients, isAdmin }: { clients: any[], isA
 
   const archivedCount = clients.filter(c => c.status === 'PASSIVE').length
 
+  async function openAssignModal(client: ClientRow) {
+    setSelectedClient(client)
+    setManagerModalOpen(true)
+    if (managers.length > 0 || loadingManagers) return
+    setLoadingManagers(true)
+    const response = await fetch('/api/users')
+    const users = await response.json()
+    const onlyManagers = Array.isArray(users) ? users.filter((u) => u.role === 'MANAGER' && u.isActive) : []
+    setManagers(onlyManagers)
+    setLoadingManagers(false)
+  }
+
+  async function assignManager(managerId: string) {
+    if (!selectedClient) return
+    setManagerSaving(true)
+    await fetch(`/api/clients/${selectedClient.id}/manager`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ managerId }),
+    })
+    setManagerSaving(false)
+    setManagerModalOpen(false)
+    setSelectedClient(null)
+    router.refresh()
+  }
+
+  async function removeManager() {
+    if (!selectedClient) return
+    setManagerSaving(true)
+    await fetch(`/api/clients/${selectedClient.id}/manager`, { method: 'DELETE' })
+    setManagerSaving(false)
+    setManagerModalOpen(false)
+    setSelectedClient(null)
+    router.refresh()
+  }
+
   return (
     <div>
-      <div className="flex gap-3 mb-3">
+      <div className="flex flex-col md:flex-row gap-2 md:gap-3 mb-3">
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="🔍 Поиск по названию, контакту, телефону, ИНН..."
           className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         <select value={filterCity} onChange={e => setFilterCity(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="ALL">Все города (UZ)</option>
           {cities.map(city => (
             <option key={city} value={city}>{city}</option>
           ))}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="ALL">Все статусы</option>
           <option value="VIP">VIP</option>
           <option value="STANDART">Стандарт</option>
@@ -148,8 +277,45 @@ export default function ClientsTable({ clients, isAdmin }: { clients: any[], isA
         )}
       </div>
 
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 && (
+          <div className="bg-white border rounded-xl p-6 text-center text-gray-400 text-sm">Ничего не найдено</div>
+        )}
+        {filtered.map((client) => {
+          const equipCount =
+            client.branches?.flatMap((b) => b.objects).flatMap((o) => o.equipment).length || 0
+          const isArchived = client.status === 'PASSIVE'
+          return (
+            <div key={client.id} className={`bg-white border rounded-xl p-3 ${isArchived ? 'opacity-60' : ''}`}>
+              <div className="flex items-start justify-between gap-2">
+                <a href={`/clients/${client.id}`} className={`font-medium text-sm hover:text-blue-600 ${isArchived ? 'line-through' : ''}`}>
+                  {client.name}
+                </a>
+                <StatusToggle client={client} isAdmin={isAdmin} />
+              </div>
+              {client.inn && <div className="text-xs text-gray-400 mt-0.5">ИНН: {client.inn}</div>}
+              <div className="mt-2 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Город</span><span className="text-gray-700">{client.city || '—'}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Контакт</span><span className="text-gray-700">{client.contactPerson || '—'}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Телефон</span><span className="text-gray-700">{client.phone || '—'}</span></div>
+                {isAdmin && <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Менеджер</span><span className="text-gray-700">{client.manager?.name || 'Не назначен'}</span></div>}
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Оборудование</span><span className="text-gray-700">{equipCount}</span></div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => openAssignModal(client)}
+                  className="mt-2 w-full min-h-11 text-xs px-3 py-2 rounded border hover:bg-gray-50"
+                >
+                  {client.managerId ? 'Сменить менеджера' : 'Назначить менеджера'}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="hidden md:block bg-white border rounded-xl overflow-x-auto">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left p-3 font-medium">Клиент</th>
@@ -157,15 +323,16 @@ export default function ClientsTable({ clients, isAdmin }: { clients: any[], isA
               <th className="text-left p-3 font-medium">Контакт</th>
               <th className="text-left p-3 font-medium">Телефон</th>
               <th className="text-left p-3 font-medium">Оборудования</th>
+              {isAdmin && <th className="text-left p-3 font-medium">Менеджер</th>}
               <th className="text-left p-3 font-medium">Статус</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-gray-400">Ничего не найдено</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="p-8 text-center text-gray-400">Ничего не найдено</td></tr>
             )}
-            {filtered.map((client: any) => {
-              const equipCount = client.branches?.flatMap((b: any) => b.objects).flatMap((o: any) => o.equipment).length || 0
+            {filtered.map((client) => {
+              const equipCount = client.branches?.flatMap((b) => b.objects).flatMap((o) => o.equipment).length || 0
               const isArchived = client.status === 'PASSIVE'
               return (
                 <tr key={client.id}
@@ -196,6 +363,19 @@ export default function ClientsTable({ clients, isAdmin }: { clients: any[], isA
                   <td className="p-3 text-gray-600">{client.contactPerson || '—'}</td>
                   <td className="p-3 text-gray-600">{client.phone || '—'}</td>
                   <td className="p-3 text-center font-medium">{equipCount}</td>
+                  {isAdmin && (
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-700">{client.manager?.name || 'Не назначен'}</span>
+                        <button
+                          onClick={() => openAssignModal(client)}
+                          className="text-xs px-2 py-1 rounded border hover:bg-gray-50"
+                        >
+                          {client.managerId ? 'Сменить' : 'Назначить'}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                   <td className="p-3">
                     <StatusToggle client={client} isAdmin={isAdmin} />
                   </td>
@@ -205,6 +385,18 @@ export default function ClientsTable({ clients, isAdmin }: { clients: any[], isA
           </tbody>
         </table>
       </div>
+      <ManagerAssignModal
+        open={managerModalOpen}
+        client={selectedClient}
+        managers={managers}
+        loading={managerSaving || loadingManagers}
+        onClose={() => {
+          setManagerModalOpen(false)
+          setSelectedClient(null)
+        }}
+        onAssign={assignManager}
+        onRemove={removeManager}
+      />
     </div>
   )
 }

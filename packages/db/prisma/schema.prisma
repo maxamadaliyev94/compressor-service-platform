@@ -93,22 +93,30 @@ enum ChecklistItemType {
 
 model User {
   id         String   @id @default(cuid())
-  email      String   @unique
+  login      String   @unique
+  email      String?  @unique
   password   String
   name       String
   role       Role     @default(ENGINEER)
   phone      String?
   telegramId String?
   isActive   Boolean  @default(true)
+  isOnline   Boolean  @default(false)
+  checkedInAt DateTime?
+  checkedOutAt DateTime?
+  engineerStatus String @default("FREE")
   lastLoginAt DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   assignedTasks ServiceTask[] @relation("AssignedEngineer")
   createdTasks  ServiceTask[] @relation("TaskCreator")
+  deletedTasks  ServiceTask[] @relation("TaskDeleter")
+  managedClients Client[] @relation("ClientManager")
   workReports   WorkReport[]
   auditLogs     AuditLog[]
   notifications Notification[]
+  rolePermissionsUpdated RolePermission[] @relation("RolePermissionUpdatedBy")
 
   @@map("users")
 }
@@ -128,8 +136,39 @@ model Notification {
   @@map("notifications")
 }
 
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  category    String
+  label       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            String   @id @default(cuid())
+  role          Role
+  permissionId  String
+  allowed       Boolean  @default(false)
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  updatedBy  User?      @relation("RolePermissionUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
+}
+
 model Client {
   id            String       @id @default(cuid())
+  managerId     String?
   name          String
   inn           String?
   contactPerson String?
@@ -142,6 +181,7 @@ model Client {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
+  manager  User?    @relation("ClientManager", fields: [managerId], references: [id])
   branches Branch[]
 
   @@map("clients")
@@ -205,12 +245,25 @@ model Equipment {
 
   object Object        @relation(fields: [objectId], references: [id], onDelete: Cascade)
   tasks  ServiceTask[]
+  photos EquipmentPhoto[]
 
   @@map("equipment")
 }
 
+model EquipmentPhoto {
+  id          String   @id @default(cuid())
+  equipmentId String
+  url         String
+  createdAt   DateTime @default(now())
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@map("equipment_photos")
+}
+
 model ServiceTask {
   id           String       @id @default(cuid())
+  requestNumber Int
   equipmentId  String
   assignedToId String?
   createdById  String
@@ -221,15 +274,20 @@ model ServiceTask {
   completedAt  DateTime?
   comment      String?
   cancelReason String?
+  deletedAt    DateTime?
+  deletedById  String?
+  deletedStatus TaskStatus?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
   equipment  Equipment   @relation(fields: [equipmentId], references: [id])
   assignedTo User?       @relation("AssignedEngineer", fields: [assignedToId], references: [id])
   createdBy  User        @relation("TaskCreator", fields: [createdById], references: [id])
+  deletedBy  User?       @relation("TaskDeleter", fields: [deletedById], references: [id])
   report     WorkReport?
 
   @@map("service_tasks")
+  @@index([requestNumber])
 }
 
 model WorkReport {

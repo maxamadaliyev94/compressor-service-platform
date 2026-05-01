@@ -69,7 +69,7 @@ export default function EquipmentHistory({ equipmentId }: { equipmentId: string 
   }
 
   return (
-    <div className="bg-white border rounded-xl overflow-hidden sticky top-4">
+    <div className="bg-white border rounded-xl overflow-hidden md:sticky md:top-4">
       <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
         <h2 className="font-semibold text-sm">📋 История изменений</h2>
         <span className="text-xs text-gray-400">{logs.length}</span>

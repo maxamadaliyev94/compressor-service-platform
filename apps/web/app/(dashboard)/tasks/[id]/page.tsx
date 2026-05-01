@@ -1,6 +1,8 @@
 import { db } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { auth } from '@/auth'
+import TaskAdminActions from './TaskAdminActions'
+import TaskDelegatePanel from './TaskDelegatePanel'
 
 const typeLabels: Record<string, string> = {
   PLANNED_MAINTENANCE: 'Плановое ТО', DIAGNOSTICS: 'Диагностика',
@@ -21,6 +23,8 @@ const statusColors: Record<string, string> = {
 
 export default async function TaskDetailPage({ params }: { params: { id: string } }) {
   const session = await auth()
+  const isAdmin = session?.user?.role === 'ADMIN'
+  const canEditDone = ['ADMIN', 'MANAGER'].includes(session?.user?.role ?? '')
   const canExecute = ['ENGINEER', 'CHIEF_ENGINEER', 'ADMIN', 'MANAGER'].includes(
     session?.user?.role ?? ''
   )
@@ -38,29 +42,47 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       }
     }
   })
-  if (!task) notFound()
+  if (!task || task.deletedAt) notFound()
 
   const isNotDone = !['DONE', 'CANCELLED'].includes(task.status)
+  const showChiefDelegate =
+    session?.user?.role === 'CHIEF_ENGINEER' &&
+    task.assignedToId === session.user.id &&
+    isNotDone &&
+    !task.report
 
   const eq = task.equipment
+  const branch = eq.object.branch
   const client = eq.object.branch.client
+  const destinationText = [client.city, branch.address, eq.object.name, client.name].filter(Boolean).join(', ')
+  const yandexRouteUrl =
+    branch.latitude !== null && branch.longitude !== null
+      ? `https://yandex.ru/maps/?mode=routes&rtext=~${branch.latitude},${branch.longitude}&rtt=auto`
+      : `https://yandex.ru/maps/?text=${encodeURIComponent(destinationText)}`
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 md:p-8 max-w-4xl">
       <div className="flex items-center gap-2 mb-6 text-sm">
         <a href="/tasks" className="text-gray-400 hover:text-gray-600">← Задачи</a>
         <span className="text-gray-300">/</span>
         <span className="font-medium">{typeLabels[task.type]}</span>
       </div>
 
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{typeLabels[task.type]}</h1>
+      <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-start mb-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">№{task.requestNumber} · {typeLabels[task.type]}</h1>
           <p className="text-gray-500 text-sm mt-1">
             {eq.brand} {eq.model} · {client.name}
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap justify-end">
+        <div className="flex items-center gap-2 md:gap-3 flex-wrap md:justify-end">
+          {isAdmin && (
+            <TaskAdminActions
+              taskId={task.id}
+              canCancel={!['DONE', 'CANCELLED'].includes(task.status)}
+              canDelete={!task.report}
+            />
+          )}
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[task.status]}`}>
             {statusLabels[task.status]}
           </span>
@@ -72,16 +94,37 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               ▶ Приступить к работе
             </a>
           )}
+          <a
+            href={yandexRouteUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-600 flex items-center gap-2"
+            title={
+              branch.latitude !== null && branch.longitude !== null
+                ? 'Построить маршрут до оборудования в Яндекс Картах'
+                : 'Открыть адрес оборудования в Яндекс Картах'
+            }
+          >
+            📍 Маршрут в Яндекс
+          </a>
           {task.report && (
             <a href={`/api/tasks/${task.id}/pdf`} target="_blank"
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2">
               📄 Печать акта
             </a>
           )}
+          {task.status === 'DONE' && canEditDone && (
+            <a
+              href={`/tasks/${task.id}/edit`}
+              className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2"
+            >
+              ✏️ Изменить данные
+            </a>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6">
         <div className="bg-white border rounded-xl p-5">
           <h2 className="font-semibold mb-3">Оборудование</h2>
           <div className="space-y-2 text-sm">
@@ -93,6 +136,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               <a href={`/clients/${client.id}`} className="hover:text-blue-600">{client.name}</a>
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Объект:</span><span>{eq.object.name}</span></div>
+            <div className="flex gap-2"><span className="text-gray-500 w-28">Адрес:</span><span>{branch.address || 'Не указан'}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Моточасы:</span><span>{eq.currentHours} м/ч</span></div>
           </div>
         </div>
@@ -127,6 +171,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
+      {showChiefDelegate && <TaskDelegatePanel taskId={task.id} />}
+
       {task.report ? (
         <div className="space-y-4">
           <div className="bg-white border rounded-xl p-5">
@@ -138,7 +184,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-xs text-gray-500 mb-1">Моточасы</div>
                 <div className="text-xl font-bold">{task.report.currentHours}</div>
@@ -166,18 +212,18 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             )}
           </div>
 
-          {task.report.checklistItems.length > 0 && (
+          {task.report.checklistItems.filter(i => i.checked).length > 0 && (
             <div className="bg-white border rounded-xl p-5">
-              <h2 className="font-semibold mb-3">Чек-лист ({task.report.checklistItems.filter(i => i.checked).length}/{task.report.checklistItems.length})</h2>
+              <h2 className="font-semibold mb-3">
+                Выполненные работы ({task.report.checklistItems.filter(i => i.checked).length})
+              </h2>
               <div className="space-y-1">
-                {task.report.checklistItems.map(item => (
+                {task.report.checklistItems
+                  .filter(item => item.checked)
+                  .map(item => (
                   <div key={item.id} className="flex items-center gap-2 text-sm py-1">
-                    <span className={item.checked ? 'text-green-500' : 'text-red-400'}>
-                      {item.checked ? '✓' : '✗'}
-                    </span>
-                    <span className={item.checked ? 'text-gray-700' : 'text-gray-400 line-through'}>
-                      {item.label}
-                    </span>
+                    <span className="text-green-500">✓</span>
+                    <span className="text-gray-700">{item.label}</span>
                   </div>
                 ))}
               </div>
@@ -185,9 +231,10 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           )}
 
           {task.report.partsUsed.length > 0 && (
-            <div className="bg-white border rounded-xl p-5">
+            <div className="bg-white border rounded-xl p-4 md:p-5">
               <h2 className="font-semibold mb-3">Использованные запчасти</h2>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[520px]">
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="text-left p-2 font-medium">Наименование</th>
@@ -207,6 +254,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 

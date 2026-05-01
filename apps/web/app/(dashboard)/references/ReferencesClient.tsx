@@ -1,10 +1,26 @@
 'use client'
 import { useState } from 'react'
 
+type RegulationItem = {
+  id?: string
+  label: string
+  isRequired: boolean
+}
+
+type Regulation = {
+  id: string
+  name: string
+  equipmentType: string
+  intervalHours: number
+  taskType: string
+  description?: string | null
+  items: RegulationItem[]
+}
+
 interface Props {
   initialTypes: any[]
   initialBrands: any[]
-  initialRegulations: any[]
+  initialRegulations: Regulation[]
   isAdmin: boolean
 }
 
@@ -16,7 +32,216 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
   const [newBrand, setNewBrand] = useState('')
   const [loadingType, setLoadingType] = useState(false)
   const [loadingBrand, setLoadingBrand] = useState(false)
+  const [loadingRegulation, setLoadingRegulation] = useState(false)
   const [activeTab, setActiveTab] = useState<'types' | 'brands' | 'regulations'>('types')
+  const [editingRegulationId, setEditingRegulationId] = useState<string | null>(null)
+  const [regulationForm, setRegulationForm] = useState({
+    name: '',
+    equipmentType: 'COMPRESSOR',
+    taskType: 'PLANNED_MAINTENANCE',
+    intervalHours: '2000',
+    description: '',
+    itemsText: '',
+  })
+
+  const taskLabels: Record<string, string> = {
+    PLANNED_MAINTENANCE: 'Плановое ТО',
+    DIAGNOSTICS: 'Диагностика',
+    WARRANTY_REPAIR: 'Гарантийный ремонт',
+    EMERGENCY: 'Аварийный выезд',
+    INSTALLATION: 'Монтаж',
+    COMMISSIONING: 'Пусконаладка',
+  }
+
+  const compressorChecklistItems = [
+    'Замена масла',
+    'Долив масла',
+    'Замена масляного фильтра',
+    'Замена сепаратора',
+    'Устранение утечки масла',
+    'Замена воздушного фильтра',
+    'Очистка воздушного фильтра',
+    'Замена панельного фильтра',
+    'Очистка панельного фильтра',
+    'Ремкомплект впускного клапана',
+    'Замена впускного клапана',
+    'Устранение утечки воздуха',
+    'Замена клапана минимального давления',
+    'Ремкомплект клапана минимального давления',
+    'Замена обратного клапана',
+    'Ремонт обратного клапана',
+    'Замена регулятора давления',
+    'Замена реле давления',
+    'Очистка радиатора',
+    'Продувка радиатора',
+    'Замена радиатора',
+    'Ремонт системы охлаждения',
+    'Проверка состояния',
+    'Замена подшипников винтового блока',
+    'Замена сальников винтового блока',
+    'Капитальный ремонт винтового блока',
+    'Проверка ремней',
+    'Замена ремней',
+    'Натяжка ремней',
+    'Проверка муфты',
+    'Замена муфты',
+    'Центровка',
+    'Проверка состояния',
+    'Смазка электродвигателя',
+    'Замена подшипников электродвигателя',
+    'Ремонт электродвигателя',
+    'Проверка питания',
+    'Протяжка клемм',
+    'Замена контакторов / реле',
+    'Замена контроллера',
+    'Настройка контроллера',
+    'Замена датчика давления',
+    'Замена датчика температуры',
+    'Проверка контроллера',
+    'Устранение ошибок',
+    'Проверка датчиков',
+    'Калибровка датчиков',
+    'Замена полиамидной трубки',
+    'Замена фитингов',
+    'Устранение утечек',
+  ]
+
+  const compressorDefaults = [
+    { taskType: 'PLANNED_MAINTENANCE', name: 'Компрессор - Плановое ТО', intervalHours: 2000 },
+    { taskType: 'DIAGNOSTICS', name: 'Компрессор - Диагностика', intervalHours: 0 },
+    { taskType: 'WARRANTY_REPAIR', name: 'Компрессор - Гарантийный ремонт', intervalHours: 0 },
+    { taskType: 'EMERGENCY', name: 'Компрессор - Аварийный выезд', intervalHours: 0 },
+  ]
+
+  function setRegulationField(field: string, value: string) {
+    setRegulationForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function normalizeChecklistItems(text: string) {
+    return text
+      .split('\n')
+      .map((line) => line.replace(/^☐\s*/, '').trim())
+      .filter(Boolean)
+      .map((label) => ({ label, isRequired: false }))
+  }
+
+  function startCreateRegulation() {
+    setEditingRegulationId(null)
+    setRegulationForm({
+      name: '',
+      equipmentType: 'COMPRESSOR',
+      taskType: 'PLANNED_MAINTENANCE',
+      intervalHours: '2000',
+      description: '',
+      itemsText: '',
+    })
+  }
+
+  function startEditRegulation(regulation: Regulation) {
+    setEditingRegulationId(regulation.id)
+    setRegulationForm({
+      name: regulation.name,
+      equipmentType: regulation.equipmentType,
+      taskType: regulation.taskType,
+      intervalHours: String(regulation.intervalHours ?? 0),
+      description: regulation.description ?? '',
+      itemsText: regulation.items.map((i) => i.label).join('\n'),
+    })
+  }
+
+  async function saveRegulation() {
+    const items = normalizeChecklistItems(regulationForm.itemsText)
+    if (!regulationForm.name.trim()) {
+      alert('Введите название регламента')
+      return
+    }
+    if (items.length === 0) {
+      alert('Добавьте хотя бы 1 пункт чек-листа')
+      return
+    }
+
+    setLoadingRegulation(true)
+    const method = editingRegulationId ? 'PATCH' : 'POST'
+    const res = await fetch('/api/regulations', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingRegulationId,
+        name: regulationForm.name.trim(),
+        equipmentType: regulationForm.equipmentType,
+        taskType: regulationForm.taskType,
+        intervalHours: parseInt(regulationForm.intervalHours, 10) || 0,
+        description: regulationForm.description.trim() || null,
+        items,
+      }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json()
+      alert(data.error || 'Не удалось сохранить регламент')
+      setLoadingRegulation(false)
+      return
+    }
+
+    const updated = (await res.json()) as Regulation
+    setRegulations((prev) => {
+      if (!editingRegulationId) return [updated, ...prev]
+      return prev.map((r) => (r.id === updated.id ? updated : r))
+    })
+    startCreateRegulation()
+    setLoadingRegulation(false)
+  }
+
+  async function removeRegulation(id: string) {
+    if (!confirm('Деактивировать этот чек-лист?')) return
+    const res = await fetch('/api/regulations', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    if (!res.ok) {
+      alert('Не удалось удалить чек-лист')
+      return
+    }
+    setRegulations((prev) => prev.filter((r) => r.id !== id))
+  }
+
+  async function createCompressorDefaults() {
+    if (!isAdmin) return
+    setLoadingRegulation(true)
+    try {
+      const existingTaskTypes = new Set(
+        regulations
+          .filter((r) => r.equipmentType === 'COMPRESSOR')
+          .map((r) => r.taskType),
+      )
+
+      let created = 0
+      for (const def of compressorDefaults) {
+        if (existingTaskTypes.has(def.taskType)) continue
+        const res = await fetch('/api/regulations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: def.name,
+            equipmentType: 'COMPRESSOR',
+            taskType: def.taskType,
+            intervalHours: def.intervalHours,
+            description: `Чек-лист для этапа: ${taskLabels[def.taskType]}`,
+            items: compressorChecklistItems.map((label) => ({ label, isRequired: false })),
+          }),
+        })
+        if (res.ok) {
+          const row = (await res.json()) as Regulation
+          setRegulations((prev) => [row, ...prev])
+          created++
+        }
+      }
+      alert(created > 0 ? `Создано чек-листов: ${created}` : 'Чек-листы для компрессора уже существуют')
+    } finally {
+      setLoadingRegulation(false)
+    }
+  }
 
   async function addType() {
     if (!newType.trim()) return
@@ -78,9 +303,9 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
 
   return (
     <div className="max-w-4xl">
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-full overflow-x-auto">
         <button onClick={() => setActiveTab('types')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
             activeTab === 'types'
               ? 'bg-white text-gray-900 shadow-sm'
               : 'text-gray-500 hover:text-gray-700'
@@ -91,7 +316,7 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
           </span>
         </button>
         <button onClick={() => setActiveTab('brands')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
             activeTab === 'brands'
               ? 'bg-white text-gray-900 shadow-sm'
               : 'text-gray-500 hover:text-gray-700'
@@ -102,7 +327,7 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
           </span>
         </button>
         <button onClick={() => setActiveTab('regulations')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
             activeTab === 'regulations' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           }`}>
           📋 Регламенты ТО
@@ -124,7 +349,7 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
           </div>
 
           <div className="p-4 border-b bg-blue-50">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 value={newType}
                 onChange={e => setNewType(e.target.value)}
@@ -195,7 +420,7 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
           </div>
 
           <div className="p-4 border-b bg-blue-50">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 value={newBrand}
                 onChange={e => setNewBrand(e.target.value)}
@@ -211,7 +436,7 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
           </div>
 
           <div className="p-4">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {brands.map(brand => (
                 <div key={brand.id}
                   className="flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-lg px-3 py-2.5 transition-colors group">
@@ -236,6 +461,108 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
 
       {activeTab === 'regulations' && (
         <div className="space-y-4">
+          {isAdmin && (
+            <div className="bg-white border rounded-xl p-4 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <h2 className="font-semibold">
+                  {editingRegulationId ? 'Редактирование чек-листа' : 'Новый чек-лист'}
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setRegulationField('itemsText', compressorChecklistItems.join('\n'))}
+                    className="text-xs border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                  >
+                    Вставить шаблон компрессора
+                  </button>
+                  <button
+                    onClick={createCompressorDefaults}
+                    disabled={loadingRegulation}
+                    className="text-xs border rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Создать 4 этапа компрессора
+                  </button>
+                  {editingRegulationId && (
+                    <button
+                      onClick={startCreateRegulation}
+                      className="text-xs border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                    >
+                      Новый
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  value={regulationForm.name}
+                  onChange={(e) => setRegulationField('name', e.target.value)}
+                  placeholder="Название чек-листа"
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <select
+                  value={regulationForm.equipmentType}
+                  onChange={(e) => setRegulationField('equipmentType', e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="COMPRESSOR">Компрессор</option>
+                  <option value="DRYER">Осушитель</option>
+                  <option value="RECEIVER">Ресивер</option>
+                  <option value="FILTER">Фильтр</option>
+                  <option value="NITROGEN_GENERATOR">Азотный генератор</option>
+                  <option value="OTHER">Другое</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <select
+                  value={regulationForm.taskType}
+                  onChange={(e) => setRegulationField('taskType', e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {Object.entries(taskLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  value={regulationForm.intervalHours}
+                  onChange={(e) => setRegulationField('intervalHours', e.target.value)}
+                  placeholder="Интервал м/ч"
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  value={regulationForm.description}
+                  onChange={(e) => setRegulationField('description', e.target.value)}
+                  placeholder="Описание (необязательно)"
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <textarea
+                value={regulationForm.itemsText}
+                onChange={(e) => setRegulationField('itemsText', e.target.value)}
+                rows={10}
+                placeholder="Пункты чек-листа, по одному в строке"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={saveRegulation}
+                  disabled={loadingRegulation}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {loadingRegulation ? 'Сохранение...' : editingRegulationId ? 'Сохранить изменения' : 'Создать чек-лист'}
+                </button>
+                <p className="text-xs text-gray-500 self-center">
+                  Формат: каждая строка = один пункт. Символ `☐` можно вставлять, он удаляется автоматически.
+                </p>
+              </div>
+            </div>
+          )}
+
           {regulations.map(reg => (
             <div key={reg.id} className="bg-white border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between p-4 bg-gray-50 border-b">
@@ -250,6 +577,22 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
                   {reg.items.length} пунктов
                 </span>
               </div>
+              {isAdmin && (
+                <div className="px-4 py-2 border-b bg-white flex gap-2">
+                  <button
+                    onClick={() => startEditRegulation(reg)}
+                    className="text-xs border rounded-md px-2.5 py-1 hover:bg-gray-50"
+                  >
+                    Редактировать
+                  </button>
+                  <button
+                    onClick={() => removeRegulation(reg.id)}
+                    className="text-xs border border-red-200 text-red-600 rounded-md px-2.5 py-1 hover:bg-red-50"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              )}
               <div className="divide-y">
                 {reg.items.map((item: any, i: number) => (
                   <div key={item.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -257,18 +600,17 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
                       {i + 1}
                     </span>
                     <span className="text-sm text-gray-700">{item.label}</span>
-                    {item.isRequired && (
-                      <span className="ml-auto text-xs text-red-400">обязательно</span>
-                    )}
                   </div>
                 ))}
               </div>
             </div>
           ))}
 
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-sm text-blue-600">
-            Для добавления нового регламента обратитесь к администратору
-          </div>
+          {!isAdmin && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-sm text-blue-600">
+              Для добавления или изменения чек-листов обратитесь к администратору
+            </div>
+          )}
         </div>
       )}
     </div>

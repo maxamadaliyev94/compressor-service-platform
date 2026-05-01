@@ -35,8 +35,8 @@ export default function NewClientPage() {
   }
 
   return (
-    <div className="p-8 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-4 md:p-8 max-w-2xl">
+      <div className="flex items-center gap-2 md:gap-3 mb-6">
         <a href="/clients" className="text-gray-400 hover:text-gray-600">
           ← Назад
         </a>
@@ -51,7 +51,7 @@ export default function NewClientPage() {
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Страна</label>
             <input value={form.country} onChange={e => set('country', e.target.value)}
@@ -69,7 +69,7 @@ export default function NewClientPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">ИНН</label>
             <input value={form.inn} onChange={e => set('inn', e.target.value)}
@@ -94,7 +94,7 @@ export default function NewClientPage() {
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Телефон</label>
             <input value={form.phone} onChange={e => set('phone', e.target.value)}
@@ -116,7 +116,7 @@ export default function NewClientPage() {
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
         </div>
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <button type="submit" disabled={loading}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? 'Сохранение...' : 'Создать клиента'}

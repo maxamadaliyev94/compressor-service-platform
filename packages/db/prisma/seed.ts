@@ -1,6 +1,110 @@
 import { PrismaClient } from '@prisma/client'
+import { randomUUID } from 'crypto'
 
 const prisma = new PrismaClient()
+
+type PermissionDef = {
+  key: string
+  category: 'section' | 'action' | 'field'
+  label: string
+  description?: string
+}
+
+const PERMISSIONS: PermissionDef[] = [
+  { key: 'section:dashboard', category: 'section', label: 'Раздел Dashboard' },
+  { key: 'section:clients', category: 'section', label: 'Раздел Клиенты' },
+  { key: 'section:equipment', category: 'section', label: 'Раздел Оборудование' },
+  { key: 'section:tasks', category: 'section', label: 'Раздел Задачи' },
+  { key: 'section:reports', category: 'section', label: 'Раздел Отчёты' },
+  { key: 'section:users', category: 'section', label: 'Раздел Пользователи' },
+  { key: 'section:map', category: 'section', label: 'Раздел Карта' },
+  { key: 'section:references', category: 'section', label: 'Раздел Справочники' },
+  { key: 'action:task.create', category: 'action', label: 'Создание задачи' },
+  { key: 'action:task.assign', category: 'action', label: 'Назначение задачи' },
+  { key: 'action:task.close', category: 'action', label: 'Закрытие задачи' },
+  { key: 'action:equipment.create', category: 'action', label: 'Добавление оборудования' },
+  { key: 'action:equipment.export', category: 'action', label: 'Экспорт оборудования' },
+  { key: 'action:user.manage', category: 'action', label: 'Управление пользователями' },
+  { key: 'field:user.phone', category: 'field', label: 'Поле Телефон пользователя' },
+  { key: 'field:equipment.warranty', category: 'field', label: 'Поле Гарантия оборудования' },
+  { key: 'field:task.internalComment', category: 'field', label: 'Внутренние комментарии задачи' },
+]
+
+const ROLE_ALLOWED: Record<string, Set<string>> = {
+  ADMIN: new Set(PERMISSIONS.map((p) => p.key)),
+  MANAGER: new Set([
+    'section:dashboard',
+    'section:clients',
+    'section:equipment',
+    'section:tasks',
+    'section:reports',
+    'section:map',
+    'section:references',
+    'action:task.create',
+    'action:task.assign',
+    'action:equipment.create',
+    'action:equipment.export',
+    'field:user.phone',
+    'field:equipment.warranty',
+    'field:task.internalComment',
+  ]),
+  CHIEF_ENGINEER: new Set([
+    'section:dashboard',
+    'section:equipment',
+    'section:tasks',
+    'section:reports',
+    'section:map',
+    'action:task.create',
+    'action:task.assign',
+    'action:task.close',
+    'field:user.phone',
+    'field:equipment.warranty',
+    'field:task.internalComment',
+  ]),
+  ENGINEER: new Set([
+    'section:dashboard',
+    'section:equipment',
+    'section:tasks',
+    'action:task.close',
+    'field:equipment.warranty',
+  ]),
+  CLIENT: new Set([]),
+}
+
+async function seedRolePermissions() {
+  for (const permission of PERMISSIONS) {
+    const permissionId = `perm_${randomUUID()}`
+    await prisma.$executeRaw`
+      INSERT INTO "permissions" ("id", "key", "category", "label", "description", "createdAt")
+      VALUES (${permissionId}, ${permission.key}, ${permission.category}, ${permission.label}, ${permission.description ?? null}, NOW())
+      ON CONFLICT ("key") DO UPDATE
+      SET "category" = EXCLUDED."category",
+          "label" = EXCLUDED."label",
+          "description" = EXCLUDED."description"
+    `
+  }
+
+  const permissionRows = (await prisma.$queryRaw`
+    SELECT "id", "key" FROM "permissions"
+  `) as Array<{ id: string; key: string }>
+
+  const roles = ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'] as const
+  for (const role of roles) {
+    const allowSet = ROLE_ALLOWED[role]
+    for (const permission of permissionRows) {
+      const allowed = allowSet.has(permission.key)
+      const rolePermissionId = `rp_${randomUUID()}`
+      await prisma.$executeRaw`
+        INSERT INTO "role_permissions" ("id", "role", "permissionId", "allowed", "createdAt", "updatedAt")
+        VALUES (${rolePermissionId}, CAST(${role} AS "Role"), ${permission.id}, ${allowed}, NOW(), NOW())
+        ON CONFLICT ("role", "permissionId") DO UPDATE
+        SET "allowed" = EXCLUDED."allowed",
+            "updatedAt" = NOW()
+      `
+    }
+  }
+  console.log('✅ RBAC permissions seeded')
+}
 
 async function main() {
   console.log('Seeding database...')
@@ -10,6 +114,7 @@ async function main() {
     where: { email: 'admin@csp.uz' },
     update: {},
     create: {
+      login: 'admin',
       email: 'admin@csp.uz',
       password: 'hashed_password',
       name: 'Администратор',
@@ -22,6 +127,7 @@ async function main() {
     where: { email: 'manager@csp.uz' },
     update: {},
     create: {
+      login: 'manager',
       email: 'manager@csp.uz',
       password: 'hashed_password',
       name: 'Алишер Каримов',
@@ -34,6 +140,7 @@ async function main() {
     where: { email: 'engineer1@csp.uz' },
     update: {},
     create: {
+      login: 'engineer1',
       email: 'engineer1@csp.uz',
       password: 'hashed_password',
       name: 'Бобур Рахимов',
@@ -46,6 +153,7 @@ async function main() {
     where: { email: 'engineer2@csp.uz' },
     update: {},
     create: {
+      login: 'engineer2',
       email: 'engineer2@csp.uz',
       password: 'hashed_password',
       name: 'Жавлон Усманов',
@@ -383,6 +491,7 @@ async function main() {
   }
 
   console.log('✅ Regulations seeded')
+  await seedRolePermissions()
 
   console.log('✅ Seed completed!')
   console.log(`Created: 4 users, 3 clients, 2 branches, 3 objects, 4 equipment, 3 tasks`)

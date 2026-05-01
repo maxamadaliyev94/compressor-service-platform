@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const client = await db.client.create({
     data: {
+      managerId: role === 'MANAGER' ? session.user.id : body.managerId || null,
       name: body.name,
       inn: body.inn || null,
       contactPerson: body.contactPerson || null,
@@ -28,6 +29,22 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const clients = await db.client.findMany({ orderBy: { createdAt: 'desc' } })
+  const session = await auth()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = session.user.role
+
+  const where =
+    role === 'MANAGER'
+      ? { managerId: session.user.id }
+      : {}
+
+  const clients = await db.client.findMany({
+    where,
+    include: {
+      manager: { select: { id: true, name: true, email: true, phone: true } },
+      branches: { include: { objects: { include: { equipment: true } } } },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
   return NextResponse.json(clients)
 }

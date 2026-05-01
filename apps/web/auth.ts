@@ -27,13 +27,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        login: { label: 'Логин', type: 'text' },
         password: { label: 'Пароль', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
+        if (!credentials?.login || !credentials?.password) return null
         const user = await db.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { login: credentials.login as string },
         })
         if (!user || !user.isActive) return null
         const valid = await bcrypt.compare(credentials.password as string, user.password)
@@ -42,7 +42,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { id: user.id },
           data: { lastLoginAt: new Date() }
         })
-        return { id: user.id, email: user.email, name: user.name, role: user.role }
+        return { id: user.id, email: user.email ?? undefined, name: user.name, role: user.role }
       },
     }),
   ],

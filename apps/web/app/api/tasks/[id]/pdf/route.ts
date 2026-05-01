@@ -15,10 +15,28 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     },
   })
 
-  if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!task || task.deletedAt) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const eq = task.equipment
   const client = eq.object.branch.client
+  const report = task.report
+
+  const checkedItems = report?.checklistItems?.filter((item) => item.checked) ?? []
+
+  const roomCondition = report?.roomCondition ?? ''
+  const extractMetric = (re: RegExp) => {
+    const m = roomCondition.match(re)
+    return m?.[1] ?? '—'
+  }
+
+  const voltageL1 = extractMetric(/L1=([^V;]+)V/)
+  const voltageL2 = extractMetric(/L2=([^V;]+)V/)
+  const voltageL3 = extractMetric(/L3=([^V;]+)V/)
+  const currentL1 = extractMetric(/Ф1=([^A;]+)A/)
+  const currentL2 = extractMetric(/Ф2=([^A;]+)A/)
+  const currentL3 = extractMetric(/Ф3=([^A;]+)A/)
+  const pressureLower = extractMetric(/Давление нижнее:\s*([^б;]+)\s*бар/)
+  const loadHours = extractMetric(/Моточасы под нагрузкой:\s*([^;]+)/)
 
   const typeLabels: Record<string, string> = {
     PLANNED_MAINTENANCE: 'Плановое ТО',
@@ -93,22 +111,44 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 <div class="section">
   <div class="section-title">Выполненные работы</div>
   ${
-    task.report?.checklistItems && task.report.checklistItems.length > 0
+    checkedItems.length > 0
       ? `
   <ul class="checklist">
-    ${task.report.checklistItems
+    ${checkedItems
       .map(
         (item) => `
-      <li class="${item.checked ? 'checked' : 'unchecked'}">
-        ${item.checked ? '✓' : '✗'} ${item.label}
+      <li class="checked">
+        ✓ ${item.label}
       </li>
     `
       )
       .join('')}
   </ul>
   `
-      : '<p style="color:#888">Чек-лист не заполнен</p>'
+      : '<p style="color:#888">Выполненные позиции не отмечены</p>'
   }
+</div>
+
+<div class="section">
+  <div class="section-title">Показатели</div>
+  <div class="grid">
+    <div class="field"><div class="label">Напряжение L1</div><div class="value">${voltageL1} V</div></div>
+    <div class="field"><div class="label">Напряжение L2</div><div class="value">${voltageL2} V</div></div>
+    <div class="field"><div class="label">Напряжение L3</div><div class="value">${voltageL3} V</div></div>
+
+    <div class="field"><div class="label">Ток фаза 1</div><div class="value">${currentL1} A</div></div>
+    <div class="field"><div class="label">Ток фаза 2</div><div class="value">${currentL2} A</div></div>
+    <div class="field"><div class="label">Ток фаза 3</div><div class="value">${currentL3} A</div></div>
+
+    <div class="field"><div class="label">Температура окружающей среды</div><div class="value">${report?.airTemp ?? '—'} °C</div></div>
+    <div class="field"><div class="label">Температура масла</div><div class="value">${report?.oilTemp ?? '—'} °C</div></div>
+
+    <div class="field"><div class="label">Давление (верхнее)</div><div class="value">${report?.pressure ?? '—'} бар</div></div>
+    <div class="field"><div class="label">Давление (нижнее)</div><div class="value">${pressureLower} бар</div></div>
+
+    <div class="field"><div class="label">Моточасы под нагрузкой</div><div class="value">${loadHours}</div></div>
+    <div class="field"><div class="label">Моточасы текущие</div><div class="value">${report?.currentHours ?? '—'} м/ч</div></div>
+  </div>
 </div>
 
 ${

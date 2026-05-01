@@ -19,13 +19,29 @@ export default async function MapPage() {
     return acc
   }, {})
 
+  const branchPoints = clients.flatMap((client) =>
+    client.branches
+      .filter((branch) => branch.latitude !== null && branch.longitude !== null)
+      .map((branch) => ({
+        id: branch.id,
+        name: branch.name,
+        address: branch.address,
+        latitude: branch.latitude as number,
+        longitude: branch.longitude as number,
+        clientId: client.id,
+        clientName: client.name,
+        city: client.city || 'Не указан',
+        equipmentCount: branch.objects.flatMap((o) => o.equipment).length,
+      }))
+  )
+
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Карта клиентов</h1>
         <p className="text-sm text-gray-500 mt-1">Узбекистан — распределение по городам</p>
       </div>
-      <MapView cityData={Object.values(cityData)} clients={clients} />
+      <MapView cityData={Object.values(cityData)} clients={clients} branchPoints={branchPoints} />
     </div>
   )
 }

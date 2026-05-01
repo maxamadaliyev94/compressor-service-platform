@@ -1,7 +1,9 @@
 import { db } from '@/lib/db'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
+import { requirePermission } from '@/lib/permissions'
 
 export default async function ReportsPage() {
+  await requirePermission('section:reports')
   const [
     totalEquipment,
     totalClients,
@@ -13,12 +15,13 @@ export default async function ReportsPage() {
   ] = await Promise.all([
     db.equipment.count(),
     db.client.count({ where: { status: { not: 'PASSIVE' } } }),
-    db.serviceTask.count(),
-    db.serviceTask.count({ where: { status: 'DONE' } }),
+    db.serviceTask.count({ where: { deletedAt: null } }),
+    db.serviceTask.count({ where: { status: 'DONE', deletedAt: null } }),
     db.equipment.findMany({
       include: { object: { include: { branch: { include: { client: true } } } } },
     }),
     db.serviceTask.findMany({
+      where: { deletedAt: null },
       include: { assignedTo: true, equipment: true },
       orderBy: { createdAt: 'desc' },
     }),
@@ -118,8 +121,8 @@ export default async function ReportsPage() {
   const maxEngTotal = engineerStats[0]?.total ?? 1
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 md:p-8">
+      <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Отчёты и аналитика</h1>
           <p className="text-sm text-gray-500 mt-1">Общая картина по всей системе</p>
@@ -127,7 +130,7 @@ export default async function ReportsPage() {
       </div>
 
       {/* Главные KPI */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-6">
         <div className="bg-white border rounded-xl p-4">
           <p className="text-xs text-gray-500 mb-1">Всего оборудования</p>
           <p className="text-3xl font-bold">{totalEquipment}</p>
@@ -161,7 +164,7 @@ export default async function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6 mb-6">
         {/* Статус ТО */}
         <div className="bg-white border rounded-xl p-5">
           <h2 className="font-semibold mb-4">Статус ТО</h2>
@@ -306,9 +309,10 @@ export default async function ReportsPage() {
       </div>
 
       {/* График задач по месяцам */}
-      <div className="bg-white border rounded-xl p-5 mb-6">
+      <div className="bg-white border rounded-xl p-4 md:p-5 mb-6">
         <h2 className="font-semibold mb-4">Задачи по месяцам</h2>
-        <div className="flex items-end gap-3 h-32">
+        <div className="overflow-x-auto">
+          <div className="flex items-end gap-3 h-32 min-w-[520px]">
           {monthlyData.map((m, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
               <span className="text-xs text-gray-500">{m.total}</span>
@@ -335,6 +339,7 @@ export default async function ReportsPage() {
               <span className="text-xs text-gray-400">{m.label}</span>
             </div>
           ))}
+          </div>
         </div>
         <div className="flex gap-4 mt-3">
           <div className="flex items-center gap-1.5">
@@ -348,7 +353,7 @@ export default async function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
         {/* Требует внимания */}
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="p-4 border-b bg-red-50 flex justify-between">

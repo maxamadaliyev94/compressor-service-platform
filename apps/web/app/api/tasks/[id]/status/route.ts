@@ -2,6 +2,8 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createNotification } from '@/lib/notifications'
+import { hasPermission } from '@/lib/permissions'
+import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import type { Role, ServiceTask, TaskStatus } from '@prisma/client'
 
 function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
@@ -20,9 +22,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const task = await db.serviceTask.findUnique({ where: { id: params.id } })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (task.deletedAt) {
+    return NextResponse.json({ error: 'Задача находится в корзине' }, { status: 400 })
+  }
 
   if (!canExecuteServiceTask(session.user.role as Role, session.user.id, task)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (status === 'DONE') {
+    const canCloseTask = await hasPermission(session.user.role as Role, 'action:task.close')
+    if (!canCloseTask) {
+      return NextResponse.json({ error: 'Нет прав на закрытие задачи' }, { status: 403 })
+    }
+  }
+
+  if (status === 'CANCELLED' && session.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
   }
 
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
@@ -35,6 +51,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id },
     data: { status },
   })
+
+  if (updated.assignedToId) {
+    if (status === 'IN_PROGRESS') {
+      await markEngineerBusy(updated.assignedToId)
+    }
+    if (status === 'DONE' || status === 'CANCELLED') {
+      await syncEngineerFreeIfNoActiveTasks(updated.assignedToId)
+    }
+  }
 
   if (
     status === 'IN_PROGRESS' &&

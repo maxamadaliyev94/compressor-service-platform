@@ -1,11 +1,22 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
-export default function SearchableEquipment({ equipment }: { equipment: any[] }) {
+export default function SearchableEquipment({
+  equipment,
+  canViewWarranty,
+  canManageEquipment,
+}: {
+  equipment: any[]
+  canViewWarranty: boolean
+  canManageEquipment: boolean
+}) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [filterType, setFilterType] = useState('ALL')
   const [showStopped, setShowStopped] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const msColors: Record<string, string> = {
     NORMAL: 'bg-green-100 text-green-800',
@@ -83,9 +94,26 @@ export default function SearchableEquipment({ equipment }: { equipment: any[] })
     return getPriority(a) - getPriority(b)
   })
 
+  async function removeEquipment(id: string) {
+    const ok = window.confirm('Удалить оборудование? Это действие нельзя отменить.')
+    if (!ok) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/equipment/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert((data as { error?: string }).error || 'Не удалось удалить оборудование')
+        return
+      }
+      router.refresh()
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <div>
-      <div className="flex gap-3 mb-4">
+      <div className="flex flex-col md:flex-row gap-3 mb-4">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -95,7 +123,7 @@ export default function SearchableEquipment({ equipment }: { equipment: any[] })
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="ALL">Все статусы ТО</option>
           <option value="OVERDUE">Просрочено</option>
@@ -106,7 +134,7 @@ export default function SearchableEquipment({ equipment }: { equipment: any[] })
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="ALL">Все типы</option>
           <option value="COMPRESSOR">Компрессор</option>
@@ -125,8 +153,60 @@ export default function SearchableEquipment({ equipment }: { equipment: any[] })
           Показать остановленное ({equipment.filter((e: any) => e.status === 'STOPPED').length})
         </label>
       )}
-      <div className="bg-white border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="md:hidden space-y-3">
+        {sorted.length === 0 && (
+          <div className="bg-white border rounded-lg p-6 text-center text-gray-400 text-sm">Ничего не найдено</div>
+        )}
+        {sorted.map((eq) => {
+          const ms = getMS(eq)
+          const ws = getWS(eq)
+          return (
+            <div key={eq.id} className="block bg-white border rounded-lg p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <a href={`/equipment/${eq.id}`} className="font-medium text-sm hover:text-blue-600">
+                    {eq.brand} {eq.model}
+                  </a>
+                  <div className="text-xs text-gray-500">{eq.serialNumber}</div>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${msColors[ms]}`}>{msLabels[ms]}</span>
+              </div>
+              <div className="mt-2 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Тип</span><span className="text-gray-700">{typeLabels[eq.type]}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Клиент</span><span className="text-gray-700 text-right">{eq.object?.branch?.client?.name || '—'}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Объект</span><span className="text-gray-700 text-right">{eq.object?.name || '—'}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Моточасы</span><span className="text-gray-700">{eq.currentHours} м/ч</span></div>
+                {eq.lastServiceDate && (
+                  <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Последнее ТО</span><span className="text-gray-700">{new Date(eq.lastServiceDate).toLocaleDateString('ru-RU')}</span></div>
+                )}
+                {canViewWarranty && <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Гарантия</span><span className="text-gray-700">{wsLabels[ws]}</span></div>}
+              </div>
+              {canManageEquipment && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <a
+                    href={`/equipment/${eq.id}/edit`}
+                    className="w-full min-h-11 border rounded-lg px-2 py-1.5 text-xs text-center hover:bg-gray-50 inline-flex items-center justify-center"
+                  >
+                    Редактировать
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => removeEquipment(eq.id)}
+                    disabled={deletingId === eq.id}
+                    className="w-full min-h-11 border border-red-200 text-red-700 rounded-lg px-2 py-1.5 text-xs hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deletingId === eq.id ? 'Удаление...' : 'Удалить'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="hidden md:block bg-white border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[1050px] text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left p-3 font-medium">Оборудование</th>
@@ -136,13 +216,14 @@ export default function SearchableEquipment({ equipment }: { equipment: any[] })
               <th className="text-left p-3 font-medium">Последнее ТО</th>
               <th className="text-left p-3 font-medium">Статус ТО</th>
               <th className="text-left p-3 font-medium">Задача</th>
-              <th className="text-left p-3 font-medium">Гарантия</th>
+              {canViewWarranty && <th className="text-left p-3 font-medium">Гарантия</th>}
+              {canManageEquipment && <th className="text-left p-3 font-medium">Действия</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-gray-400">
+                <td colSpan={canViewWarranty ? (canManageEquipment ? 9 : 8) : canManageEquipment ? 8 : 7} className="p-8 text-center text-gray-400">
                   Ничего не найдено
                 </td>
               </tr>
@@ -240,23 +321,46 @@ export default function SearchableEquipment({ equipment }: { equipment: any[] })
                       <span className="text-xs text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="p-3">
-                    <div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${wsColors[ws]}`}>
-                        {wsLabels[ws]}
-                      </span>
-                      {eq.warrantyUntil && (
-                        <div className="text-xs text-gray-400 mt-0.5">
-                          до {new Date(eq.warrantyUntil).toLocaleDateString('ru-RU')}
-                        </div>
-                      )}
-                    </div>
-                  </td>
+                  {canViewWarranty && (
+                    <td className="p-3">
+                      <div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${wsColors[ws]}`}>
+                          {wsLabels[ws]}
+                        </span>
+                        {eq.warrantyUntil && (
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            до {new Date(eq.warrantyUntil).toLocaleDateString('ru-RU')}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                  {canManageEquipment && (
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/equipment/${eq.id}/edit`}
+                          className="border rounded px-2 py-1 text-xs hover:bg-gray-50"
+                        >
+                          Редактировать
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => removeEquipment(eq.id)}
+                          disabled={deletingId === eq.id}
+                          className="border border-red-200 text-red-700 rounded px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {deletingId === eq.id ? 'Удаление...' : 'Удалить'}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               )
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

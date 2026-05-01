@@ -14,7 +14,12 @@ export default function NewEquipmentPage() {
   const [showNewBranch, setShowNewBranch] = useState(false)
   const [newBranchName, setNewBranchName] = useState('')
   const [newBranchAddress, setNewBranchAddress] = useState('')
+  const [newBranchLatitude, setNewBranchLatitude] = useState('')
+  const [newBranchLongitude, setNewBranchLongitude] = useState('')
+  const [showLocationFields, setShowLocationFields] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
   const [creatingBranch, setCreatingBranch] = useState(false)
+  const [photos, setPhotos] = useState<string[]>([])
   const [form, setForm] = useState({
     type: '', brand: '', model: '',
     serialNumber: '', yearOfManufacture: '',
@@ -50,6 +55,8 @@ export default function NewEquipmentPage() {
         clientId: selectedClient,
         name: newBranchName,
         address: newBranchAddress,
+        latitude: newBranchLatitude || null,
+        longitude: newBranchLongitude || null,
       })
     })
     const branch = await res.json()
@@ -58,7 +65,31 @@ export default function NewEquipmentPage() {
     setShowNewBranch(false)
     setNewBranchName('')
     setNewBranchAddress('')
+    setNewBranchLatitude('')
+    setNewBranchLongitude('')
+    setShowLocationFields(false)
     setCreatingBranch(false)
+  }
+
+  async function detectLocation() {
+    if (!navigator.geolocation) {
+      alert('Геолокация не поддерживается в этом браузере')
+      return
+    }
+    setDetectingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setNewBranchLatitude(position.coords.latitude.toFixed(6))
+        setNewBranchLongitude(position.coords.longitude.toFixed(6))
+        setShowLocationFields(true)
+        setDetectingLocation(false)
+      },
+      () => {
+        alert('Не удалось определить координаты')
+        setDetectingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -95,6 +126,7 @@ export default function NewEquipmentPage() {
         currentHours: parseInt(form.currentHours) || 0,
         installDate: form.installDate || null,
         warrantyUntil: form.warrantyUntil || null,
+        photos,
       })
     })
     if (res.ok) { router.push('/equipment'); router.refresh() }
@@ -103,9 +135,28 @@ export default function NewEquipmentPage() {
 
   const selectedClientData = clients.find(c => c.id === selectedClient)
 
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function onPhotoPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const allowed = Math.max(0, 10 - photos.length)
+    const selected = files.slice(0, allowed)
+    const loaded = await Promise.all(selected.map(readFileAsDataUrl))
+    setPhotos(prev => [...prev, ...loaded].slice(0, 10))
+    e.target.value = ''
+  }
+
   return (
-    <div className="p-8 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-4 md:p-8 max-w-2xl">
+      <div className="flex items-center gap-2 md:gap-3 mb-6">
         <a href="/equipment" className="text-gray-400 hover:text-gray-600">← Назад</a>
         <h1 className="text-2xl font-bold">Новое оборудование</h1>
       </div>
@@ -162,6 +213,39 @@ export default function NewEquipmentPage() {
                     <input value={newBranchAddress} onChange={e => setNewBranchAddress(e.target.value)}
                       placeholder="Адрес (необязательно)"
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"/>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowLocationFields((prev) => !prev)}
+                        className="text-xs px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                      >
+                        {showLocationFields ? 'Скрыть точную локацию' : '+ Добавить точную локацию'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={detectLocation}
+                        disabled={detectingLocation}
+                        className="text-xs px-3 py-2 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {detectingLocation ? 'Определяем...' : '📍 Определить мою геопозицию'}
+                      </button>
+                    </div>
+                    {showLocationFields && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          value={newBranchLatitude}
+                          onChange={(e) => setNewBranchLatitude(e.target.value)}
+                          placeholder="Широта (напр. 41.2995)"
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        />
+                        <input
+                          value={newBranchLongitude}
+                          onChange={(e) => setNewBranchLongitude(e.target.value)}
+                          placeholder="Долгота (напр. 69.2401)"
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        />
+                      </div>
+                    )}
                     <button type="button" onClick={createBranch}
                       disabled={!newBranchName.trim() || creatingBranch}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
@@ -183,7 +267,7 @@ export default function NewEquipmentPage() {
         <div className="bg-white border rounded-xl p-5">
           <h2 className="font-semibold mb-4 text-gray-800">Данные оборудования</h2>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Тип *</label>
                 <EquipmentTypeSelect value={form.type} onChange={val => set('type', val)} />
@@ -194,7 +278,7 @@ export default function NewEquipmentPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Модель *</label>
                 <input required value={form.model} onChange={e => set('model', e.target.value)}
@@ -209,7 +293,7 @@ export default function NewEquipmentPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Год выпуска</label>
                 <input type="number" value={form.yearOfManufacture} onChange={e => set('yearOfManufacture', e.target.value)}
@@ -237,10 +321,39 @@ export default function NewEquipmentPage() {
                 Следующее ТО будет автоматически установлено через 2000 м/ч
               </p>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Фото оборудования (до 10 шт.)</label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={onPhotoPick}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">Загружено: {photos.length} / 10</p>
+              {photos.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                  {photos.map((src, idx) => (
+                    <div key={`${idx}-${src.slice(0, 24)}`} className="relative border rounded-lg overflow-hidden bg-gray-50">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt={`Фото ${idx + 1}`} className="w-full h-24 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-1 right-1 bg-white/90 text-red-600 border rounded px-1.5 text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button type="submit" disabled={loading}
             className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? 'Сохранение...' : '+ Добавить оборудование'}

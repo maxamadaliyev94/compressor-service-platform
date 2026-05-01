@@ -8,7 +8,10 @@ export default function NewTaskPage() {
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState<any[]>([])
   const [equipment, setEquipment] = useState<any[]>([])
+  const [equipmentMode, setEquipmentMode] = useState<'list' | 'search'>('list')
+  const [equipmentSearch, setEquipmentSearch] = useState('')
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [selectedEngineerIds, setSelectedEngineerIds] = useState<string[]>([])
   const [form, setForm] = useState({
     equipmentId: '',
     assignedToId: '',
@@ -41,7 +44,7 @@ export default function NewTaskPage() {
   const assignableUsers = users.filter((u) => {
     if (!currentUser) return false
     if (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') {
-      return ['CHIEF_ENGINEER', 'ENGINEER'].includes(u.role)
+      return u.role === 'CHIEF_ENGINEER'
     }
     if (currentUser.role === 'CHIEF_ENGINEER') {
       return u.role === 'ENGINEER'
@@ -63,27 +66,69 @@ export default function NewTaskPage() {
     COMMISSIONING: 'Пусконаладка',
   }
 
+  const normalizedEquipmentQuery = equipmentSearch.trim().toLowerCase()
+  const filteredEquipment =
+    normalizedEquipmentQuery.length === 0
+      ? equipment
+      : equipment.filter((eq: any) => {
+          const haystack = [
+            eq.brand,
+            eq.model,
+            eq.serialNumber,
+            eq.object?.branch?.client?.name,
+            eq.object?.name,
+            eq.object?.branch?.address,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedEquipmentQuery)
+        })
+  const selectedEquipment = equipment.find((eq: any) => eq.id === form.equipmentId)
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    const res = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form,
-        sendNotification: true,
-      }),
-    })
-    if (res.ok) {
-      router.push('/tasks')
-      router.refresh()
+    if (!form.equipmentId) {
+      alert('Выберите оборудование')
+      return
     }
-    setLoading(false)
+    setLoading(true)
+    try {
+      const payload =
+        currentUser?.role === 'CHIEF_ENGINEER'
+          ? {
+              ...form,
+              assignedToId: selectedEngineerIds[0] || '',
+              assignedToIds: selectedEngineerIds,
+              sendNotification: true,
+            }
+          : {
+              ...form,
+              sendNotification: true,
+            }
+
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        router.push('/tasks')
+        router.refresh()
+        return
+      }
+      const data = await res.json().catch(() => ({}))
+      alert(data?.error || 'Не удалось создать задачу')
+    } catch {
+      alert('Ошибка сети. Проверьте соединение и попробуйте снова.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="p-8 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-4 md:p-8 max-w-2xl">
+      <div className="flex items-center gap-2 md:gap-3 mb-6">
         <a href="/tasks" className="text-gray-400 hover:text-gray-600">
           ← Назад
         </a>
@@ -92,7 +137,7 @@ export default function NewTaskPage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
         <h3 className="text-sm font-semibold text-blue-800 mb-2">Цепочка назначения</h3>
-        <div className="flex items-center gap-2 text-sm text-blue-700">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-blue-700">
           <span className="bg-blue-200 px-2 py-1 rounded">
             {currentUser?.role === 'ADMIN'
               ? '👑 Администратор'
@@ -104,9 +149,13 @@ export default function NewTaskPage() {
           </span>
           <span>→</span>
           <span className="bg-white border border-blue-200 px-2 py-1 rounded">
-            {form.assignedToId
-              ? users.find((u) => u.id === form.assignedToId)?.name || 'Выбранный'
-              : 'Не назначен'}
+            {currentUser?.role === 'CHIEF_ENGINEER'
+              ? selectedEngineerIds.length > 0
+                ? `Инженеров: ${selectedEngineerIds.length}`
+                : 'Не назначен'
+              : form.assignedToId
+                ? users.find((u) => u.id === form.assignedToId)?.name || 'Выбранный'
+                : 'Не назначен'}
           </span>
         </div>
       </div>
@@ -114,22 +163,80 @@ export default function NewTaskPage() {
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-6 space-y-5">
         <div>
           <label className="block text-sm font-medium mb-1">Оборудование *</label>
-          <select
-            required
-            value={form.equipmentId}
-            onChange={(e) => set('equipmentId', e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Выберите оборудование</option>
-            {equipment.map((eq: any) => (
-              <option key={eq.id} value={eq.id}>
-                {eq.brand} {eq.model} — {eq.object?.branch?.client?.name} ({eq.serialNumber})
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-4 mb-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="equipment-mode"
+                checked={equipmentMode === 'list'}
+                onChange={() => setEquipmentMode('list')}
+                className="accent-blue-600"
+              />
+              Из списка
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="equipment-mode"
+                checked={equipmentMode === 'search'}
+                onChange={() => setEquipmentMode('search')}
+                className="accent-blue-600"
+              />
+              Поиск
+            </label>
+          </div>
+          {equipmentMode === 'list' ? (
+            <select
+              required
+              value={form.equipmentId}
+              onChange={(e) => set('equipmentId', e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Выберите оборудование</option>
+              {equipment.map((eq: any) => (
+                <option key={eq.id} value={eq.id}>
+                  {eq.brand} {eq.model} — {eq.object?.branch?.client?.name} ({eq.serialNumber})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="space-y-2">
+              <input
+                value={equipmentSearch}
+                onChange={(e) => setEquipmentSearch(e.target.value)}
+                placeholder="Поиск: бренд, модель, серийный номер, клиент..."
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="max-h-44 overflow-y-auto border rounded-lg divide-y">
+                {filteredEquipment.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-gray-400">Ничего не найдено</div>
+                ) : (
+                  filteredEquipment.map((eq: any) => (
+                    <button
+                      key={eq.id}
+                      type="button"
+                      onClick={() => set('equipmentId', eq.id)}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                        form.equipmentId === eq.id ? 'bg-blue-50 text-blue-700' : ''
+                      }`}
+                    >
+                      {eq.brand} {eq.model} — {eq.object?.branch?.client?.name} ({eq.serialNumber})
+                    </button>
+                  ))
+                )}
+              </div>
+              {selectedEquipment ? (
+                <div className="text-xs text-green-600">
+                  ✓ Выбрано: {selectedEquipment.brand} {selectedEquipment.model} ({selectedEquipment.serialNumber})
+                </div>
+              ) : (
+                <div className="text-xs text-red-500">Выберите оборудование</div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Тип работы *</label>
             <select
@@ -165,19 +272,42 @@ export default function NewTaskPage() {
             Назначить{' '}
             {currentUser?.role === 'CHIEF_ENGINEER' ? 'инженера' : 'ответственного'}
           </label>
-          <select
-            value={form.assignedToId}
-            onChange={(e) => set('assignedToId', e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Не назначен</option>
-            {assignableUsers.map((u: any) => (
-              <option key={u.id} value={u.id}>
-                {roleLabels[u.role] || ''} {u.name}
-              </option>
-            ))}
-          </select>
-          {form.assignedToId && (
+          {currentUser?.role === 'CHIEF_ENGINEER' ? (
+            <div className="border rounded-lg p-3 space-y-2 max-h-44 overflow-y-auto">
+              {assignableUsers.length === 0 && (
+                <p className="text-xs text-gray-500">Нет доступных инженеров</p>
+              )}
+              {assignableUsers.map((u: any) => (
+                <label key={u.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedEngineerIds.includes(u.id)}
+                    onChange={(e) => {
+                      setSelectedEngineerIds((prev) =>
+                        e.target.checked ? [...prev, u.id] : prev.filter((id) => id !== u.id)
+                      )
+                    }}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  <span>{roleLabels[u.role] || ''} {u.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <select
+              value={form.assignedToId}
+              onChange={(e) => set('assignedToId', e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Не назначен</option>
+              {assignableUsers.map((u: any) => (
+                <option key={u.id} value={u.id}>
+                  {roleLabels[u.role] || ''} {u.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {(form.assignedToId || selectedEngineerIds.length > 0) && (
             <p className="text-xs text-green-600 mt-1">✓ Уведомление будет отправлено автоматически</p>
           )}
         </div>

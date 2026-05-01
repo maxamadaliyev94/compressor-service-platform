@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import type {
   User,
@@ -25,9 +25,11 @@ type RegulationWithItems = (MaintenanceRegulation & { items: MaintenanceRegulati
 
 interface ChecklistItem {
   id: string
+  category: string
   label: string
   checked: boolean
   isRequired: boolean
+  isAuto?: boolean
 }
 
 interface Props {
@@ -35,6 +37,139 @@ interface Props {
   regulation: RegulationWithItems
   engineerId: string
   engineerName: string
+}
+
+type ChecklistTemplateGroup = {
+  category: string
+  items: string[]
+}
+
+const CHECKLIST_TEMPLATE_GROUPS: ChecklistTemplateGroup[] = [
+  {
+    category: 'Тип работ (авто)',
+    items: ['Плановое ТО', 'Диагностика', 'Ремонт', 'Гарантийный ремонт', 'Монтаж', 'Пусконаладка'],
+  },
+  {
+    category: 'Масляная система',
+    items: [
+      'Замена масла',
+      'Долив масла',
+      'Замена масляного фильтра',
+      'Замена сепаратора',
+      'Устранение утечки масла',
+    ],
+  },
+  {
+    category: 'Воздушная система (впуск)',
+    items: [
+      'Замена воздушного фильтра',
+      'Очистка воздушного фильтра',
+      'Замена панельного фильтра',
+      'Очистка панельного фильтра',
+      'Ремкомплект впускного клапана',
+      'Замена впускного клапана',
+      'Устранение утечки воздуха',
+    ],
+  },
+  {
+    category: 'Клапанная группа',
+    items: [
+      'Замена клапана минимального давления',
+      'Ремкомплект клапана минимального давления',
+      'Замена обратного клапана',
+      'Ремонт обратного клапана',
+      'Замена регулятора давления',
+      'Замена реле давления',
+    ],
+  },
+  {
+    category: 'Система охлаждения',
+    items: ['Очистка радиатора', 'Продувка радиатора', 'Замена радиатора', 'Ремонт системы охлаждения'],
+  },
+  {
+    category: 'Винтовой блок',
+    items: [
+      'Проверка состояния',
+      'Замена подшипников винтового блока',
+      'Замена сальников винтового блока',
+      'Капитальный ремонт винтового блока',
+    ],
+  },
+  {
+    category: 'Привод (ремни / муфта)',
+    items: ['Проверка ремней', 'Замена ремней', 'Натяжка ремней', 'Проверка муфты', 'Замена муфты', 'Центровка'],
+  },
+  {
+    category: 'Электродвигатель',
+    items: [
+      'Проверка состояния',
+      'Смазка электродвигателя',
+      'Замена подшипников электродвигателя',
+      'Ремонт электродвигателя',
+    ],
+  },
+  {
+    category: 'Электрика и управление',
+    items: [
+      'Проверка питания',
+      'Протяжка клемм',
+      'Замена контакторов / реле',
+      'Замена контроллера',
+      'Настройка контроллера',
+      'Замена датчика давления',
+      'Замена датчика температуры',
+      'Проверка контроллера',
+      'Устранение ошибок',
+    ],
+  },
+  {
+    category: 'КИП (датчики)',
+    items: ['Проверка датчиков', 'Калибровка датчиков'],
+  },
+  {
+    category: 'Пневмосистема',
+    items: ['Замена полиамидной трубки', 'Замена фитингов', 'Устранение утечек'],
+  },
+  {
+    category: 'Дополнительно',
+    items: ['Установка ремкомплекта (указать узел)', 'Сброс сервисного счетчика'],
+  },
+  {
+    category: 'Завершение',
+    items: ['Запуск оборудования', 'Проверка под нагрузкой', 'Оборудование работает стабильно'],
+  },
+]
+
+const AUTO_TYPE_LABELS: Record<string, string> = {
+  PLANNED_MAINTENANCE: 'Плановое ТО',
+  DIAGNOSTICS: 'Диагностика',
+  WARRANTY_REPAIR: 'Гарантийный ремонт',
+  EMERGENCY: 'Ремонт',
+  INSTALLATION: 'Монтаж',
+  COMMISSIONING: 'Пусконаладка',
+}
+
+function buildFallbackChecklist(taskType: string): ChecklistItem[] {
+  const activeTypeLabel = AUTO_TYPE_LABELS[taskType] ?? 'Плановое ТО'
+  let idx = 0
+
+  return CHECKLIST_TEMPLATE_GROUPS.flatMap((group) =>
+    group.items.map((label) => {
+      const isTypeGroup = group.category === 'Тип работ (авто)'
+      const isAuto = isTypeGroup
+      const checked = isTypeGroup && label === activeTypeLabel
+      const isRequired = false
+      idx += 1
+      return {
+        id: `tpl-${idx}`,
+        category: group.category,
+        label,
+        checked,
+        isRequired,
+        isAuto,
+      }
+    })
+  )
 }
 
 export default function ExecuteTaskClient({ task, regulation, engineerId, engineerName }: Props) {
@@ -49,27 +184,47 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
   const [nextServiceHours, setNextServiceHours] = useState(
     String(eq.nextServiceHours ?? eq.currentHours + 2000)
   )
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(
-    regulation?.items?.map((item) => ({
-      id: item.id,
-      label: item.label,
-      checked: false,
-      isRequired: item.isRequired,
-    })) ?? []
-  )
+  const [loadHours, setLoadHours] = useState('')
+  const [voltageL1, setVoltageL1] = useState('')
+  const [voltageL2, setVoltageL2] = useState('')
+  const [voltageL3, setVoltageL3] = useState('')
+  const [currentL1, setCurrentL1] = useState('')
+  const [currentL2, setCurrentL2] = useState('')
+  const [currentL3, setCurrentL3] = useState('')
+  const [ambientTemp, setAmbientTemp] = useState('')
+  const [oilTemp, setOilTemp] = useState('')
+  const [pressureUpper, setPressureUpper] = useState('')
+  const [pressureLower, setPressureLower] = useState('')
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(() => {
+    const regulationItems =
+      regulation?.items?.map((item) => ({
+        id: item.id,
+        category: regulation?.name ?? 'Регламент',
+        label: item.label,
+        checked: false,
+        isRequired: false,
+      })) ?? []
+
+    if (regulationItems.length > 0) return regulationItems
+    return buildFallbackChecklist(task.type)
+  })
   const [parts, setParts] = useState<{ name: string; quantity: number; unit: string }[]>([])
   const [newPartName, setNewPartName] = useState('')
   const [newPartQty, setNewPartQty] = useState('1')
   const [newPartUnit, setNewPartUnit] = useState('шт')
   const [notes, setNotes] = useState('')
   const [recommendations, setRecommendations] = useState('')
+  const [reportPhotos, setReportPhotos] = useState<string[]>([])
 
   const checkedCount = checklist.filter((i) => i.checked).length
-  const requiredCount = checklist.filter((i) => i.isRequired).length
-  const checkedRequired = checklist.filter((i) => i.isRequired && i.checked).length
 
   function toggleChecklist(id: string) {
-    setChecklist((prev) => prev.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)))
+    setChecklist((prev) =>
+      prev.map((i) => {
+        if (i.id !== id || i.isAuto) return i
+        return { ...i, checked: !i.checked }
+      })
+    )
   }
 
   function addPart() {
@@ -80,6 +235,25 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
     ])
     setNewPartName('')
     setNewPartQty('1')
+  }
+
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function onPickReportPhotos(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const allowed = Math.max(0, 10 - reportPhotos.length)
+    const selected = files.slice(0, allowed)
+    const loaded = await Promise.all(selected.map(readFileAsDataUrl))
+    setReportPhotos((prev) => [...prev, ...loaded].slice(0, 10))
+    e.target.value = ''
   }
 
   async function startTask() {
@@ -110,16 +284,6 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
       alert('Введите следующее ТО')
       return
     }
-    const uncheckedRequired = checklist.filter((i) => i.isRequired && !i.checked)
-    if (uncheckedRequired.length > 0) {
-      const ok = confirm(
-        `Не выполнено ${uncheckedRequired.length} обязательных пунктов чек-листа. Продолжить?`
-      )
-      if (!ok) {
-        setStep('checklist')
-        return
-      }
-    }
     setLoading(true)
     try {
       const res = await fetch(`/api/tasks/${task.id}/complete`, {
@@ -128,10 +292,22 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
         body: JSON.stringify({
           currentHours: parseInt(currentHours, 10),
           nextServiceHours: parseInt(nextServiceHours, 10),
+          loadHours: loadHours ? Number(loadHours) : null,
+          voltageL1: voltageL1 ? Number(voltageL1) : null,
+          voltageL2: voltageL2 ? Number(voltageL2) : null,
+          voltageL3: voltageL3 ? Number(voltageL3) : null,
+          currentL1: currentL1 ? Number(currentL1) : null,
+          currentL2: currentL2 ? Number(currentL2) : null,
+          currentL3: currentL3 ? Number(currentL3) : null,
+          ambientTemp: ambientTemp ? Number(ambientTemp) : null,
+          oilTemp: oilTemp ? Number(oilTemp) : null,
+          pressureUpper: pressureUpper ? Number(pressureUpper) : null,
+          pressureLower: pressureLower ? Number(pressureLower) : null,
           checklist: checklist.map((i) => ({ label: i.label, checked: i.checked })),
           partsUsed: parts,
           notes,
           recommendations,
+          reportPhotos,
           engineerId,
         }),
       })
@@ -158,6 +334,11 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
 
   const steps = ['start', 'checklist', 'hours', 'parts', 'notes', 'complete']
   const stepIdx = steps.indexOf(step)
+  const checklistByCategory = checklist.reduce<Record<string, ChecklistItem[]>>((acc, item) => {
+    if (!acc[item.category]) acc[item.category] = []
+    acc[item.category].push(item)
+    return acc
+  }, {})
 
   return (
     <div className="p-8 max-w-3xl">
@@ -173,7 +354,7 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
         {[
           { key: 'start', label: 'Старт' },
           { key: 'checklist', label: 'Чек-лист' },
-          { key: 'hours', label: 'Моточасы' },
+          { key: 'hours', label: 'Показатели' },
           { key: 'parts', label: 'Запчасти' },
           { key: 'notes', label: 'Заметки' },
           { key: 'complete', label: 'Завершить' },
@@ -309,27 +490,37 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
               />
             </div>
             <div className="divide-y">
-              {checklist.map((item) => (
-                <label
-                  key={item.id}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={item.checked}
-                    onChange={() => toggleChecklist(item.id)}
-                    className="w-5 h-5 rounded accent-blue-600"
-                  />
-                  <span
-                    className={`text-sm flex-1 ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
-                  >
-                    {item.label}
-                  </span>
-                  {item.isRequired && !item.checked && (
-                    <span className="text-xs text-red-400 flex-shrink-0">обяз.</span>
-                  )}
-                  {item.checked && <span className="text-green-500 text-sm flex-shrink-0">✓</span>}
-                </label>
+              {Object.entries(checklistByCategory).map(([category, items]) => (
+                <div key={category}>
+                  <div className="px-4 py-2 bg-gray-50 border-y text-xs font-semibold text-gray-600">
+                    {category}
+                  </div>
+                  {items.map((item) => (
+                    <label
+                      key={item.id}
+                      className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 ${
+                        item.isAuto ? 'cursor-not-allowed bg-gray-50/60' : 'cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.checked}
+                        disabled={item.isAuto}
+                        onChange={() => toggleChecklist(item.id)}
+                        className="w-5 h-5 rounded accent-blue-600 disabled:opacity-60"
+                      />
+                      <span
+                        className={`text-sm flex-1 ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                      >
+                        {item.label}
+                      </span>
+                      {item.isAuto && (
+                        <span className="text-xs text-blue-500 flex-shrink-0">авто</span>
+                      )}
+                      {item.checked && <span className="text-green-500 text-sm flex-shrink-0">✓</span>}
+                    </label>
+                  ))}
+                </div>
               ))}
               {checklist.length === 0 && (
                 <div className="p-6 text-center text-gray-400 text-sm">
@@ -338,11 +529,6 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
               )}
             </div>
           </div>
-          {checkedRequired < requiredCount && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700">
-              ⚠️ Не выполнено {requiredCount - checkedRequired} обязательных пунктов
-            </div>
-          )}
           <button
             onClick={() => setStep('hours')}
             className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700"
@@ -355,9 +541,9 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
       {step === 'hours' && (
         <div className="space-y-4">
           <div className="bg-white border rounded-xl p-5 space-y-4">
-            <h2 className="font-semibold">Моточасы</h2>
+            <h2 className="font-semibold">Показатели</h2>
             <div>
-              <label className="block text-sm font-medium mb-1">Текущие моточасы *</label>
+              <label className="block text-sm font-medium mb-1">Моточасы текущие *</label>
               <input
                 type="number"
                 value={currentHours}
@@ -381,6 +567,41 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
               <p className="text-xs text-gray-400 mt-1 text-center">
                 Рекомендуется: {parseInt(currentHours || '0', 10) + 2000} м/ч (+2000)
               </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Моточасы под нагрузкой</label>
+                <input
+                  type="number"
+                  value={loadHours}
+                  onChange={(e) => setLoadHours(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={0}
+                  placeholder="Необязательно"
+                />
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold mb-3">Электрические параметры (необязательно)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input type="number" value={voltageL1} onChange={(e) => setVoltageL1(e.target.value)} placeholder="Напряжение L1, V" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={voltageL2} onChange={(e) => setVoltageL2(e.target.value)} placeholder="Напряжение L2, V" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={voltageL3} onChange={(e) => setVoltageL3(e.target.value)} placeholder="Напряжение L3, V" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={currentL1} onChange={(e) => setCurrentL1(e.target.value)} placeholder="Ток фаза 1, A" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={currentL2} onChange={(e) => setCurrentL2(e.target.value)} placeholder="Ток фаза 2, A" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={currentL3} onChange={(e) => setCurrentL3(e.target.value)} placeholder="Ток фаза 3, A" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold mb-3">Температура и давление (необязательно)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input type="number" value={ambientTemp} onChange={(e) => setAmbientTemp(e.target.value)} placeholder="Температура окружающей среды, °C" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={oilTemp} onChange={(e) => setOilTemp(e.target.value)} placeholder="Температура масла, °C" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={pressureUpper} onChange={(e) => setPressureUpper(e.target.value)} placeholder="Давление верхнее, бар" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={pressureLower} onChange={(e) => setPressureLower(e.target.value)} placeholder="Давление нижнее, бар" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
             {currentHours && nextServiceHours && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center text-sm text-green-700 font-medium">
@@ -514,6 +735,34 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
                 placeholder="Что нужно сделать клиенту, на что обратить внимание..."
                 className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Фото отчета (до 10 шт.)</label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={onPickReportPhotos}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">Загружено: {reportPhotos.length} / 10</p>
+              {reportPhotos.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                  {reportPhotos.map((src, idx) => (
+                    <div key={`${idx}-${src.slice(0, 24)}`} className="relative border rounded-lg overflow-hidden bg-gray-50">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt={`Фото отчета ${idx + 1}`} className="w-full h-24 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setReportPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-1 right-1 bg-white/90 text-red-600 border rounded px-1.5 text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-3">

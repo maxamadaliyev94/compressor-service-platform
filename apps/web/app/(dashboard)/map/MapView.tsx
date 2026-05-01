@@ -23,16 +23,16 @@ const STATUS_LABELS: Record<string, string> = {
   PASSIVE: 'Пассивный',
 }
 
-export default function MapView({ cityData, clients }: { cityData: any[], clients: any[] }) {
+export default function MapView({ cityData, clients, branchPoints }: { cityData: any[], clients: any[], branchPoints: any[] }) {
   const [selected, setSelected] = useState<any>(null)
   const maxClients = Math.max(...cityData.map((c: any) => c.total), 1)
   void clients
 
   return (
-    <div className="grid grid-cols-3 gap-6">
-      <div className="col-span-2">
-        <div className="bg-white border rounded-xl overflow-hidden" style={{ height: '560px' }}>
-          <LeafletMap cityData={cityData} onCityClick={setSelected} />
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
+      <div className="xl:col-span-2">
+        <div className="bg-white border rounded-xl overflow-hidden h-[360px] sm:h-[420px] md:h-[560px]">
+          <LeafletMap cityData={cityData} branchPoints={branchPoints} onCityClick={setSelected} />
         </div>
         <p className="text-xs text-gray-400 mt-2 text-center">
           Карта интерактивна — можно зумировать и перемещать. Нажмите на маркер для деталей.
@@ -63,6 +63,12 @@ export default function MapView({ cityData, clients }: { cityData: any[], client
               </button>
             ))}
           </div>
+        </div>
+        <div className="bg-white border rounded-xl p-4">
+          <h3 className="font-semibold text-sm mb-1">Точные локации площадок</h3>
+          <p className="text-xs text-gray-500">
+            На карте отображаются маркеры площадок с координатами: {branchPoints.length}
+          </p>
         </div>
 
         {selected ? (

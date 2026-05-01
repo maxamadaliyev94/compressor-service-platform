@@ -1,19 +1,25 @@
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/roles'
+import { hasPermission, requirePermission } from '@/lib/permissions'
+import type { Role } from '@prisma/client'
 import TasksTable from './TasksTable'
 
 export default async function TasksPage() {
+  await requirePermission('section:tasks')
   const session = await getSession()
   const role = session.user.role
+  const isAdmin = role === 'ADMIN'
+  const canCreateTask = role !== 'ENGINEER' && (await hasPermission(role as Role, 'action:task.create'))
 
   const tasks = await db.serviceTask.findMany({
     where: role === 'ENGINEER'
-      ? { assignedToId: session.user.id }
-      : {},
+      ? { assignedToId: session.user.id, deletedAt: null }
+      : { deletedAt: null },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
       createdBy: true,
+      report: { select: { id: true } },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -54,25 +60,35 @@ export default async function TasksPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Задачи</h1>
-        <div className="flex gap-3">
-          <a href="/tasks/kanban" className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
+    <div className="p-4 md:p-8">
+      <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
+        <h1 className="text-xl md:text-2xl font-bold">Задачи</h1>
+        <div className="flex flex-col w-full md:w-auto md:flex-row gap-2 md:gap-3">
+          {isAdmin && (
+            <a href="/tasks/trash" className="w-full md:w-auto min-h-11 border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 inline-flex items-center justify-center">
+              Корзина
+            </a>
+          )}
+          <a href="/tasks/kanban" className="w-full md:w-auto min-h-11 border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 inline-flex items-center justify-center">
             Канбан
           </a>
-          <a href="/tasks/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-            + Создать задачу
-          </a>
+          {canCreateTask && (
+            <a href="/tasks/new" className="w-full md:w-auto min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center justify-center">
+              + Создать задачу
+            </a>
+          )}
         </div>
       </div>
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-white border rounded-lg overflow-x-auto">
         <TasksTable
           tasks={tasks}
           typeLabels={typeLabels}
           statusColors={statusColors}
           statusLabels={statusLabels}
           priorityColors={priorityColors}
+          isAdmin={isAdmin}
+          currentUserId={session.user.id}
+          role={role}
         />
       </div>
     </div>

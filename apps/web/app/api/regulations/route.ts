@@ -11,9 +11,13 @@ export async function GET() {
   return NextResponse.json(regulations)
 }
 
+function canManageRegulations(role?: string) {
+  return role === 'ADMIN'
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session || !['ADMIN', 'MANAGER'].includes(session.user.role)) {
+  if (!session || !canManageRegulations(session.user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const body = await req.json()
@@ -36,4 +40,84 @@ export async function POST(req: NextRequest) {
     include: { items: true }
   })
   return NextResponse.json(regulation)
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session || !canManageRegulations(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = (await req.json()) as {
+    id?: string
+    name?: string
+    equipmentType?: string
+    intervalHours?: number | string
+    taskType?: string
+    description?: string | null
+    items?: Array<{ label: string; itemType?: string; isRequired?: boolean }>
+  }
+
+  if (!body.id) {
+    return NextResponse.json({ error: 'Regulation id is required' }, { status: 400 })
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    const regulation = await tx.maintenanceRegulation.update({
+      where: { id: body.id },
+      data: {
+        name: body.name,
+        equipmentType: body.equipmentType as any,
+        intervalHours:
+          body.intervalHours === undefined ? undefined : parseInt(String(body.intervalHours), 10) || 0,
+        taskType: body.taskType as any,
+        description: body.description ?? null,
+      },
+    })
+
+    if (Array.isArray(body.items)) {
+      await tx.maintenanceRegulationItem.deleteMany({
+        where: { regulationId: body.id },
+      })
+      if (body.items.length > 0) {
+        await tx.maintenanceRegulationItem.createMany({
+          data: body.items.map((item, index) => ({
+            regulationId: body.id as string,
+            label: item.label,
+            itemType: (item.itemType as any) || 'CONTROL',
+            order: index,
+            isRequired: item.isRequired !== false,
+          })),
+        })
+      }
+    }
+
+    return regulation
+  })
+
+  const withItems = await db.maintenanceRegulation.findUnique({
+    where: { id: updated.id },
+    include: { items: { orderBy: { order: 'asc' } } },
+  })
+
+  return NextResponse.json(withItems)
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth()
+  if (!session || !canManageRegulations(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = (await req.json()) as { id?: string }
+  if (!body.id) {
+    return NextResponse.json({ error: 'Regulation id is required' }, { status: 400 })
+  }
+
+  await db.maintenanceRegulation.update({
+    where: { id: body.id },
+    data: { isActive: false },
+  })
+
+  return NextResponse.json({ ok: true })
 }

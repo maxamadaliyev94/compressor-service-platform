@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,13 +15,13 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     const res = await signIn('credentials', {
-      email,
+      login,
       password,
       redirect: false,
     })
     setLoading(false)
     if (res?.error) {
-      setError('Неверный email или пароль')
+      setError('Неверный логин или пароль')
     } else {
       router.push('/')
     }
@@ -36,12 +36,12 @@ export default function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label className="block text-sm font-medium mb-1">Логин</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@csp.uz"
+              type="text"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="admin"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
@@ -66,11 +66,17 @@ export default function LoginPage() {
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
+        <div className="mt-4 text-sm text-gray-500">
+          Нет аккаунта?{' '}
+          <a href="/register" className="text-blue-600 hover:underline">
+            Зарегистрироваться
+          </a>
+        </div>
         <div className="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
           <p className="font-medium mb-1">Тестовые аккаунты:</p>
-          <p>admin@csp.uz — Администратор</p>
-          <p>manager@csp.uz — Менеджер</p>
-          <p>engineer1@csp.uz — Инженер</p>
+          <p>admin — Администратор</p>
+          <p>manager — Менеджер</p>
+          <p>engineer1 — Инженер</p>
         </div>
       </div>
     </div>

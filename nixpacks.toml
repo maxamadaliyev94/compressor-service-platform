@@ -1,11 +1,14 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_20", "nodePackages.pnpm"]
 
 [phases.install]
-cmds = ["npm install -g pnpm", "pnpm install"]
+cmds = ["pnpm install --frozen-lockfile"]
 
 [phases.build]
-cmds = ["pnpm run build --filter=@csp/web"]
+cmds = [
+  "pnpm --filter @csp/db exec prisma generate",
+  "pnpm --filter @csp/web build"
+]
 
 [start]
 cmd = "cd apps/web && pnpm start"

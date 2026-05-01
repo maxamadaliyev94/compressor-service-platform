@@ -7,9 +7,14 @@ import UpdateHours from './UpdateHours'
 import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
 import { auth } from '@/auth'
+import { hasPermission, requirePermission } from '@/lib/permissions'
+import type { Role } from '@prisma/client'
 
 export default async function EquipmentPage({ params }: { params: { id: string } }) {
+  await requirePermission('section:equipment')
   const session = await auth()
+  const role = session?.user.role ?? 'CLIENT'
+  const canViewWarranty = await hasPermission(role as Role, 'field:equipment.warranty')
   const eq = await db.equipment.findUnique({
     where: { id: params.id },
     include: {
@@ -21,6 +26,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
         }
       },
       tasks: {
+        where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
         include: {
           assignedTo: true,
@@ -30,7 +36,8 @@ export default async function EquipmentPage({ params }: { params: { id: string }
             }
           }
         }
-      }
+      },
+      photos: { orderBy: { createdAt: 'desc' } },
     }
   })
   if (!eq) notFound()
@@ -80,8 +87,8 @@ export default async function EquipmentPage({ params }: { params: { id: string }
   const qrUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/equipment/${eq.id}`
 
   return (
-    <div className="p-8 max-w-7xl">
-      <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
+    <div className="p-4 md:p-8 max-w-7xl">
+      <div className="flex flex-wrap items-center gap-2 mb-6 text-sm text-gray-500">
         <a href="/equipment" className="hover:text-gray-700">← Оборудование</a>
         <span>/</span>
         <a href={`/clients/${client.id}`} className="hover:text-gray-700">{client.name}</a>
@@ -89,53 +96,55 @@ export default async function EquipmentPage({ params }: { params: { id: string }
         <span className="text-gray-900 font-medium">{eq.brand} {eq.model}</span>
       </div>
 
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold">{eq.brand} {eq.model}</h1>
           <p className="text-gray-500 text-sm mt-1">
             {typeLabels[eq.type]} · {eq.serialNumber}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[eq.status]}`}>
             {statusLabels[eq.status]}
           </span>
-          <span className={`px-3 py-1 rounded-full text-xs font-medium ${wsColors[ws]}`}>
-            {wsLabels[ws]}
-          </span>
+          {canViewWarranty && (
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${wsColors[ws]}`}>
+              {wsLabels[ws]}
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border rounded-xl p-5">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
+        <div className="xl:col-span-2 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white border rounded-xl p-4 md:p-5">
               <h2 className="font-semibold mb-3 flex items-center gap-2">👥 Клиент</h2>
               <div className="space-y-2 text-sm">
-                <div className="flex gap-2"><span className="text-gray-500 w-24">Компания:</span>
+                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Компания:</span>
                   <a href={`/clients/${client.id}`} className="font-medium text-blue-600 hover:underline truncate">{client.name}</a>
                 </div>
-                {client.city && <div className="flex gap-2"><span className="text-gray-500 w-24">Город:</span><span>{client.city}</span></div>}
-                {client.contactPerson && <div className="flex gap-2"><span className="text-gray-500 w-24">Контакт:</span><span>{client.contactPerson}</span></div>}
-                {client.phone && <div className="flex gap-2"><span className="text-gray-500 w-24">Телефон:</span>
+                {client.city && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Город:</span><span>{client.city}</span></div>}
+                {client.contactPerson && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Контакт:</span><span>{client.contactPerson}</span></div>}
+                {client.phone && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Телефон:</span>
                   <a href={`tel:${client.phone}`} className="text-blue-600 hover:underline">{client.phone}</a>
                 </div>}
-                {client.email && <div className="flex gap-2"><span className="text-gray-500 w-24">Email:</span>
+                {client.email && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Email:</span>
                   <a href={`mailto:${client.email}`} className="text-blue-600 hover:underline truncate">{client.email}</a>
                 </div>}
-                <div className="flex gap-2"><span className="text-gray-500 w-24">Объект:</span><span>{eq.object.name}</span></div>
-                {eq.object.branch.address && <div className="flex gap-2"><span className="text-gray-500 w-24">Адрес:</span><span className="text-xs">{eq.object.branch.address}</span></div>}
+                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Объект:</span><span>{eq.object.name}</span></div>
+                {eq.object.branch.address && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Адрес:</span><span className="text-xs break-words">{eq.object.branch.address}</span></div>}
               </div>
             </div>
 
-            <div className="bg-white border rounded-xl p-4 flex flex-col items-center gap-2">
+            <div className="bg-white border rounded-xl p-4 flex flex-col items-center gap-2 min-w-0">
               <h2 className="font-semibold self-start text-sm">QR-код</h2>
               <div className="bg-gray-50 border rounded-lg p-2">
                 <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrUrl)}`}
                   alt="QR" width={120} height={120}/>
               </div>
               <p className="text-xs text-gray-400 text-center">Наклейте на оборудование</p>
-              <div className="flex gap-2 w-full">
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
                 <a href={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrUrl)}`}
                   download className="flex-1 text-center text-xs text-blue-600 hover:underline border border-blue-200 py-1 rounded-lg hover:bg-blue-50">
                   📥 Скачать
@@ -147,23 +156,25 @@ export default async function EquipmentPage({ params }: { params: { id: string }
 
           <div className="bg-white border rounded-xl p-5">
             <h2 className="font-semibold mb-3 flex items-center gap-2">⚙️ Технические данные</h2>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[eq.type]}</span></div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Бренд:</span><span className="font-medium">{eq.brand}</span></div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Модель:</span><span className="font-medium">{eq.model}</span></div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Серийный №:</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[eq.type]}</span></div>
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Бренд:</span><span className="font-medium">{eq.brand}</span></div>
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Модель:</span><span className="font-medium">{eq.model}</span></div>
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Серийный №:</span>
                 <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{eq.serialNumber}</span>
               </div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Год выпуска:</span><span>{eq.yearOfManufacture || '—'}</span></div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Установлен:</span>
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Год выпуска:</span><span>{eq.yearOfManufacture || '—'}</span></div>
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Установлен:</span>
                 <span>{eq.installDate ? new Date(eq.installDate).toLocaleDateString('ru-RU') : '—'}</span>
               </div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Гарантия до:</span>
-                <span className={ws === 'EXPIRED' ? 'text-red-600' : ws === 'EXPIRING' ? 'text-orange-600' : 'text-green-600'}>
-                  {eq.warrantyUntil ? new Date(eq.warrantyUntil).toLocaleDateString('ru-RU') : '—'}
-                </span>
-              </div>
-              <div className="flex gap-2"><span className="text-gray-500 w-28">Статус:</span>
+              {canViewWarranty && (
+                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Гарантия до:</span>
+                  <span className={ws === 'EXPIRED' ? 'text-red-600' : ws === 'EXPIRING' ? 'text-orange-600' : 'text-green-600'}>
+                    {eq.warrantyUntil ? new Date(eq.warrantyUntil).toLocaleDateString('ru-RU') : '—'}
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Статус:</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[eq.status]}`}>
                   {statusLabels[eq.status]}
                 </span>
@@ -173,10 +184,32 @@ export default async function EquipmentPage({ params }: { params: { id: string }
 
           <UpdateHours equipmentId={eq.id} currentHours={eq.currentHours} nextServiceHours={eq.nextServiceHours} />
 
+          <div className="bg-white border rounded-xl p-5">
+            <h2 className="font-semibold mb-3 flex items-center gap-2">🖼️ Фото оборудования</h2>
+            {eq.photos.length === 0 ? (
+              <p className="text-sm text-gray-400">Фото пока не добавлены</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {eq.photos.map((photo, idx) => (
+                  <a
+                    key={photo.id}
+                    href={photo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block border rounded-lg overflow-hidden bg-gray-50 hover:opacity-90 transition-opacity"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt={`Фото оборудования ${idx + 1}`} className="w-full h-36 object-cover" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border rounded-xl overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b">
               <h2 className="font-semibold">История обслуживания ({eq.tasks.length})</h2>
-              <QuickTaskButton equipmentId={eq.id} createdById={session?.user?.id || ''} />
+              <QuickTaskButton equipmentId={eq.id} createdById={session?.user?.id || ''} role={role} />
             </div>
             {eq.tasks.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">
@@ -314,7 +347,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
           </div>
         </div>
 
-        <div className="col-span-1">
+        <div className="xl:col-span-1">
           <EquipmentHistory equipmentId={eq.id} />
         </div>
       </div>

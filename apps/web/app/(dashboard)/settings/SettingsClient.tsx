@@ -43,7 +43,7 @@ export default function SettingsClient({ equipmentTypes, brands, isAdmin }: Prop
   return (
     <div className="space-y-6">
       <div className="bg-white border rounded-xl overflow-hidden">
-        <div className="flex justify-between items-center p-4 border-b bg-gray-50">
+        <div className="flex flex-col sm:flex-row gap-2 sm:justify-between sm:items-center p-4 border-b bg-gray-50">
           <div>
             <h2 className="font-semibold">Типы оборудования</h2>
             <p className="text-xs text-gray-500 mt-0.5">Активные типы из регламентов ТО</p>
@@ -73,16 +73,18 @@ export default function SettingsClient({ equipmentTypes, brands, isAdmin }: Prop
           </div>
           <span className="text-xs text-gray-400">{brandList.length} брендов</span>
         </div>
-        <div className="grid grid-cols-3 gap-0 divide-y">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0 divide-y">
           {brandList.map((brand, i) => (
             <div key={brand.id}
-              className={`flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 ${i % 3 !== 2 ? 'border-r' : ''}`}>
+              className={`flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 ${
+                i % 3 !== 2 ? 'lg:border-r' : ''
+              }`}>
               <span className="text-sm font-medium">{brand.name}</span>
             </div>
           ))}
         </div>
         <div className="p-4 border-t bg-gray-50">
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               value={newBrand}
               onChange={e => setNewBrand(e.target.value)}

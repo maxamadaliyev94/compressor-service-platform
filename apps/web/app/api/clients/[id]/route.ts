@@ -5,6 +5,19 @@ import { auth } from '@/auth'
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = session.user.role
+  const existing = await db.client.findUnique({
+    where: { id: params.id },
+    select: { managerId: true },
+  })
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (role === 'ENGINEER' || role === 'CHIEF_ENGINEER' || role === 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (role === 'MANAGER' && existing.managerId !== session.user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const body = await req.json()
   const client = await db.client.update({
     where: { id: params.id },

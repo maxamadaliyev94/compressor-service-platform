@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { getSession } from '@/lib/roles'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import Link from 'next/link'
+import EngineerShiftToggle from './EngineerShiftToggle'
 
 export default async function DashboardPage() {
   const session = await getSession()
@@ -12,6 +13,7 @@ export default async function DashboardPage() {
     const myTasks = await db.serviceTask.findMany({
       where: {
         assignedToId: userId,
+        deletedAt: null,
         status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] },
       },
       include: {
@@ -42,13 +44,14 @@ export default async function DashboardPage() {
     }
 
     return (
-      <main className="p-8">
+      <main className="p-4 md:p-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Мои задачи</h1>
+          <h1 className="text-xl md:text-2xl font-bold">Мои задачи</h1>
           <p className="text-gray-500 text-sm mt-1">
             Добро пожаловать, {session.user.name ?? 'инженер'} · {myTasks.length} активных задач
           </p>
         </div>
+        <EngineerShiftToggle />
 
         {myTasks.length === 0 ? (
           <div className="bg-white border rounded-xl p-12 text-center">
@@ -71,7 +74,7 @@ export default async function DashboardPage() {
                     className="absolute inset-0 z-0 rounded-xl"
                     aria-label="Открыть задачу"
                   />
-                  <div className="relative z-[1] flex justify-between items-start gap-4 pointer-events-none">
+                  <div className="relative z-[1] flex flex-col md:flex-row justify-between items-start gap-4 pointer-events-none">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="text-xs font-medium text-gray-500">
@@ -175,10 +178,11 @@ export default async function DashboardPage() {
   )
 
   const activeTasks = await db.serviceTask.count({
-    where: { status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] } },
+    where: { status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] }, deletedAt: null },
   })
 
   const allTasks = await db.serviceTask.findMany({
+    where: { deletedAt: null },
     include: {
       assignedTo: true,
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
@@ -226,6 +230,7 @@ export default async function DashboardPage() {
 
   const maxCount = Math.max(...tasksByMonth.map((m) => m.count), 1)
   const recentTasks = await db.serviceTask.findMany({
+    where: { deletedAt: null },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
@@ -256,10 +261,10 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main className="p-8">
-      <div className="flex justify-between items-center mb-6">
+    <main className="p-4 md:p-8">
+      <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
           <p className="text-gray-500 text-sm">
             {roleGreetings[session.user.role] || 'Compressor Service Platform'}
             {' · '}
@@ -275,8 +280,9 @@ export default async function DashboardPage() {
           })}
         </p>
       </div>
+      {role === 'CHIEF_ENGINEER' && <EngineerShiftToggle />}
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-6">
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-sm text-red-600 mb-1">Просрочено ТО</p>
           <p className="text-3xl font-bold text-red-700">{stats.overdue}</p>
@@ -299,8 +305,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-6">
-        <div className="col-span-2 bg-white border rounded-xl p-5">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6 mb-6">
+        <div className="xl:col-span-2 bg-white border rounded-xl p-4 md:p-5">
           <h2 className="font-semibold mb-4">Задачи по месяцам</h2>
           <div className="flex items-end gap-3 h-40">
             {tasksByMonth.map((m, i) => (
@@ -330,7 +336,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-xl p-5">
+        <div className="bg-white border rounded-xl p-4 md:p-5">
           <h2 className="font-semibold mb-4">Топ инженеров</h2>
           <div className="space-y-3">
             {topEngineers.length === 0 && <p className="text-sm text-gray-400">Нет данных</p>}
@@ -360,7 +366,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="flex justify-between items-center p-4 border-b">
             <h2 className="font-semibold">Последние задачи</h2>

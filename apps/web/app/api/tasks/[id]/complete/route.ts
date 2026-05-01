@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createNotification } from '@/lib/notifications'
+import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import type { Role, ServiceTask } from '@prisma/client'
 
 function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
@@ -9,6 +10,12 @@ function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): b
   if (role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER') return true
   if (role === 'ENGINEER') return task.assignedToId === userId
   return false
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -64,12 +71,48 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     typeof (body as { recommendations?: unknown }).recommendations === 'string'
       ? (body as { recommendations: string }).recommendations
       : null
+  const reportPhotosRaw = (body as { reportPhotos?: unknown }).reportPhotos
+  const reportPhotos = Array.isArray(reportPhotosRaw)
+    ? reportPhotosRaw.filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/')).slice(0, 10)
+    : []
+
+  const loadHours = toOptionalNumber((body as { loadHours?: unknown }).loadHours)
+  const voltageL1 = toOptionalNumber((body as { voltageL1?: unknown }).voltageL1)
+  const voltageL2 = toOptionalNumber((body as { voltageL2?: unknown }).voltageL2)
+  const voltageL3 = toOptionalNumber((body as { voltageL3?: unknown }).voltageL3)
+  const currentL1 = toOptionalNumber((body as { currentL1?: unknown }).currentL1)
+  const currentL2 = toOptionalNumber((body as { currentL2?: unknown }).currentL2)
+  const currentL3 = toOptionalNumber((body as { currentL3?: unknown }).currentL3)
+  const ambientTemp = toOptionalNumber((body as { ambientTemp?: unknown }).ambientTemp)
+  const oilTemp = toOptionalNumber((body as { oilTemp?: unknown }).oilTemp)
+  const pressureUpper = toOptionalNumber((body as { pressureUpper?: unknown }).pressureUpper)
+  const pressureLower = toOptionalNumber((body as { pressureLower?: unknown }).pressureLower)
+
+  const roomConditionLines: string[] = []
+  if (voltageL1 !== null || voltageL2 !== null || voltageL3 !== null) {
+    roomConditionLines.push(
+      `Напряжение: L1=${voltageL1 ?? '—'}V, L2=${voltageL2 ?? '—'}V, L3=${voltageL3 ?? '—'}V`
+    )
+  }
+  if (currentL1 !== null || currentL2 !== null || currentL3 !== null) {
+    roomConditionLines.push(
+      `Ток: Ф1=${currentL1 ?? '—'}A, Ф2=${currentL2 ?? '—'}A, Ф3=${currentL3 ?? '—'}A`
+    )
+  }
+  if (pressureLower !== null) {
+    roomConditionLines.push(`Давление нижнее: ${pressureLower} бар`)
+  }
+  if (loadHours !== null) {
+    roomConditionLines.push(`Моточасы под нагрузкой: ${loadHours}`)
+  }
+  const roomCondition = roomConditionLines.length > 0 ? roomConditionLines.join('; ') : null
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
     include: { report: true, equipment: true },
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (task.deletedAt) return NextResponse.json({ error: 'Задача находится в корзине' }, { status: 400 })
   if (task.report) return NextResponse.json({ error: 'Отчёт уже существует' }, { status: 400 })
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
     return NextResponse.json({ error: 'Задача уже закрыта' }, { status: 400 })
@@ -93,6 +136,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           finishedAt: new Date(),
           currentHours,
           nextServiceHours,
+          pressure: pressureUpper,
+          oilTemp,
+          airTemp: ambientTemp,
+          roomCondition,
           notes,
           recommendations,
           actNumber,
@@ -108,6 +155,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
               name: (p as { name: string }).name,
               quantity: (p as { quantity: number }).quantity,
               unit: (p as { unit: string }).unit,
+            })),
+          },
+          attachments: {
+            create: reportPhotos.map((url, index) => ({
+              url,
+              type: 'OTHER',
+              caption: `Фото отчета ${index + 1}`,
             })),
           },
         },
@@ -155,6 +209,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       type: 'SUCCESS',
       link: `/tasks/${task.id}`,
     })
+  }
+
+  if (task.assignedToId) {
+    await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
   }
 
   return NextResponse.json({ ok: true })

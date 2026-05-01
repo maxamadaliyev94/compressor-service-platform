@@ -17,7 +17,7 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
       createdBy: true,
     }
   })
-  if (!task) notFound()
+  if (!task || task.deletedAt) notFound()
 
   if (['DONE', 'CANCELLED'].includes(task.status)) {
     redirect(`/tasks/${params.id}`)

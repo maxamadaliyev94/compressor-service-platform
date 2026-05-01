@@ -5,28 +5,38 @@ import ClientsTable from './ClientsTable'
 
 export default async function ClientsPage() {
   const session = await auth()
-  const isAdmin = session?.user?.role === 'ADMIN'
+  if (!session) return null
+  const role = session.user.role
+  const isAdmin = role === 'ADMIN'
+  const isManager = role === 'MANAGER'
+  const isEngineer = role === 'ENGINEER'
 
   const clients = await db.client.findMany({
-    include: { branches: { include: { objects: { include: { equipment: true } } } } },
+    where: isManager ? { managerId: session.user.id } : {},
+    include: {
+      manager: { select: { id: true, name: true, email: true, phone: true } },
+      branches: { include: { objects: { include: { equipment: true } } } },
+    },
     orderBy: { createdAt: 'desc' }
   })
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 md:p-8">
+      <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Клиенты</h1>
+          <h1 className="text-xl md:text-2xl font-bold">Клиенты</h1>
           <p className="text-sm text-gray-500 mt-1">
             <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium mr-1">UZ</span>
             Узбекистан
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col w-full md:w-auto md:flex-row gap-2 md:gap-3">
           <ExportClientsButton clients={clients} />
-          <a href="/clients/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-            + Добавить клиента
-          </a>
+          {!isEngineer && (
+            <a href="/clients/new" className="w-full md:w-auto min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center justify-center">
+              + Добавить клиента
+            </a>
+          )}
         </div>
       </div>
       <ClientsTable clients={clients} isAdmin={isAdmin} />

@@ -43,12 +43,12 @@ export default function KanbanBoard({ tasks }: { tasks: any[] }) {
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
+    <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4">
       {COLUMNS.map(col => {
         const colTasks = localTasks.filter(t => t.status === col.id)
         return (
           <div key={col.id}
-            className={`flex-shrink-0 w-64 rounded-xl border-2 ${col.color} p-3`}
+            className={`flex-shrink-0 w-[85vw] sm:w-72 md:w-64 rounded-xl border-2 ${col.color} p-3`}
             onDragOver={onDragOver}
             onDrop={e => onDrop(e, col.id)}>
             <div className="flex justify-between items-center mb-3">

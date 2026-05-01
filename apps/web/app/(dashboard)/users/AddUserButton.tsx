@@ -14,7 +14,7 @@ export default function AddUserButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', phone: '', role: 'ENGINEER', password: 'password123' })
+  const [form, setForm] = useState({ name: '', login: '', email: '', phone: '', role: 'ENGINEER', password: 'password123' })
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -30,19 +30,19 @@ export default function AddUserButton() {
     })
     setLoading(false)
     setOpen(false)
-    setForm({ name: '', email: '', phone: '', role: 'ENGINEER', password: 'password123' })
+    setForm({ name: '', login: '', email: '', phone: '', role: 'ENGINEER', password: 'password123' })
     router.refresh()
   }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+      <button onClick={() => setOpen(true)} className="w-full md:w-auto min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
         + Добавить пользователя
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
+          <div className="bg-white rounded-t-2xl md:rounded-xl p-4 md:p-6 w-full md:max-w-md shadow-xl max-h-[92vh] overflow-y-auto">
             <h2 className="text-lg font-bold mb-4">Новый пользователь</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -56,17 +56,26 @@ export default function AddUserButton() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Email *</label>
+                <label className="block text-sm font-medium mb-1">Логин *</label>
                 <input
                   required
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => set('email', e.target.value)}
-                  placeholder="user@csp.uz"
+                  value={form.login}
+                  onChange={(e) => set('login', e.target.value)}
+                  placeholder="ivanov"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Email</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set('email', e.target.value)}
+                  placeholder="user@csp.uz (необязательно)"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">Телефон</label>
                   <input
@@ -100,15 +109,15 @@ export default function AddUserButton() {
                 />
                 <p className="text-xs text-gray-400 mt-1">По умолчанию: password123</p>
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="flex-1 min-h-11 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
                   {loading ? 'Создание...' : 'Создать'}
                 </button>
-                <button type="button" onClick={() => setOpen(false)} className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50">
+                <button type="button" onClick={() => setOpen(false)} className="flex-1 min-h-11 border py-2 rounded-lg text-sm hover:bg-gray-50">
                   Отмена
                 </button>
               </div>
