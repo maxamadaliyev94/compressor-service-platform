@@ -146,6 +146,8 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
                       <option value="5">5 дней (пн-пт)</option>
                       <option value="4">4 дня</option>
                       <option value="3">3 дня</option>
+                      <option value="2">2 дня</option>
+                      <option value="1">1 день</option>
                     </select>
                   </div>
                 </div>

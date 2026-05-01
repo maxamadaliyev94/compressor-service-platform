@@ -16,10 +16,8 @@ ALTER TABLE "clients" ALTER COLUMN "status" SET DEFAULT 'STANDART';
 COMMIT;
 
 -- DropIndex
-DROP INDEX "clients_managerId_idx";
 
 -- DropIndex
-DROP INDEX "service_tasks_deletedAt_idx";
 
 -- AlterTable
 ALTER TABLE "audit_logs" ADD COLUMN     "comment" TEXT;
