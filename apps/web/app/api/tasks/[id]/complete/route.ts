@@ -18,6 +18,21 @@ function toOptionalNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+const MAX_SIGNATURE_BYTES = 2_000_000
+
+function parsePngDataUrlSignature(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  if (!value.startsWith('data:image/png;base64,')) return null
+  if (value.length > MAX_SIGNATURE_BYTES) return null
+  return value
+}
+
+function parseSignedAt(value: unknown): Date {
+  if (typeof value !== 'string') return new Date()
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? new Date() : d
+}
+
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -75,6 +90,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const reportPhotos = Array.isArray(reportPhotosRaw)
     ? reportPhotosRaw.filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/')).slice(0, 10)
     : []
+
+  const engineerSignature = parsePngDataUrlSignature((body as { engineerSignature?: unknown }).engineerSignature)
+  if (!engineerSignature) {
+    return NextResponse.json({ error: 'Требуется подпись инженера (PNG)' }, { status: 400 })
+  }
+  const optionalClient = parsePngDataUrlSignature((body as { clientSignature?: unknown }).clientSignature)
+  const engineerSignedAt = parseSignedAt((body as { engineerSignedAt?: unknown }).engineerSignedAt)
 
   const loadHours = toOptionalNumber((body as { loadHours?: unknown }).loadHours)
   const voltageL1 = toOptionalNumber((body as { voltageL1?: unknown }).voltageL1)
@@ -143,6 +165,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           notes,
           recommendations,
           actNumber,
+          engineerSignature,
+          clientSignature: optionalClient,
+          engineerSignedAt,
+          clientSignedAt: optionalClient ? parseSignedAt((body as { clientSignedAt?: unknown }).clientSignedAt) : null,
           checklistItems: {
             create: checklist.map((c, i) => ({
               label: (c as { label: string }).label,
@@ -169,7 +195,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       await tx.serviceTask.update({
         where: { id: task.id },
-        data: { status: 'DONE', completedAt: new Date() },
+        data: {
+          status: 'DONE',
+          completedAt: new Date(),
+          engineerSignature,
+          clientSignature: optionalClient,
+        },
       })
 
       await tx.equipment.update({

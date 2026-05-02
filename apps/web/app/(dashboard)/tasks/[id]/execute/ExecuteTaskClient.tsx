@@ -2,6 +2,7 @@
 
 import { useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import ActSignaturePad from './ActSignaturePad'
 import type {
   User,
   ServiceTask,
@@ -215,6 +216,8 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
   const [notes, setNotes] = useState('')
   const [recommendations, setRecommendations] = useState('')
   const [reportPhotos, setReportPhotos] = useState<string[]>([])
+  const [engineerSignature, setEngineerSignature] = useState<string | null>(null)
+  const [engineerSignedAt, setEngineerSignedAt] = useState<Date | null>(null)
 
   const checkedCount = checklist.filter((i) => i.checked).length
 
@@ -284,6 +287,10 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
       alert('Введите следующее ТО')
       return
     }
+    if (!engineerSignature || !engineerSignedAt) {
+      alert('Нужна подпись инженера на вкладке «Завершить»')
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/tasks/${task.id}/complete`, {
@@ -309,6 +316,8 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
           recommendations,
           reportPhotos,
           engineerId,
+          engineerSignature,
+          engineerSignedAt: engineerSignedAt.toISOString(),
         }),
       })
       if (!res.ok) {
@@ -784,6 +793,27 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
 
       {step === 'complete' && (
         <div className="space-y-4">
+          <div className="bg-white border rounded-xl p-5 space-y-4">
+            <h2 className="font-semibold">Подпись инженера</h2>
+            <p className="text-xs text-gray-500">
+              Поставьте подпись перед закрытием задачи. Подпись клиента можно добавить позже в карточке задачи.
+            </p>
+            <ActSignaturePad
+              variant="engineer"
+              title="Подпись инженера"
+              signedDataUrl={engineerSignature}
+              signedAt={engineerSignedAt}
+              onSigned={(url, at) => {
+                setEngineerSignature(url)
+                setEngineerSignedAt(at)
+              }}
+              onReset={() => {
+                setEngineerSignature(null)
+                setEngineerSignedAt(null)
+              }}
+            />
+          </div>
+
           <div className="bg-white border rounded-xl p-5">
             <h2 className="font-semibold mb-4">✅ Сводка перед закрытием</h2>
             <div className="space-y-3">

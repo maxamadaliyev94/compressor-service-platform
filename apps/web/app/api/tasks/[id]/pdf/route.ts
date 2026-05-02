@@ -191,9 +191,33 @@ ${
 <div class="footer">
   <div>
     <div class="sig-line">Подпись инженера: ${task.assignedTo?.name || '_______________'}</div>
+    ${
+      report?.engineerSignature
+        ? `<div style="margin-top:8px;"><img src="${report.engineerSignature}" alt="" style="max-height:90px;max-width:100%;object-fit:contain;" /></div>`
+        : ''
+    }
+    ${
+      report?.engineerSignedAt
+        ? `<div style="margin-top:6px;padding:4px 8px;display:inline-block;border:2px dashed #16a34a;background:#f0fdf4;color:#166534;font-size:11px;font-weight:bold;">ПОДПИСАНО · ${new Date(
+            report.engineerSignedAt
+          ).toLocaleString('ru-RU')}</div>`
+        : ''
+    }
   </div>
   <div>
     <div class="sig-line">Подпись клиента: ${client.contactPerson || '_______________'}</div>
+    ${
+      report?.clientSignature
+        ? `<div style="margin-top:8px;"><img src="${report.clientSignature}" alt="" style="max-height:90px;max-width:100%;object-fit:contain;" /></div>`
+        : ''
+    }
+    ${
+      report?.clientSignedAt
+        ? `<div style="margin-top:6px;padding:4px 8px;display:inline-block;border:2px dashed #2563eb;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:bold;">ПОДПИСАНО · ${new Date(
+            report.clientSignedAt
+          ).toLocaleString('ru-RU')}</div>`
+        : ''
+    }
   </div>
 </div>
 </body>

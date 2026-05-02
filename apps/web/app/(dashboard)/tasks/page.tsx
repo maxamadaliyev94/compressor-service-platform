@@ -19,7 +19,7 @@ export default async function TasksPage() {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
       createdBy: true,
-      report: { select: { id: true } },
+      report: { select: { id: true, clientSignature: true } },
     },
     orderBy: { createdAt: 'desc' },
   })

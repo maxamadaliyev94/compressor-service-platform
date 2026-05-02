@@ -25,7 +25,7 @@ type TaskRow = {
     }
   }
   assignedTo: { id: string; name: string } | null
-  report?: { id: string } | null
+  report?: { id: string; clientSignature: string | null } | null
   comment?: string | null
 }
 
@@ -193,9 +193,16 @@ export default function TasksTable({
               <span className={`mr-1 ${priorityColors[task.priority]}`}>●</span>
               №{task.requestNumber} · {typeLabels[task.type] || task.type}
             </div>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRenderedStatusColor(task, sourceTaskId)}`}>
-              {getRenderedStatusLabel(task, sourceTaskId)}
-            </span>
+            <div className="flex flex-col items-end gap-1">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRenderedStatusColor(task, sourceTaskId)}`}>
+                {getRenderedStatusLabel(task, sourceTaskId)}
+              </span>
+              {task.status === 'DONE' && task.report && !task.report.clientSignature && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 text-right">
+                  Нет подписи клиента
+                </span>
+              )}
+            </div>
           </div>
           <div className="mt-2 text-sm text-gray-700">
             {task.equipment.brand} {task.equipment.model}
@@ -274,9 +281,16 @@ export default function TasksTable({
           {task.scheduledAt ? new Date(task.scheduledAt).toLocaleDateString('ru-RU') : '—'}
         </td>
         <td className="p-3">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRenderedStatusColor(task, sourceTaskId)}`}>
-            {getRenderedStatusLabel(task, sourceTaskId)}
-          </span>
+          <div className="flex flex-col gap-1 items-start">
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRenderedStatusColor(task, sourceTaskId)}`}>
+              {getRenderedStatusLabel(task, sourceTaskId)}
+            </span>
+            {task.status === 'DONE' && task.report && !task.report.clientSignature && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 max-w-[11rem] leading-tight">
+                Нет подписи клиента
+              </span>
+            )}
+          </div>
         </td>
         <td className="p-3">
           <a
