@@ -11,11 +11,20 @@ export default async function MapPage() {
     },
   })
 
+  type CityEquipRow = {
+    equipmentId: string
+    clientName: string
+    brand: string
+    model: string
+    serialNumber: string
+  }
+
   type CityBucket = {
     city: string
     clients: (typeof clients)[number][]
     total: number
     equipment: number
+    equipmentItems: CityEquipRow[]
   }
   const cityMap: Record<string, CityBucket> = {}
 
@@ -23,7 +32,7 @@ export default async function MapPage() {
     if (client.branches.length === 0) {
       const cityKey = client.city?.trim() || 'Не указан'
       if (!cityMap[cityKey]) {
-        cityMap[cityKey] = { city: cityKey, clients: [], total: 0, equipment: 0 }
+        cityMap[cityKey] = { city: cityKey, clients: [], total: 0, equipment: 0, equipmentItems: [] }
       }
       if (!cityMap[cityKey].clients.find((c) => c.id === client.id)) {
         cityMap[cityKey].clients.push(client)
@@ -33,16 +42,26 @@ export default async function MapPage() {
     }
 
     for (const branch of client.branches) {
-      const branchEquip = branch.objects.flatMap((o) => o.equipment).length
+      const branchEquipment = branch.objects.flatMap((o) => o.equipment)
+      const branchEquip = branchEquipment.length
       const coords = parseBranchCoords(branch.latitude, branch.longitude)
       const cityKey = coords
         ? nearestMapCityName(coords.lat, coords.lng)
         : client.city?.trim() || 'Не указан'
 
       if (!cityMap[cityKey]) {
-        cityMap[cityKey] = { city: cityKey, clients: [], total: 0, equipment: 0 }
+        cityMap[cityKey] = { city: cityKey, clients: [], total: 0, equipment: 0, equipmentItems: [] }
       }
       cityMap[cityKey].equipment += branchEquip
+      for (const eq of branchEquipment) {
+        cityMap[cityKey].equipmentItems.push({
+          equipmentId: eq.id,
+          clientName: client.name,
+          brand: eq.brand,
+          model: eq.model,
+          serialNumber: eq.serialNumber,
+        })
+      }
       if (!cityMap[cityKey].clients.find((c) => c.id === client.id)) {
         cityMap[cityKey].clients.push(client)
         cityMap[cityKey].total++
@@ -57,6 +76,7 @@ export default async function MapPage() {
       .map((branch) => {
         const c = parseBranchCoords(branch.latitude, branch.longitude)
         if (!c) return null
+        const equipment = branch.objects.flatMap((o) => o.equipment)
         return {
           id: branch.id,
           name: branch.name,
@@ -66,7 +86,14 @@ export default async function MapPage() {
           clientId: client.id,
           clientName: client.name,
           city: client.city || 'Не указан',
-          equipmentCount: branch.objects.flatMap((o) => o.equipment).length,
+          equipmentCount: equipment.length,
+          equipment: equipment.map((eq) => ({
+            id: eq.id,
+            brand: eq.brand,
+            model: eq.model,
+            serialNumber: eq.serialNumber,
+            type: eq.type,
+          })),
         }
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)

@@ -49,23 +49,67 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
             карточке клиента. Синие круги — справочные центры городов, метки — точные филиалы.
           </p>
           <div className="space-y-2">
-            {cityData.sort((a: any, b: any) => b.total - a.total).map((data: any) => (
-              <button key={data.city}
-                onClick={() => setSelected(selected?.city === data.city ? null : data)}
-                className={`w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-colors ${selected?.city === data.city ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}`}>
-                <div>
-                  <div className="text-sm font-medium">{data.city}</div>
-                  <div className="text-xs text-gray-500">{data.equipment} ед. оборудования</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                    <div className="bg-blue-500 h-1.5 rounded-full transition-all"
-                      style={{ width: `${(data.total / maxClients) * 100}%` }}/>
+            {cityData
+              .sort((a: any, b: any) => b.total - a.total)
+              .map((data: any) => {
+                const items: {
+                  equipmentId: string
+                  clientName: string
+                  brand: string
+                  model: string
+                  serialNumber: string
+                }[] = [...(data.equipmentItems || [])].sort((x, y) =>
+                  x.clientName.localeCompare(y.clientName, 'ru') || x.serialNumber.localeCompare(y.serialNumber, 'ru')
+                )
+                return (
+                  <div
+                    key={data.city}
+                    className={`rounded-lg border transition-colors ${
+                      selected?.city === data.city ? 'bg-blue-50 border-blue-200' : 'border-gray-100 bg-white hover:border-gray-200'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelected(selected?.city === data.city ? null : data)}
+                      className="w-full flex items-center justify-between p-2.5 text-left"
+                    >
+                      <div>
+                        <div className="text-sm font-medium">{data.city}</div>
+                        <div className="text-xs text-gray-500">
+                          {data.equipment} ед. · {data.total} {data.total === 1 ? 'клиент' : 'клиентов'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-16 bg-gray-100 rounded-full h-1.5">
+                          <div
+                            className="bg-blue-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${(data.total / maxClients) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold text-blue-700 w-4 text-right">{data.total}</span>
+                      </div>
+                    </button>
+                    {items.length > 0 && (
+                      <ul className="px-2.5 pb-2.5 max-h-48 overflow-y-auto space-y-1.5 border-t border-gray-100/80 pt-2">
+                        {items.map((eq) => (
+                          <li key={`${data.city}-${eq.equipmentId}`} className="text-[11px] leading-snug text-gray-700 pl-1">
+                            <span className="font-medium text-gray-800">{eq.clientName}</span>
+                            <span className="text-gray-400"> — </span>
+                            <a
+                              href={`/equipment/${eq.equipmentId}`}
+                              className="text-blue-600 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {eq.brand} {eq.model}
+                            </a>
+                            <div className="text-gray-500 mt-0.5">№ {eq.serialNumber}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                  <span className="text-sm font-bold text-blue-700 w-4 text-right">{data.total}</span>
-                </div>
-              </button>
-            ))}
+                )
+              })}
           </div>
         </div>
         <div className="bg-white border rounded-xl p-4">
@@ -91,6 +135,26 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
                 <div className="text-xs text-green-500">оборудования</div>
               </div>
             </div>
+            {Array.isArray(selected.equipmentItems) && selected.equipmentItems.length > 0 && (
+              <div className="mb-3 border border-gray-100 rounded-lg p-2 max-h-52 overflow-y-auto">
+                <div className="text-xs font-semibold text-gray-700 mb-2">Оборудование в городе</div>
+                <ul className="space-y-2">
+                  {[...selected.equipmentItems]
+                    .sort((a: any, b: any) =>
+                      a.clientName.localeCompare(b.clientName, 'ru') || a.serialNumber.localeCompare(b.serialNumber, 'ru')
+                    )
+                    .map((eq: any) => (
+                      <li key={eq.equipmentId} className="text-xs text-gray-700 border-b border-gray-50 last:border-0 pb-2 last:pb-0">
+                        <div className="font-medium text-gray-800">{eq.clientName}</div>
+                        <a href={`/equipment/${eq.equipmentId}`} className="text-blue-600 hover:underline">
+                          {eq.brand} {eq.model}
+                        </a>
+                        <div className="text-gray-500">№ {eq.serialNumber}</div>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
             <div className="space-y-2">
               {selected.clients.map((client: any) => {
                 const equipCount = client.branches

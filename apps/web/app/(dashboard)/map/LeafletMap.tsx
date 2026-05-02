@@ -8,6 +8,46 @@ interface Props {
   onCityClick: (data: any) => void
 }
 
+function escHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function branchPopupHtml(point: any): string {
+  const items: { id: string; brand: string; model: string; serialNumber: string }[] = Array.isArray(point.equipment)
+    ? point.equipment
+    : []
+  const listHtml =
+    items.length === 0
+      ? `<div style="font-size:11px;color:#9ca3af;margin-top:6px">Оборудование на этой площадке не добавлено</div>`
+      : `<div style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:8px">
+          <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px">Оборудование (${items.length})</div>
+          ${items
+            .map(
+              (eq) => `
+            <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;line-height:1.35">
+              <div style="font-size:12px;font-weight:600;color:#111827">${escHtml(eq.brand)} ${escHtml(eq.model)}</div>
+              <div style="font-size:11px;color:#6b7280">Серийный № ${escHtml(eq.serialNumber)}</div>
+              <a href="/equipment/${encodeURIComponent(eq.id)}" style="font-size:11px;color:#2563eb;text-decoration:none;margin-top:2px;display:inline-block">Открыть карточку →</a>
+            </div>`
+            )
+            .join('')}
+        </div>`
+
+  return `
+          <div style="font-family:system-ui,sans-serif;min-width:220px;max-width:280px">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px">📌 ${escHtml(point.name)}</div>
+            <div style="font-size:12px;color:#374151;margin-bottom:4px">${escHtml(point.clientName)}</div>
+            <div style="font-size:11px;color:#6b7280;margin-bottom:4px">${escHtml(point.address || 'Адрес не указан')}</div>
+            <div style="font-size:11px;color:#6b7280">${point.equipmentCount ?? items.length} ед. оборудования</div>
+            ${listHtml}
+          </div>
+        `
+}
+
 export default function LeafletMap({ cityData, branchPoints, onCityClick }: Props) {
   const mapRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -119,14 +159,7 @@ export default function LeafletMap({ cityData, branchPoints, onCityClick }: Prop
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
         boundsPoints.push([lat, lng])
         const marker = L.marker([lat, lng]).addTo(map)
-        marker.bindPopup(`
-          <div style="font-family:system-ui,sans-serif;min-width:210px">
-            <div style="font-weight:700;font-size:14px;margin-bottom:4px">📌 ${point.name}</div>
-            <div style="font-size:12px;color:#374151;margin-bottom:4px">${point.clientName}</div>
-            <div style="font-size:11px;color:#6b7280;margin-bottom:6px">${point.address || 'Адрес не указан'}</div>
-            <div style="font-size:11px;color:#6b7280">${point.equipmentCount} ед. оборудования</div>
-          </div>
-        `)
+        marker.bindPopup(branchPopupHtml(point), { maxWidth: 300, maxHeight: 340, className: 'branch-detail-popup' })
       })
 
       cityData.forEach((data: any) => {
