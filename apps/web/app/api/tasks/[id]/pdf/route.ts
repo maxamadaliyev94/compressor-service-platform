@@ -17,9 +17,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   if (!task || task.deletedAt) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
   const eq = task.equipment
   const client = eq.object.branch.client
   const report = task.report
+  const engineerName = task.assignedTo?.name || '—'
+  const clientSignerName = client.contactPerson?.trim() || client.name || '—'
 
   const checkedItems = report?.checklistItems?.filter((item) => item.checked) ?? []
 
@@ -69,8 +74,28 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   .checklist li { padding: 3px 0; }
   .checked { color: #16a34a; }
   .unchecked { color: #dc2626; }
-  .footer { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-  .sig-line { border-top: 1px solid #333; margin-top: 40px; padding-top: 4px; font-size: 11px; color: #666; }
+  .footer { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  .sig-block { min-width: 0; }
+  .sig-label { font-size: 11px; color: #555; margin-bottom: 8px; font-weight: 600; }
+  .sig-row {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+    border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px 12px; background: #fafafa; min-height: 88px;
+  }
+  .sig-img-wrap { flex: 1; min-width: 120px; display: flex; align-items: center; justify-content: flex-start; }
+  .sig-img-wrap img { max-height: 80px; max-width: 100%; object-fit: contain; display: block; }
+  .sig-placeholder { color: #ccc; font-size: 12px; user-select: none; }
+  .stamp {
+    flex-shrink: 0; text-align: center; padding: 10px 14px; border: 1px solid; border-radius: 2px;
+    font-size: 10px; line-height: 1.45; max-width: 210px;
+  }
+  .stamp--engineer { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .stamp--engineer .stamp-title { font-weight: 700; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .stamp--engineer .stamp-time { font-size: 9px; font-weight: 500; color: #15803d; margin-bottom: 3px; }
+  .stamp--engineer .stamp-by { font-size: 9px; color: #14532d; }
+  .stamp--client { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
+  .stamp--client .stamp-title { font-weight: 700; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .stamp--client .stamp-time { font-size: 9px; font-weight: 500; color: #2563eb; margin-bottom: 3px; }
+  .stamp--client .stamp-by { font-size: 9px; color: #1e3a8a; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; background: #dbeafe; color: #1d4ed8; }
 </style>
 </head>
@@ -189,35 +214,57 @@ ${
 </div>
 
 <div class="footer">
-  <div>
-    <div class="sig-line">Подпись инженера: ${task.assignedTo?.name || '_______________'}</div>
-    ${
-      report?.engineerSignature
-        ? `<div style="margin-top:8px;"><img src="${report.engineerSignature}" alt="" style="max-height:90px;max-width:100%;object-fit:contain;" /></div>`
-        : ''
-    }
-    ${
-      report?.engineerSignedAt
-        ? `<div style="margin-top:6px;padding:4px 8px;display:inline-block;border:2px dashed #16a34a;background:#f0fdf4;color:#166534;font-size:11px;font-weight:bold;">ПОДПИСАНО · ${new Date(
-            report.engineerSignedAt
-          ).toLocaleString('ru-RU')}</div>`
-        : ''
-    }
+  <div class="sig-block">
+    <div class="sig-label">Подпись инженера</div>
+    <div class="sig-row">
+      <div class="sig-img-wrap">
+        ${
+          report?.engineerSignature
+            ? `<img src="${report.engineerSignature}" alt="" />`
+            : '<span class="sig-placeholder">________________</span>'
+        }
+      </div>
+      ${
+        report?.engineerSignedAt
+          ? `<div class="stamp stamp--engineer">
+            <div class="stamp-title">ПОДПИСАНО</div>
+            <div class="stamp-time">${esc(
+              new Date(report.engineerSignedAt).toLocaleString('ru-RU', {
+                dateStyle: 'short',
+                timeStyle: 'medium',
+              })
+            )}</div>
+            <div class="stamp-by">${esc(engineerName)}</div>
+          </div>`
+          : ''
+      }
+    </div>
   </div>
-  <div>
-    <div class="sig-line">Подпись клиента: ${client.contactPerson || '_______________'}</div>
-    ${
-      report?.clientSignature
-        ? `<div style="margin-top:8px;"><img src="${report.clientSignature}" alt="" style="max-height:90px;max-width:100%;object-fit:contain;" /></div>`
-        : ''
-    }
-    ${
-      report?.clientSignedAt
-        ? `<div style="margin-top:6px;padding:4px 8px;display:inline-block;border:2px dashed #2563eb;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:bold;">ПОДПИСАНО · ${new Date(
-            report.clientSignedAt
-          ).toLocaleString('ru-RU')}</div>`
-        : ''
-    }
+  <div class="sig-block">
+    <div class="sig-label">Подпись клиента</div>
+    <div class="sig-row">
+      <div class="sig-img-wrap">
+        ${
+          report?.clientSignature
+            ? `<img src="${report.clientSignature}" alt="" />`
+            : '<span class="sig-placeholder">________________</span>'
+        }
+      </div>
+      ${
+        report?.clientSignedAt
+          ? `<div class="stamp stamp--client">
+            <div class="stamp-title">ПОДПИСАНО</div>
+            <div class="stamp-time">${esc(
+              new Date(report.clientSignedAt).toLocaleString('ru-RU', {
+                dateStyle: 'short',
+                timeStyle: 'medium',
+              })
+            )}</div>
+            <div class="stamp-by">${esc(clientSignerName)}</div>
+          </div>`
+          : ''
+      }
+    </div>
   </div>
 </div>
 </body>

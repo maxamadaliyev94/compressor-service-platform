@@ -4,7 +4,14 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import ActSignaturePad from './execute/ActSignaturePad'
 
-export default function ClientSignaturePanel({ taskId }: { taskId: string }) {
+export default function ClientSignaturePanel({
+  taskId,
+  signerName,
+}: {
+  taskId: string
+  /** Кто подписывает от имени клиента (КЛ / контакт) */
+  signerName: string
+}) {
   const router = useRouter()
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const [signedAt, setSignedAt] = useState<Date | null>(null)
@@ -44,6 +51,7 @@ export default function ClientSignaturePanel({ taskId }: { taskId: string }) {
         title="Подпись клиента"
         signedDataUrl={signedUrl}
         signedAt={signedAt}
+        signerName={signerName}
         onSigned={(url, at) => {
           setSignedUrl(url)
           setSignedAt(at)

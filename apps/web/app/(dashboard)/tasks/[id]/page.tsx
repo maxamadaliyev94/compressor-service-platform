@@ -156,7 +156,10 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
       {canAddClientSignature && (
         <div className="mb-6">
-          <ClientSignaturePanel taskId={task.id} />
+          <ClientSignaturePanel
+            taskId={task.id}
+            signerName={client.contactPerson?.trim() || client.name}
+          />
         </div>
       )}
 
@@ -253,40 +256,60 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 <div className="grid md:grid-cols-2 gap-4">
                   {task.report.engineerSignature && (
                     <div className="rounded-lg border bg-gray-50 p-3">
-                      <div className="text-xs text-gray-500 mb-2">Подпись инженера</div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={task.report.engineerSignature}
-                        alt=""
-                        className="max-h-28 object-contain bg-white border rounded mb-2"
-                      />
-                      {task.report.engineerSignedAt && (
-                        <div className="inline-block border-2 border-dashed border-green-600 bg-green-50 text-green-800 rounded-lg px-3 py-1 text-xs font-bold uppercase">
-                          ПОДПИСАНО
-                          <div className="font-normal normal-case font-medium mt-0.5">
-                            {new Date(task.report.engineerSignedAt).toLocaleString('ru-RU')}
+                      <div className="text-xs text-gray-500 mb-2 font-medium">Подпись инженера</div>
+                      <div className="flex flex-wrap items-end gap-3 justify-between border border-gray-200 rounded-md bg-white/60 p-3 min-h-[6.5rem]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={task.report.engineerSignature}
+                          alt=""
+                          className="max-h-28 object-contain bg-white border border-gray-100 rounded shrink min-w-0"
+                        />
+                        {task.report.engineerSignedAt && (
+                          <div className="shrink-0 text-center border border-green-300 bg-green-50 text-green-900 rounded px-3.5 py-2.5 text-[10px] leading-snug max-w-[220px] shadow-sm">
+                            <div className="font-bold text-[11px] tracking-[0.06em] text-green-800">
+                              ПОДПИСАНО
+                            </div>
+                            <div className="text-[9px] font-medium text-green-700 mt-1.5">
+                              {new Date(task.report.engineerSignedAt).toLocaleString('ru-RU', {
+                                dateStyle: 'short',
+                                timeStyle: 'medium',
+                              })}
+                            </div>
+                            <div className="text-[9px] text-green-950 mt-1.5 break-words">
+                              {task.assignedTo?.name ?? '—'}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                   {task.report.clientSignature && (
                     <div className="rounded-lg border bg-gray-50 p-3">
-                      <div className="text-xs text-gray-500 mb-2">Подпись клиента</div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={task.report.clientSignature}
-                        alt=""
-                        className="max-h-28 object-contain bg-white border rounded mb-2"
-                      />
-                      {task.report.clientSignedAt && (
-                        <div className="inline-block border-2 border-dashed border-blue-600 bg-blue-50 text-blue-800 rounded-lg px-3 py-1 text-xs font-bold uppercase">
-                          ПОДПИСАНО
-                          <div className="font-normal normal-case font-medium mt-0.5">
-                            {new Date(task.report.clientSignedAt).toLocaleString('ru-RU')}
+                      <div className="text-xs text-gray-500 mb-2 font-medium">Подпись клиента</div>
+                      <div className="flex flex-wrap items-end gap-3 justify-between border border-gray-200 rounded-md bg-white/60 p-3 min-h-[6.5rem]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={task.report.clientSignature}
+                          alt=""
+                          className="max-h-28 object-contain bg-white border border-gray-100 rounded shrink min-w-0"
+                        />
+                        {task.report.clientSignedAt && (
+                          <div className="shrink-0 text-center border border-blue-300 bg-blue-50 text-blue-900 rounded px-3.5 py-2.5 text-[10px] leading-snug max-w-[220px] shadow-sm">
+                            <div className="font-bold text-[11px] tracking-[0.06em] text-blue-800">
+                              ПОДПИСАНО
+                            </div>
+                            <div className="text-[9px] font-medium text-blue-700 mt-1.5">
+                              {new Date(task.report.clientSignedAt).toLocaleString('ru-RU', {
+                                dateStyle: 'short',
+                                timeStyle: 'medium',
+                              })}
+                            </div>
+                            <div className="text-[9px] text-blue-950 mt-1.5 break-words">
+                              {client.contactPerson?.trim() || client.name}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -803,6 +803,7 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
               title="Подпись инженера"
               signedDataUrl={engineerSignature}
               signedAt={engineerSignedAt}
+              signerName={engineerName}
               onSigned={(url, at) => {
                 setEngineerSignature(url)
                 setEngineerSignedAt(at)

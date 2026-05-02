@@ -12,6 +12,7 @@ export default function ActSignaturePad({
   title,
   signedDataUrl,
   signedAt,
+  signerName,
   onSigned,
   onReset,
 }: {
@@ -19,6 +20,8 @@ export default function ActSignaturePad({
   title: string
   signedDataUrl: string | null
   signedAt: Date | null
+  /** ФИО или представитель — показывается в штампе «ПОДПИСАНО» */
+  signerName?: string | null
   onSigned: (dataUrl: string, at: Date) => void
   onReset: () => void
 }) {
@@ -41,10 +44,13 @@ export default function ActSignaturePad({
     return () => ro.disconnect()
   }, [])
 
-  const stampClass =
+  const stampWrap =
     variant === 'engineer'
-      ? 'border-green-600 bg-green-50 text-green-800'
-      : 'border-blue-600 bg-blue-50 text-blue-800'
+      ? 'border-green-300 bg-green-50 text-green-900'
+      : 'border-blue-300 bg-blue-50 text-blue-900'
+  const stampTitle = variant === 'engineer' ? 'text-green-800' : 'text-blue-800'
+  const stampTime = variant === 'engineer' ? 'text-green-700' : 'text-blue-700'
+  const stampBy = variant === 'engineer' ? 'text-green-950' : 'text-blue-950'
 
   function clearPad() {
     sigRef.current?.clear()
@@ -65,17 +71,26 @@ export default function ActSignaturePad({
     return (
       <div className="space-y-2">
         <div className="text-sm font-medium text-gray-800">{title}</div>
-        <div className="border rounded-lg p-3 bg-gray-50 flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-end gap-3 justify-between border border-gray-200 rounded-lg bg-gray-50/80 p-3 min-h-[6.5rem]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={signedDataUrl} alt="" className="max-h-28 object-contain bg-white border rounded" />
-          <div
-            className={`border-2 border-dashed rounded-lg px-4 py-2 text-center text-xs font-bold uppercase ${stampClass}`}
-          >
-            <div>ПОДПИСАНО</div>
-            <div className="font-normal normal-case font-medium mt-1">
-              {signedAt ? signedAt.toLocaleString('ru-RU') : ''}
+          <img
+            src={signedDataUrl}
+            alt=""
+            className="max-h-28 object-contain bg-white border border-gray-100 rounded shrink min-w-0"
+          />
+          {signedAt && (
+            <div
+              className={`shrink-0 text-center border rounded px-3.5 py-2.5 text-[10px] leading-snug max-w-[220px] shadow-sm ${stampWrap}`}
+            >
+              <div className={`font-bold text-[11px] tracking-[0.06em] ${stampTitle}`}>ПОДПИСАНО</div>
+              <div className={`text-[9px] font-medium mt-1.5 ${stampTime}`}>
+                {signedAt.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'medium' })}
+              </div>
+              {signerName ? (
+                <div className={`text-[9px] mt-1.5 break-words ${stampBy}`}>{signerName}</div>
+              ) : null}
             </div>
-          </div>
+          )}
         </div>
         <button type="button" onClick={onReset} className="text-xs text-blue-600 hover:underline">
           Изменить подпись
