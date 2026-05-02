@@ -1,6 +1,7 @@
 'use client'
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import ExportTasksButton from './ExportTasksButton'
 
 type TaskRow = {
   id: string
@@ -55,13 +56,15 @@ const MONTHS_RU = [
 function matchesScheduleFilter(
   task: TaskRow,
   year: number | 'all',
-  month: number | 'all'
+  month: number | 'all',
+  day: number | 'all'
 ): boolean {
-  if (year === 'all' && month === 'all') return true
+  if (year === 'all' && month === 'all' && day === 'all') return true
   if (!task.scheduledAt) return false
   const d = new Date(task.scheduledAt)
   if (year !== 'all' && d.getFullYear() !== year) return false
   if (month !== 'all' && d.getMonth() + 1 !== month) return false
+  if (day !== 'all' && d.getDate() !== day) return false
   return true
 }
 
@@ -114,6 +117,7 @@ export default function TasksTable({
   const [groupBy, setGroupBy] = useState<'status' | 'assignee'>(() => (role === 'ENGINEER' ? 'status' : 'assignee'))
   const [filterYear, setFilterYear] = useState<number | 'all'>('all')
   const [filterMonth, setFilterMonth] = useState<number | 'all'>('all')
+  const [filterDay, setFilterDay] = useState<number | 'all'>('all')
 
   const canGroupByAssignee = role !== 'ENGINEER'
 
@@ -126,9 +130,22 @@ export default function TasksTable({
     return [...years].sort((a, b) => b - a)
   }, [tasks])
 
+  const dayOptions = useMemo(() => {
+    if (filterYear !== 'all' && filterMonth !== 'all') {
+      const n = new Date(filterYear, filterMonth, 0).getDate()
+      return Array.from({ length: n }, (_, i) => i + 1)
+    }
+    return Array.from({ length: 31 }, (_, i) => i + 1)
+  }, [filterYear, filterMonth])
+
+  useEffect(() => {
+    if (filterDay === 'all') return
+    if (!dayOptions.includes(filterDay)) setFilterDay('all')
+  }, [filterDay, dayOptions])
+
   const filteredTasks = useMemo(
-    () => tasks.filter((t) => matchesScheduleFilter(t, filterYear, filterMonth)),
-    [tasks, filterYear, filterMonth]
+    () => tasks.filter((t) => matchesScheduleFilter(t, filterYear, filterMonth, filterDay)),
+    [tasks, filterYear, filterMonth, filterDay]
   )
 
   const statusGroups = useMemo(() => {
@@ -436,12 +453,29 @@ export default function TasksTable({
                 </option>
               ))}
             </select>
-            {(filterYear !== 'all' || filterMonth !== 'all') && (
+            <select
+              value={filterDay === 'all' ? 'all' : String(filterDay)}
+              onChange={(e) => {
+                const v = e.target.value
+                setFilterDay(v === 'all' ? 'all' : Number(v))
+              }}
+              className="text-sm border rounded-lg px-2 py-1.5 bg-white min-w-[6.5rem]"
+              aria-label="Число срока"
+            >
+              <option value="all">Все числа</option>
+              {dayOptions.map((d) => (
+                <option key={d} value={String(d)}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            {(filterYear !== 'all' || filterMonth !== 'all' || filterDay !== 'all') && (
               <button
                 type="button"
                 onClick={() => {
                   setFilterYear('all')
                   setFilterMonth('all')
+                  setFilterDay('all')
                 }}
                 className="text-xs text-blue-600 hover:text-blue-800 hover:underline px-1"
               >
@@ -449,6 +483,7 @@ export default function TasksTable({
               </button>
             )}
           </div>
+          <ExportTasksButton tasks={filteredTasks} typeLabels={typeLabels} statusLabels={statusLabels} />
           <span className="text-xs text-slate-400 sm:ml-auto">
             Всего: {filteredTasks.length}
             {filteredTasks.length !== tasks.length && (
@@ -468,6 +503,7 @@ export default function TasksTable({
             onClick={() => {
               setFilterYear('all')
               setFilterMonth('all')
+              setFilterDay('all')
             }}
             className="text-sm text-blue-600 hover:underline"
           >
