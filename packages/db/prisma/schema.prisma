@@ -108,6 +108,7 @@ model User {
   checkedOutAt DateTime?
   engineerStatus String @default("FREE")
   lastLoginAt DateTime?
+  clientId      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -115,6 +116,7 @@ model User {
   createdTasks  ServiceTask[] @relation("TaskCreator")
   deletedTasks  ServiceTask[] @relation("TaskDeleter")
   managedClients Client[] @relation("ClientManager")
+  clientAccount Client? @relation("ClientPortalUsers", fields: [clientId], references: [id], onDelete: SetNull)
   workReports   WorkReport[]
   auditLogs     AuditLog[]
   notifications Notification[]
@@ -185,6 +187,7 @@ model Client {
 
   manager  User?    @relation("ClientManager", fields: [managerId], references: [id])
   branches Branch[]
+  portalUsers User[] @relation("ClientPortalUsers")
 
   @@map("clients")
 }

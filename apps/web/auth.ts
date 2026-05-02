@@ -14,6 +14,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.role = user.role
         token.id = user.id
+        token.clientId = (user as { clientId?: string | null }).clientId ?? null
       }
       return token
     },
@@ -21,6 +22,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token) {
         session.user.role = token.role as string
         session.user.id = token.id as string
+        session.user.clientId = (token.clientId as string | null | undefined) ?? null
       }
       return session
     },
@@ -43,7 +45,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: user.id },
           data: { lastLoginAt: new Date() }
         })
-        return { id: user.id, email: user.email ?? undefined, name: user.name, role: user.role }
+        return {
+          id: user.id,
+          email: user.email ?? undefined,
+          name: user.name,
+          role: user.role,
+          clientId: user.clientId,
+        }
       },
     }),
   ],

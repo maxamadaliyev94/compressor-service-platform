@@ -62,14 +62,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       : `https://yandex.ru/maps/?text=${encodeURIComponent(destinationText)}`
 
   const role = session?.user?.role ?? ''
+  const sessionClientId = session?.user?.clientId ?? null
   const clientSignaturePending =
     task.status === 'DONE' && task.report && !task.report.clientSignature
   const canAddClientSignature =
     clientSignaturePending &&
-    (role === 'ADMIN' ||
-      role === 'MANAGER' ||
-      role === 'CHIEF_ENGINEER' ||
-      (role === 'ENGINEER' && task.assignedToId === session?.user?.id))
+    role === 'CLIENT' &&
+    sessionClientId !== null &&
+    sessionClientId === client.id
 
   return (
     <div className="p-4 md:p-8 max-w-4xl">
@@ -142,12 +142,23 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
       {clientSignaturePending && (
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Задача закрыта, акт сформирован, но <span className="font-medium">подпись клиента ещё не получена</span>. Она
-          может быть добавлена позже (например, при визите).
+          Задача закрыта, акт сформирован, но <span className="font-medium">подпись клиента ещё не получена</span>. Её
+          может поставить только представитель клиента (вход под учётной записью клиента).
         </div>
       )}
 
-      {canAddClientSignature && <div className="mb-6"><ClientSignaturePanel taskId={task.id} /></div>}
+      {clientSignaturePending && role === 'CLIENT' && !sessionClientId && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Чтобы поставить подпись, аккаунт должен быть привязан к вашей организации в системе. Обратитесь к
+          администратору.
+        </div>
+      )}
+
+      {canAddClientSignature && (
+        <div className="mb-6">
+          <ClientSignaturePanel taskId={task.id} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6">
         <div className="bg-white border rounded-xl p-5">

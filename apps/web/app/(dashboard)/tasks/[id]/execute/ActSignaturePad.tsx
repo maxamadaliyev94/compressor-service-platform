@@ -1,9 +1,11 @@
 'use client'
 
-import { useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import SignatureCanvas from 'react-signature-canvas'
 
 type Variant = 'engineer' | 'client'
+
+const PAD_HEIGHT = 160
 
 export default function ActSignaturePad({
   variant,
@@ -20,7 +22,24 @@ export default function ActSignaturePad({
   onSigned: (dataUrl: string, at: Date) => void
   onReset: () => void
 }) {
-  const ref = useRef<SignatureCanvas>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const sigRef = useRef<SignatureCanvas>(null)
+  const [canvasWidth, setCanvasWidth] = useState(340)
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => {
+      const w = Math.floor(el.getBoundingClientRect().width)
+      if (w < 1) return
+      const next = Math.max(260, Math.min(640, w))
+      setCanvasWidth((prev) => (prev === next ? prev : next))
+    }
+    measure()
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const stampClass =
     variant === 'engineer'
@@ -28,11 +47,11 @@ export default function ActSignaturePad({
       : 'border-blue-600 bg-blue-50 text-blue-800'
 
   function clearPad() {
-    ref.current?.clear()
+    sigRef.current?.clear()
   }
 
   function apply() {
-    const inst = ref.current
+    const inst = sigRef.current
     if (!inst || inst.isEmpty()) {
       alert('Нарисуйте подпись')
       return
@@ -68,14 +87,20 @@ export default function ActSignaturePad({
   return (
     <div className="space-y-2">
       <div className="text-sm font-medium text-gray-800">{title}</div>
-      <div className="border rounded-lg overflow-hidden bg-white">
+      <div
+        ref={wrapRef}
+        className="w-full border rounded-lg overflow-hidden bg-white touch-none"
+        style={{ touchAction: 'none' }}
+      >
         <SignatureCanvas
-          ref={ref}
+          key={canvasWidth}
+          ref={sigRef}
           penColor="#111827"
           canvasProps={{
-            width: 340,
-            height: 140,
-            className: 'w-full max-w-full touch-none',
+            width: canvasWidth,
+            height: PAD_HEIGHT,
+            className: 'block',
+            style: { width: canvasWidth, height: PAD_HEIGHT, maxWidth: '100%' },
           }}
         />
       </div>

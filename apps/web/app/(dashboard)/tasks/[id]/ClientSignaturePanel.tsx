@@ -37,7 +37,7 @@ export default function ClientSignaturePanel({ taskId }: { taskId: string }) {
     <div className="bg-white border rounded-xl p-5 space-y-4">
       <h2 className="font-semibold">Подпись клиента</h2>
       <p className="text-xs text-gray-500">
-        Подпись можно поставить позже (на объекте или при следующей встрече). После сохранения акт будет полностью подписан.
+        Подпись ставите вы как представитель клиента. После сохранения акт будет полностью подписан.
       </p>
       <ActSignaturePad
         variant="client"
