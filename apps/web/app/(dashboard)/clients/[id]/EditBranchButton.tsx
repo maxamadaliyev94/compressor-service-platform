@@ -18,6 +18,7 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
   const [form, setForm] = useState({
     name: branch.name,
     address: branch.address ?? '',
@@ -30,6 +31,29 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
 
   function set(field: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function addLocationFromGps() {
+    if (!navigator.geolocation) {
+      alert('Геолокация не поддерживается в этом браузере')
+      return
+    }
+    setDetectingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((prev) => ({
+          ...prev,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        }))
+        setDetectingLocation(false)
+      },
+      () => {
+        alert('Не удалось получить координаты. Разрешите доступ к геолокации или введите широту и долготу вручную.')
+        setDetectingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    )
   }
 
   function openModal() {
@@ -113,6 +137,23 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
                   placeholder="г. Ташкент, ул. Примерная 1"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <span className="text-sm font-medium text-gray-800">Локация на карте</span>
+                  <button
+                    type="button"
+                    onClick={() => addLocationFromGps()}
+                    disabled={detectingLocation}
+                    className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg border border-blue-500 bg-white px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                  >
+                    <span aria-hidden>📍</span>
+                    {detectingLocation ? 'Определяем…' : 'Добавить локацию'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Подставляет текущие GPS-координаты устройства в поля ниже (удобно на площадке клиента). Либо введите широту и долготу вручную.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
