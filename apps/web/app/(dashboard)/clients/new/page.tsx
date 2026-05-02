@@ -1,11 +1,13 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { UZBEKISTAN_CITIES } from '@/lib/uzbekistan'
 
 export default function NewClientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  /** Синхронная защита от двойного сабмита (двойной клик до перерисовки с loading) */
+  const submitLock = useRef(false)
   const [form, setForm] = useState({
     name: '', inn: '', contactPerson: '',
     phone: '', email: '', status: 'STANDART',
@@ -18,20 +20,30 @@ export default function NewClientPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitLock.current || loading) return
+    submitLock.current = true
     setLoading(true)
-    const res = await fetch('/api/clients', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    if (res.status === 403) {
-      alert('Недостаточно прав для создания клиента')
-      router.push('/403')
-    } else if (res.ok) {
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (res.status === 403) {
+        alert('Недостаточно прав для создания клиента')
+        router.push('/403')
+        return
+      }
+      if (!res.ok) {
+        alert('Не удалось создать клиента')
+        return
+      }
       router.push('/clients')
       router.refresh()
+    } finally {
+      submitLock.current = false
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -43,7 +55,6 @@ export default function NewClientPage() {
         <h1 className="text-2xl font-bold">Новый клиент</h1>
       </div>
       <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-6 space-y-5">
-
         <div>
           <label className="block text-sm font-medium mb-1">Название компании *</label>
           <input required value={form.name} onChange={e => set('name', e.target.value)}

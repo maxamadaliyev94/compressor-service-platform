@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { UZBEKISTAN_CITIES } from '@/lib/uzbekistan'
 
@@ -20,6 +20,7 @@ type ClientPayload = {
 export default function EditClientForm({ client }: { client: ClientPayload }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const submitLock = useRef(false)
   const [form, setForm] = useState({
     name: client.name,
     inn: client.inn ?? '',
@@ -38,23 +39,29 @@ export default function EditClientForm({ client }: { client: ClientPayload }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitLock.current || loading) return
+    submitLock.current = true
     setLoading(true)
-    const res = await fetch(`/api/clients/${client.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    setLoading(false)
-    if (res.status === 403) {
-      alert('Недостаточно прав')
-      return
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (res.status === 403) {
+        alert('Недостаточно прав')
+        return
+      }
+      if (!res.ok) {
+        alert('Не удалось сохранить')
+        return
+      }
+      router.push(`/clients/${client.id}`)
+      router.refresh()
+    } finally {
+      submitLock.current = false
+      setLoading(false)
     }
-    if (!res.ok) {
-      alert('Не удалось сохранить')
-      return
-    }
-    router.push(`/clients/${client.id}`)
-    router.refresh()
   }
 
   return (

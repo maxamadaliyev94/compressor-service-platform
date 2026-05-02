@@ -37,6 +37,34 @@ type TaskBundle = {
 
 const STATUS_ORDER = ['ASSIGNED', 'NEW', 'IN_PROGRESS', 'REVIEW', 'DRAFT', 'REVISION', 'DONE', 'CANCELLED'] as const
 
+const MONTHS_RU = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
+] as const
+
+function matchesScheduleFilter(
+  task: TaskRow,
+  year: number | 'all',
+  month: number | 'all'
+): boolean {
+  if (year === 'all' && month === 'all') return true
+  if (!task.scheduledAt) return false
+  const d = new Date(task.scheduledAt)
+  if (year !== 'all' && d.getFullYear() !== year) return false
+  if (month !== 'all' && d.getMonth() + 1 !== month) return false
+  return true
+}
+
 function getSourceTaskId(task: TaskRow): string | null {
   const comment = task.comment || ''
   const match = comment.match(/\[Распределено ГИ из задачи ([^\]]+)\]/)
@@ -84,27 +112,43 @@ export default function TasksTable({
   const router = useRouter()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<'status' | 'assignee'>(() => (role === 'ENGINEER' ? 'status' : 'assignee'))
+  const [filterYear, setFilterYear] = useState<number | 'all'>('all')
+  const [filterMonth, setFilterMonth] = useState<number | 'all'>('all')
 
   const canGroupByAssignee = role !== 'ENGINEER'
+
+  const yearOptions = useMemo(() => {
+    const years = new Set<number>()
+    years.add(new Date().getFullYear())
+    for (const t of tasks) {
+      if (t.scheduledAt) years.add(new Date(t.scheduledAt).getFullYear())
+    }
+    return [...years].sort((a, b) => b - a)
+  }, [tasks])
+
+  const filteredTasks = useMemo(
+    () => tasks.filter((t) => matchesScheduleFilter(t, filterYear, filterMonth)),
+    [tasks, filterYear, filterMonth]
+  )
 
   const statusGroups = useMemo(() => {
     const groups = [
       ...STATUS_ORDER.map((status) => ({
         key: status,
         label: statusLabels[status] || status,
-        tasks: tasks.filter((t) => t.status === status),
+        tasks: filteredTasks.filter((t) => t.status === status),
       })).filter((g) => g.tasks.length > 0),
     ]
-    const otherStatusTasks = tasks.filter((t) => !STATUS_ORDER.includes(t.status as (typeof STATUS_ORDER)[number]))
+    const otherStatusTasks = filteredTasks.filter((t) => !STATUS_ORDER.includes(t.status as (typeof STATUS_ORDER)[number]))
     if (otherStatusTasks.length > 0) {
       groups.push({ key: 'OTHER', label: 'Другое', tasks: otherStatusTasks })
     }
     return groups
-  }, [tasks, statusLabels])
+  }, [filteredTasks, statusLabels])
 
   const assigneeGroups = useMemo(() => {
     const map = new Map<string, { key: string; label: string; tasks: TaskRow[] }>()
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       const id = task.assignedToId || '_none'
       const label =
         task.assignedToId === currentUserId
@@ -124,7 +168,7 @@ export default function TasksTable({
       return a.label.localeCompare(b.label, 'ru')
     })
     return list
-  }, [tasks, currentUserId])
+  }, [filteredTasks, currentUserId])
 
   const tableColSpan = isAdmin ? 8 : 7
   const sections = !canGroupByAssignee || groupBy === 'status' ? statusGroups : assigneeGroups
@@ -341,25 +385,95 @@ export default function TasksTable({
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-2 md:px-4 border-b bg-slate-50/80">
-        <span className="text-xs font-medium text-slate-600">Группировка</span>
-        {canGroupByAssignee ? (
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as 'status' | 'assignee')}
-            className="text-sm border rounded-lg px-2 py-1.5 bg-white max-w-xs"
-          >
-            <option value="assignee">По заявке (блоки)</option>
-            <option value="status">По статусу</option>
-          </select>
-        ) : (
-          <span className="text-xs text-slate-500">По статусу</span>
-        )}
-        <span className="text-xs text-slate-400 sm:ml-auto">Всего: {tasks.length}</span>
+      <div className="flex flex-col gap-2 px-3 py-2 md:px-4 border-b bg-slate-50/80">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">Группировка</span>
+            {canGroupByAssignee ? (
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as 'status' | 'assignee')}
+                className="text-sm border rounded-lg px-2 py-1.5 bg-white max-w-xs"
+              >
+                <option value="assignee">По заявке (блоки)</option>
+                <option value="status">По статусу</option>
+              </select>
+            ) : (
+              <span className="text-xs text-slate-500">По статусу</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:border-l sm:border-slate-200 sm:pl-3">
+            <span className="text-xs font-medium text-slate-600">Срок</span>
+            <select
+              value={filterYear === 'all' ? 'all' : String(filterYear)}
+              onChange={(e) => {
+                const v = e.target.value
+                setFilterYear(v === 'all' ? 'all' : Number(v))
+              }}
+              className="text-sm border rounded-lg px-2 py-1.5 bg-white min-w-[7rem]"
+              aria-label="Год срока"
+            >
+              <option value="all">Все годы</option>
+              {yearOptions.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterMonth === 'all' ? 'all' : String(filterMonth)}
+              onChange={(e) => {
+                const v = e.target.value
+                setFilterMonth(v === 'all' ? 'all' : Number(v))
+              }}
+              className="text-sm border rounded-lg px-2 py-1.5 bg-white min-w-[9.5rem]"
+              aria-label="Месяц срока"
+            >
+              <option value="all">Все месяцы</option>
+              {MONTHS_RU.map((label, i) => (
+                <option key={label} value={String(i + 1)}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {(filterYear !== 'all' || filterMonth !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterYear('all')
+                  setFilterMonth('all')
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 hover:underline px-1"
+              >
+                Сбросить
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-slate-400 sm:ml-auto">
+            Всего: {filteredTasks.length}
+            {filteredTasks.length !== tasks.length && (
+              <span className="text-slate-300"> · из {tasks.length}</span>
+            )}
+          </span>
+        </div>
       </div>
 
       {tasks.length === 0 ? (
         <div className="p-8 text-center text-sm text-gray-400">Нет задач</div>
+      ) : filteredTasks.length === 0 ? (
+        <div className="p-8 text-center text-sm text-gray-500 space-y-2">
+          <p>Нет задач с выбранным сроком.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterYear('all')
+              setFilterMonth('all')
+            }}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Показать все задачи
+          </button>
+        </div>
       ) : (
         <>
           <div className="md:hidden divide-y divide-gray-100 bg-white">
