@@ -41,9 +41,13 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
 
       <div className="space-y-4">
         <div className="bg-white border rounded-xl p-4">
-          <h3 className="font-semibold text-sm mb-3">
+          <h3 className="font-semibold text-sm mb-1">
             Города ({cityData.length})
           </h3>
+          <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+            Подсчёт по площадкам: если у филиала заданы координаты, город определяется по карте; иначе — по полю «Город» в
+            карточке клиента. Синие круги — справочные центры городов, метки — точные филиалы.
+          </p>
           <div className="space-y-2">
             {cityData.sort((a: any, b: any) => b.total - a.total).map((data: any) => (
               <button key={data.city}

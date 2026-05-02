@@ -6,13 +6,38 @@ export default function AddBranchButton({ clientId }: { clientId: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [detectingLocation, setDetectingLocation] = useState(false)
   const [form, setForm] = useState({
     name: '', address: '', contactPerson: '',
-    phone: '', workingHours: ''
+    phone: '', workingHours: '',
+    latitude: '', longitude: '',
   })
 
   function set(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  function detectLocation() {
+    if (!navigator.geolocation) {
+      alert('Геолокация не поддерживается в этом браузере')
+      return
+    }
+    setDetectingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((prev) => ({
+          ...prev,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        }))
+        setDetectingLocation(false)
+      },
+      () => {
+        alert('Не удалось определить координаты. Введите широту и долготу вручную.')
+        setDetectingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    )
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -21,11 +46,19 @@ export default function AddBranchButton({ clientId }: { clientId: string }) {
     await fetch('/api/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, clientId })
+      body: JSON.stringify({
+        ...form,
+        clientId,
+        latitude: form.latitude.trim() || null,
+        longitude: form.longitude.trim() || null,
+      })
     })
     setLoading(false)
     setOpen(false)
-    setForm({ name: '', address: '', contactPerson: '', phone: '', workingHours: '' })
+    setForm({
+      name: '', address: '', contactPerson: '', phone: '', workingHours: '',
+      latitude: '', longitude: '',
+    })
     router.refresh()
   }
 
@@ -52,6 +85,45 @@ export default function AddBranchButton({ clientId }: { clientId: string }) {
                 <input value={form.address} onChange={e => set('address', e.target.value)}
                   placeholder="г. Ташкент, ул. Примерная 1"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-600">Координаты для карты (необязательно)</span>
+                  <button
+                    type="button"
+                    onClick={() => detectLocation()}
+                    disabled={detectingLocation}
+                    className="text-xs px-2 py-1 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                  >
+                    {detectingLocation ? 'Определяем…' : '📍 Моя геопозиция'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Широта</label>
+                    <input
+                      value={form.latitude}
+                      onChange={(e) => set('latitude', e.target.value)}
+                      placeholder="41.299500"
+                      inputMode="decimal"
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Долгота</label>
+                    <input
+                      value={form.longitude}
+                      onChange={(e) => set('longitude', e.target.value)}
+                      placeholder="69.240100"
+                      inputMode="decimal"
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Без координат филиал не попадёт на карту «Клиентов». У клиента указывается только город в карточке — точку ставят для{' '}
+                  <strong>филиала</strong>.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

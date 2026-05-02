@@ -8,6 +8,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(branches)
 }
 
+function parseCoord(v: unknown): number | null {
+  if (v === '' || v === null || v === undefined) return null
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const branch = await db.branch.create({
@@ -15,8 +21,8 @@ export async function POST(req: NextRequest) {
       clientId: body.clientId,
       name: body.name,
       address: body.address || null,
-      latitude: body.latitude ? parseFloat(body.latitude) : null,
-      longitude: body.longitude ? parseFloat(body.longitude) : null,
+      latitude: parseCoord(body.latitude),
+      longitude: parseCoord(body.longitude),
       contactPerson: body.contactPerson || null,
       phone: body.phone || null,
       workingHours: body.workingHours || null,

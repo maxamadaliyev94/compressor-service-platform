@@ -1,30 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-
-const CITY_COORDS: Record<string, [number, number]> = {
-  'Ташкент':    [41.2995, 69.2401],
-  'Самарканд':  [39.6547, 66.9597],
-  'Наманган':   [41.0011, 71.6722],
-  'Андижан':    [40.7821, 72.3442],
-  'Фергана':    [40.3842, 71.7843],
-  'Нукус':      [42.4619, 59.6166],
-  'Карши':      [38.8571, 65.7911],
-  'Бухара':     [39.7747, 64.4286],
-  'Навои':      [40.1000, 65.3667],
-  'Термез':     [37.2242, 67.2783],
-  'Коканд':     [40.5283, 70.9425],
-  'Маргилан':   [40.4714, 71.7239],
-  'Ургенч':     [41.5500, 60.6333],
-  'Хива':       [41.3783, 60.3622],
-  'Зарафшан':   [41.5636, 64.2097],
-  'Джизак':     [40.1158, 67.8422],
-  'Гулистан':   [40.4897, 68.7839],
-  'Янгиюль':    [41.1108, 69.0486],
-  'Чирчик':     [41.4686, 69.5811],
-  'Алмалык':    [40.8436, 69.5981],
-  'Ангрен':     [41.0167, 70.1500],
-  'Бекабад':    [40.2214, 69.2647],
-}
+import { MAP_CITY_COORDS } from '@/lib/mapCities'
 
 interface Props {
   cityData: any[]
@@ -78,7 +54,7 @@ export default function LeafletMap({ cityData, branchPoints, onCityClick }: Prop
       }).addTo(map)
 
       cityData.forEach((data: any) => {
-        const coords = CITY_COORDS[data.city]
+        const coords = MAP_CITY_COORDS[data.city]
         if (!coords) return
 
         const radius = 8 + (data.total / maxClients) * 20
@@ -135,9 +111,14 @@ export default function LeafletMap({ cityData, branchPoints, onCityClick }: Prop
         })
       })
 
+      const boundsPoints: [number, number][] = []
+
       branchPoints.forEach((point: any) => {
-        if (typeof point.latitude !== 'number' || typeof point.longitude !== 'number') return
-        const marker = L.marker([point.latitude, point.longitude]).addTo(map)
+        const lat = Number(point.latitude)
+        const lng = Number(point.longitude)
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+        boundsPoints.push([lat, lng])
+        const marker = L.marker([lat, lng]).addTo(map)
         marker.bindPopup(`
           <div style="font-family:system-ui,sans-serif;min-width:210px">
             <div style="font-weight:700;font-size:14px;margin-bottom:4px">📌 ${point.name}</div>
@@ -147,6 +128,20 @@ export default function LeafletMap({ cityData, branchPoints, onCityClick }: Prop
           </div>
         `)
       })
+
+      cityData.forEach((data: any) => {
+        const coords = MAP_CITY_COORDS[data.city]
+        if (coords) boundsPoints.push([coords[0], coords[1]])
+      })
+
+      if (boundsPoints.length === 1) {
+        map.setView(boundsPoints[0], 10)
+      } else if (boundsPoints.length > 1) {
+        const b = L.latLngBounds(boundsPoints)
+        if (b.isValid()) {
+          map.fitBounds(b, { padding: [48, 48], maxZoom: 9 })
+        }
+      }
     }
 
     init()
