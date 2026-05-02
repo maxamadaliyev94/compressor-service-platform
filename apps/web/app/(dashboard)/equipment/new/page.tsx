@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import BrandSelect from './BrandSelect'
+import ClientSelect from './ClientSelect'
 import EquipmentTypeSelect from './EquipmentTypeSelect'
 
 export default function NewEquipmentPage() {
@@ -169,13 +170,11 @@ export default function NewEquipmentPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Клиент *</label>
-              <select required value={selectedClient} onChange={e => setSelectedClient(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Выберите клиента</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} {c.city ? `(${c.city})` : ''}</option>
-                ))}
-              </select>
+              <ClientSelect
+                value={selectedClient}
+                onChange={setSelectedClient}
+                clients={clients}
+              />
             </div>
 
             {selectedClient && (
