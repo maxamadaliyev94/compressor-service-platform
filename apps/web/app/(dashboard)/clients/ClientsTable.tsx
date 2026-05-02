@@ -179,7 +179,15 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
   )
 }
 
-export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[], isAdmin: boolean }) {
+export default function ClientsTable({
+  clients,
+  isAdmin,
+  canEditClient,
+}: {
+  clients: ClientRow[]
+  isAdmin: boolean
+  canEditClient: boolean
+}) {
   const [search, setSearch] = useState('')
   const [filterCity, setFilterCity] = useState('ALL')
   const [filterStatus, setFilterStatus] = useState('ALL')
@@ -189,7 +197,13 @@ export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[
   const [managerSaving, setManagerSaving] = useState(false)
   const [managerModalOpen, setManagerModalOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ClientRow | null>(null)
+  const [deleteText, setDeleteText] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const router = useRouter()
+
+  const showActionsCol = canEditClient || isAdmin
+  const tableColSpan = 6 + (isAdmin ? 1 : 0) + (showActionsCol ? 1 : 0)
 
   const cities = [...new Set(clients.map((c) => c.city).filter(Boolean))] as string[]
 
@@ -242,6 +256,21 @@ export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[
     setManagerModalOpen(false)
     setSelectedClient(null)
     router.refresh()
+  }
+
+  async function confirmDeleteClient() {
+    if (!deleteTarget || deleteText !== deleteTarget.name) return
+    setDeleteLoading(true)
+    const res = await fetch(`/api/clients/${deleteTarget.id}`, { method: 'DELETE' })
+    setDeleteLoading(false)
+    if (res.ok) {
+      setDeleteTarget(null)
+      setDeleteText('')
+      router.refresh()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      alert((data as { error?: string }).error ?? 'Ошибка удаления')
+    }
   }
 
   return (
@@ -309,13 +338,37 @@ export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[
                   {client.managerId ? 'Сменить менеджера' : 'Назначить менеджера'}
                 </button>
               )}
+              {showActionsCol && (
+                <div className="mt-2 flex gap-2">
+                  {canEditClient && (
+                    <a
+                      href={`/clients/${client.id}/edit`}
+                      className="flex-1 min-h-11 text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-center text-gray-700"
+                    >
+                      Изменить
+                    </a>
+                  )}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteTarget(client)
+                        setDeleteText('')
+                      }}
+                      className="flex-1 min-h-11 text-xs px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                    >
+                      Удалить
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
       </div>
 
       <div className="hidden md:block bg-white border rounded-xl overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[880px] text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left p-3 font-medium">Клиент</th>
@@ -325,11 +378,18 @@ export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[
               <th className="text-left p-3 font-medium">Оборудования</th>
               {isAdmin && <th className="text-left p-3 font-medium">Менеджер</th>}
               <th className="text-left p-3 font-medium">Статус</th>
+              {showActionsCol && (
+                <th className="text-right p-3 font-medium whitespace-nowrap">Действия</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={isAdmin ? 7 : 6} className="p-8 text-center text-gray-400">Ничего не найдено</td></tr>
+              <tr>
+                <td colSpan={tableColSpan} className="p-8 text-center text-gray-400">
+                  Ничего не найдено
+                </td>
+              </tr>
             )}
             {filtered.map((client) => {
               const equipCount = client.branches?.flatMap((b) => b.objects).flatMap((o) => o.equipment).length || 0
@@ -379,6 +439,32 @@ export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[
                   <td className="p-3">
                     <StatusToggle client={client} isAdmin={isAdmin} />
                   </td>
+                  {showActionsCol && (
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {canEditClient && (
+                          <a
+                            href={`/clients/${client.id}/edit`}
+                            className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                          >
+                            Изменить
+                          </a>
+                        )}
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteTarget(client)
+                              setDeleteText('')
+                            }}
+                            className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 whitespace-nowrap"
+                          >
+                            Удалить
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               )
             })}
@@ -397,6 +483,58 @@ export default function ClientsTable({ clients, isAdmin }: { clients: ClientRow[
         onAssign={assignManager}
         onRemove={removeManager}
       />
+
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">⚠️</div>
+              <h2 className="text-lg font-bold text-gray-900">Удалить клиента?</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Это действие нельзя отменить. Будут удалены все данные клиента.
+              </p>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-red-700 font-medium">{deleteTarget.name}</p>
+              {deleteTarget.city && <p className="text-xs text-red-500">{deleteTarget.city}</p>}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Введите название клиента для подтверждения:
+              </label>
+              <input
+                value={deleteText}
+                onChange={(e) => setDeleteText(e.target.value)}
+                placeholder={deleteTarget.name}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => void confirmDeleteClient()}
+                disabled={deleteText !== deleteTarget.name || deleteLoading}
+                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? 'Удаление...' : 'Удалить навсегда'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null)
+                  setDeleteText('')
+                }}
+                className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

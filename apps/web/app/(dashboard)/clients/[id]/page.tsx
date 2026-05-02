@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import AddBranchButton from './AddBranchButton'
+import EditBranchButton from './EditBranchButton'
 import ClientActions from './ClientActions'
 import { auth } from '@/auth'
 import ClientManagerCard from './ClientManagerCard'
@@ -13,6 +14,8 @@ type Branch = {
   contactPerson?: string | null
   phone?: string | null
   workingHours?: string | null
+  latitude?: number | null
+  longitude?: number | null
   objects: {
     id: string
     name: string
@@ -167,13 +170,27 @@ export default async function ClientPage({ params }: { params: { id: string } })
           <div className="space-y-3">
             {client.branches.map((branch: Branch) => (
               <div key={branch.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="font-medium text-sm">{branch.name}</div>
-                  {branch.workingHours && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                      🕐 {branch.workingHours}
-                    </span>
-                  )}
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <div className="font-medium text-sm min-w-0 flex-1">{branch.name}</div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {branch.workingHours && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        🕐 {branch.workingHours}
+                      </span>
+                    )}
+                    <EditBranchButton
+                      branch={{
+                        id: branch.id,
+                        name: branch.name,
+                        address: branch.address ?? null,
+                        contactPerson: branch.contactPerson ?? null,
+                        phone: branch.phone ?? null,
+                        workingHours: branch.workingHours ?? null,
+                        latitude: branch.latitude ?? null,
+                        longitude: branch.longitude ?? null,
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   {branch.address && (

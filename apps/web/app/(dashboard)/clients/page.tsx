@@ -8,11 +8,11 @@ export default async function ClientsPage() {
   if (!session) return null
   const role = session.user.role
   const isAdmin = role === 'ADMIN'
-  const isManager = role === 'MANAGER'
   const isEngineer = role === 'ENGINEER'
+  const canEditClient = ['ADMIN', 'MANAGER'].includes(role)
 
   const clients = await db.client.findMany({
-    where: isManager ? { managerId: session.user.id } : {},
+    where: role === 'MANAGER' ? { managerId: session.user.id } : {},
     include: {
       manager: { select: { id: true, name: true, email: true, phone: true } },
       branches: { include: { objects: { include: { equipment: true } } } },
@@ -39,7 +39,7 @@ export default async function ClientsPage() {
           )}
         </div>
       </div>
-      <ClientsTable clients={clients} isAdmin={isAdmin} />
+      <ClientsTable clients={clients} isAdmin={isAdmin} canEditClient={canEditClient} />
     </div>
   )
 }

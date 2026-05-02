@@ -29,6 +29,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       email: body.email || null,
       status: body.status,
       comment: body.comment || null,
+      country: body.country || 'Узбекистан',
+      city: body.city || null,
     },
   })
   return NextResponse.json(client)
