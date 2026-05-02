@@ -1,7 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+
+function yandexRouteUrl(latStr: string, lngStr: string): string | null {
+  const lat = parseFloat(latStr.replace(',', '.'))
+  const lng = parseFloat(lngStr.replace(',', '.'))
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return `https://yandex.ru/maps/?mode=routes&rtext=~${lat},${lng}&rtt=auto`
+}
 
 export type EditableBranch = {
   id: string
@@ -19,6 +27,8 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [detectingLocation, setDetectingLocation] = useState(false)
+  const [gpsJustAdded, setGpsJustAdded] = useState(false)
+  const [highlightCoords, setHighlightCoords] = useState(false)
   const [form, setForm] = useState({
     name: branch.name,
     address: branch.address ?? '',
@@ -30,8 +40,21 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
   })
 
   function set(field: keyof typeof form, value: string) {
+    if (field === 'latitude' || field === 'longitude') setGpsJustAdded(false)
     setForm((prev) => ({ ...prev, [field]: value }))
   }
+
+  const routeHref = useMemo(
+    () => yandexRouteUrl(form.latitude.trim(), form.longitude.trim()),
+    [form.latitude, form.longitude]
+  )
+
+  useEffect(() => {
+    if (!gpsJustAdded) return
+    setHighlightCoords(true)
+    const t = window.setTimeout(() => setHighlightCoords(false), 3500)
+    return () => window.clearTimeout(t)
+  }, [gpsJustAdded])
 
   function addLocationFromGps() {
     if (!navigator.geolocation) {
@@ -47,6 +70,7 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
           longitude: pos.coords.longitude.toFixed(6),
         }))
         setDetectingLocation(false)
+        setGpsJustAdded(true)
       },
       () => {
         alert('Не удалось получить координаты. Разрешите доступ к геолокации или введите широту и долготу вручную.')
@@ -66,6 +90,8 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
       latitude: branch.latitude != null ? String(branch.latitude) : '',
       longitude: branch.longitude != null ? String(branch.longitude) : '',
     })
+    setGpsJustAdded(false)
+    setHighlightCoords(false)
     setOpen(true)
   }
 
@@ -154,6 +180,20 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
                 <p className="text-xs text-gray-500">
                   Подставляет текущие GPS-координаты устройства в поля ниже (удобно на площадке клиента). Либо введите широту и долготу вручную.
                 </p>
+                {gpsJustAdded && (
+                  <div
+                    role="status"
+                    className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900"
+                  >
+                    <span className="text-green-600 shrink-0" aria-hidden>
+                      ✓
+                    </span>
+                    <span>
+                      <strong>Локация получена.</strong> Координаты подставлены в поля ниже. Проверьте точку на карте кнопкой «Маршрут» и нажмите{' '}
+                      <strong>Сохранить</strong>, чтобы записать их в базу.
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -163,7 +203,9 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
                     onChange={(e) => set('latitude', e.target.value)}
                     placeholder="41.311081"
                     inputMode="decimal"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow ${
+                      highlightCoords ? 'ring-2 ring-green-400 border-green-400 bg-green-50/50' : ''
+                    }`}
                   />
                 </div>
                 <div>
@@ -173,10 +215,25 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
                     onChange={(e) => set('longitude', e.target.value)}
                     placeholder="69.279737"
                     inputMode="decimal"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow ${
+                      highlightCoords ? 'ring-2 ring-green-400 border-green-400 bg-green-50/50' : ''
+                    }`}
                   />
                 </div>
               </div>
+              {routeHref ? (
+                <a
+                  href={routeHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+                >
+                  <span aria-hidden>🚗</span>
+                  Построить маршрут в Яндекс.Картах
+                </a>
+              ) : (
+                <p className="text-xs text-gray-400 text-center">Введите широту и долготу — станет доступна кнопка маршрута</p>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">Контактное лицо</label>
