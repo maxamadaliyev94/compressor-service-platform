@@ -105,7 +105,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   .stamp--client .stamp-title { font-weight: 700; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 4px; }
   .stamp--client .stamp-time { font-size: 9px; font-weight: 500; color: #2563eb; margin-bottom: 3px; }
   .stamp--client .stamp-by { font-size: 9px; color: #1e3a8a; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; background: #dbeafe; color: #1d4ed8; }
+  .badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
 </style>
 </head>
 <body>
