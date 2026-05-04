@@ -4,14 +4,12 @@ import { auth } from '@/auth'
 import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
-import type { ChecklistItemAction, Role, ServiceTask } from '@prisma/client'
-import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
+import type { Role } from '@prisma/client'
 
-function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
-  if (role === 'CLIENT') return false
-  if (role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER') return true
-  if (role === 'ENGINEER') return task.assignedToId === userId
-  return false
+function parseSignedAt(value: unknown): Date {
+  if (typeof value !== 'string') return new Date()
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? new Date() : d
 }
 
 function toOptionalNumber(value: unknown): number | null {
@@ -20,15 +18,14 @@ function toOptionalNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function parseSignedAt(value: unknown): Date {
-  if (typeof value !== 'string') return new Date()
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? new Date() : d
-}
-
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const role = session.user.role as Role
+  if (role !== 'CHIEF_ENGINEER' && role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Только главный инженер или администратор может закрыть долгосрочную задачу' }, { status: 403 })
+  }
 
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
@@ -44,56 +41,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Некорректное следующее ТО' }, { status: 400 })
   }
 
-  const checklistRaw = (body as { checklist?: unknown }).checklist
-  const checklist = Array.isArray(checklistRaw) ? checklistRaw : []
-  for (const c of checklist) {
-    if (
-      typeof c !== 'object' ||
-      c === null ||
-      typeof (c as { label?: unknown }).label !== 'string' ||
-      typeof (c as { checked?: unknown }).checked !== 'boolean'
-    ) {
-      return NextResponse.json({ error: 'Некорректный чек-лист' }, { status: 400 })
-    }
-    const extra = c as { isAuto?: unknown; action?: unknown }
-    if (extra.isAuto !== undefined && typeof extra.isAuto !== 'boolean') {
-      return NextResponse.json({ error: 'Некорректный чек-лист (isAuto)' }, { status: 400 })
-    }
-    if (extra.action !== undefined && extra.action !== null && typeof extra.action !== 'string') {
-      return NextResponse.json({ error: 'Некорректный чек-лист (action)' }, { status: 400 })
-    }
-  }
-
-  const partsRaw = (body as { partsUsed?: unknown }).partsUsed
-  const partsUsed = Array.isArray(partsRaw) ? partsRaw : []
-  for (const p of partsUsed) {
-    if (
-      typeof p !== 'object' ||
-      p === null ||
-      typeof (p as { name?: unknown }).name !== 'string' ||
-      typeof (p as { quantity?: unknown }).quantity !== 'number' ||
-      typeof (p as { unit?: unknown }).unit !== 'string'
-    ) {
-      return NextResponse.json({ error: 'Некорректные запчасти' }, { status: 400 })
-    }
-  }
-
-  const notes =
-    typeof (body as { notes?: unknown }).notes === 'string'
-      ? (body as { notes: string }).notes
-      : null
+  const chiefNotes =
+    typeof (body as { chiefNotes?: unknown }).chiefNotes === 'string'
+      ? (body as { chiefNotes: string }).chiefNotes.trim()
+      : ''
   const recommendations =
     typeof (body as { recommendations?: unknown }).recommendations === 'string'
-      ? (body as { recommendations: string }).recommendations
+      ? (body as { recommendations: string }).recommendations.trim()
       : null
-  const reportPhotosRaw = (body as { reportPhotos?: unknown }).reportPhotos
-  const reportPhotos = Array.isArray(reportPhotosRaw)
-    ? reportPhotosRaw.filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/')).slice(0, 10)
-    : []
 
   const engineerSignature = parsePngDataUrlSignature((body as { engineerSignature?: unknown }).engineerSignature)
   if (!engineerSignature) {
-    return NextResponse.json({ error: 'Требуется подпись инженера (PNG)' }, { status: 400 })
+    return NextResponse.json({ error: 'Требуется подпись главного инженера (PNG)' }, { status: 400 })
   }
   const optionalClient = parsePngDataUrlSignature((body as { clientSignature?: unknown }).clientSignature)
   const engineerSignedAt = parseSignedAt((body as { engineerSignedAt?: unknown }).engineerSignedAt)
@@ -135,41 +94,62 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (task.deletedAt) return NextResponse.json({ error: 'Задача находится в корзине' }, { status: 400 })
+  if (task.taskType !== 'LONG_TERM') {
+    return NextResponse.json({ error: 'Это не долгосрочная задача' }, { status: 400 })
+  }
   if (task.report) return NextResponse.json({ error: 'Отчёт уже существует' }, { status: 400 })
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
     return NextResponse.json({ error: 'Задача уже закрыта' }, { status: 400 })
   }
 
-  if (task.taskType === 'LONG_TERM') {
-    return NextResponse.json(
-      {
-        error:
-          'Долгосрочную задачу завершает главный инженер через кнопку «Завершить долгосрочную задачу» на странице задачи',
-      },
-      { status: 400 }
-    )
-  }
-
-  if (!canExecuteServiceTask(session.user.role as Role, session.user.id, task)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  if (task.type === 'DIAGNOSTICS') {
-    for (const c of checklist) {
-      const row = c as { label: string; checked: boolean; isAuto?: boolean; action?: string | null }
-      if (needsDiagnosticsPerformedAction(row)) {
-        if (!isValidDiagnosticsActionForLabel(row.label, row.action)) {
-          return NextResponse.json(
-            { error: 'Для диагностики у каждого отмеченного пункта чек-листа выберите действие (Заменить / Долить или Ремонт)' },
-            { status: 400 }
-          )
-        }
-      }
+  if (role === 'CHIEF_ENGINEER') {
+    if (!task.managedByChiefId || task.managedByChiefId !== session.user.id) {
+      return NextResponse.json({ error: 'Вы не ответственный главный инженер по этой задаче' }, { status: 403 })
     }
   }
 
-  const actNumber = `AKT-${task.id.slice(-8).toUpperCase()}`
+  const dailyWorks = await db.dailyWork.findMany({
+    where: { taskId: task.id },
+    include: { engineer: { select: { name: true } } },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+  })
 
+  const journalLines: string[] = []
+  for (const dw of dailyWorks) {
+    const ds = new Date(dw.date).toLocaleDateString('ru-RU')
+    journalLines.push(`--- ${ds} · ${dw.engineer.name} ---\n${dw.description}`)
+    const arr = dw.checklist as { label?: string; checked?: boolean }[]
+    if (Array.isArray(arr)) {
+      for (const c of arr) {
+        if (c.checked && typeof c.label === 'string') {
+          journalLines.push(`  ✓ ${c.label}`)
+        }
+      }
+    }
+    journalLines.push('')
+  }
+  const journalText = journalLines.join('\n').trim()
+  const notesCombined = [chiefNotes || null, journalText || 'Журнал работ пуст.'].filter(Boolean).join('\n\n')
+
+  const checklistCreates: { label: string; checked: boolean; order: number; performedAction: null }[] = []
+  let order = 0
+  checklistCreates.push({
+    label: 'Долгосрочная задача: сводный журнал работ по дням (см. раздел «Заметки»)',
+    checked: true,
+    order: order++,
+    performedAction: null,
+  })
+  for (const dw of dailyWorks) {
+    const ds = new Date(dw.date).toLocaleDateString('ru-RU')
+    checklistCreates.push({
+      label: `${ds} — ${dw.engineer.name}: ${dw.description.slice(0, 400)}${dw.description.length > 400 ? '…' : ''}`,
+      checked: true,
+      order: order++,
+      performedAction: null,
+    })
+  }
+
+  const actNumber = `AKT-LT-${task.id.slice(-8).toUpperCase()}`
   const prevHours = task.equipment.currentHours
 
   try {
@@ -186,7 +166,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           oilTemp,
           airTemp: ambientTemp,
           roomCondition,
-          notes,
+          notes: notesCombined,
           recommendations,
           actNumber,
           engineerSignature,
@@ -194,39 +174,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           engineerSignedAt,
           clientSignedAt: optionalClient ? parseSignedAt((body as { clientSignedAt?: unknown }).clientSignedAt) : null,
           checklistItems: {
-            create: checklist.map((c, i) => {
-              const row = c as {
-                label: string
-                checked: boolean
-                isAuto?: boolean
-                action?: string | null
-              }
-              const performedAction: ChecklistItemAction | null =
-                task.type === 'DIAGNOSTICS' && needsDiagnosticsPerformedAction(row) && row.action
-                  ? (row.action as ChecklistItemAction)
-                  : null
-              return {
-                label: row.label,
-                checked: row.checked,
-                order: i,
-                performedAction,
-              }
-            }),
+            create: checklistCreates,
           },
-          partsUsed: {
-            create: partsUsed.map((p) => ({
-              name: (p as { name: string }).name,
-              quantity: (p as { quantity: number }).quantity,
-              unit: (p as { unit: string }).unit,
-            })),
-          },
-          attachments: {
-            create: reportPhotos.map((url, index) => ({
-              url,
-              type: 'OTHER',
-              caption: `Фото отчета ${index + 1}`,
-            })),
-          },
+          partsUsed: { create: [] },
+          attachments: { create: [] },
         },
       })
 
@@ -259,7 +210,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             entityId: task.equipmentId,
             oldValue: String(prevHours),
             newValue: String(currentHours),
-            comment: `Закрытие задачи ${task.id}`,
+            comment: `Закрытие долгосрочной задачи ${task.id}`,
           },
         })
       }
@@ -269,11 +220,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 })
   }
 
-  if (task.createdById) {
+  if (task.createdById && task.createdById !== session.user.id) {
     await createNotification({
       userId: task.createdById,
-      title: '✅ Задача выполнена',
-      message: 'Задача успешно закрыта инженером',
+      title: '✅ Долгосрочная задача закрыта',
+      message: 'Главный инженер закрыл долгосрочную задачу и сформировал сводный акт.',
       type: 'SUCCESS',
       link: `/tasks/${task.id}`,
     })
@@ -282,8 +233,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await notifyClientSubscriberForEquipmentWork(
     task.equipmentId,
     {
-      title: '✅ Задача выполнена',
-      message: 'Задача закрыта по акту (отчёт сохранён).',
+      title: '✅ Долгосрочная задача выполнена',
+      message: 'Долгосрочная задача закрыта, сводный акт сформирован.',
       type: 'SUCCESS',
       link: `/tasks/${task.id}`,
     },

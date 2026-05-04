@@ -32,6 +32,13 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
     redirect(`/tasks/${params.id}`)
   }
 
+  if (task.taskType === 'LONG_TERM') {
+    if (session.user.role === 'ENGINEER' && task.assignedToId === session.user.id) {
+      redirect(`/tasks/${params.id}/daily`)
+    }
+    redirect(`/tasks/${params.id}`)
+  }
+
   const regulation = await db.maintenanceRegulation.findFirst({
     where: {
       taskType: task.type,

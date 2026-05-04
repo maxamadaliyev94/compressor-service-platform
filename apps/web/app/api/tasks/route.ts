@@ -4,7 +4,21 @@ import { auth } from '@/auth'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy } from '@/lib/engineerPresence'
-import type { Role } from '@prisma/client'
+import type { Role, TaskWorkType } from '@prisma/client'
+
+function resolveManagedByChiefId(
+  taskType: TaskWorkType,
+  role: Role,
+  creatorId: string,
+  assigneeList: { id: string; role: Role }[] | null,
+): string | null {
+  if (taskType !== 'LONG_TERM') return null
+  if (role === 'CHIEF_ENGINEER') return creatorId
+  if (assigneeList && assigneeList.length === 1 && assigneeList[0].role === 'CHIEF_ENGINEER') {
+    return assigneeList[0].id
+  }
+  return null
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -85,6 +99,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  let taskType: TaskWorkType = 'QUICK'
+  if (body.taskType === 'LONG_TERM') {
+    if (!['CHIEF_ENGINEER', 'MANAGER', 'ADMIN'].includes(role)) {
+      return NextResponse.json(
+        { error: 'Долгосрочные задачи может создавать только главный инженер, менеджер или администратор' },
+        { status: 403 }
+      )
+    }
+    taskType = 'LONG_TERM'
+  }
+
+  const managedByChiefId = resolveManagedByChiefId(taskType, role, creator.id, assignees)
+
   const createdByUser = await db.user.findUnique({ where: { id: creator.id } })
   const createdTasks = []
   const maxRequest = await db.serviceTask.aggregate({ _max: { requestNumber: true } })
@@ -98,6 +125,8 @@ export async function POST(req: NextRequest) {
         createdById: creator.id,
         assignedToId: null,
         type: body.type,
+        taskType,
+        managedByChiefId,
         priority: body.priority || 'MEDIUM',
         status: 'NEW',
         scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
@@ -115,6 +144,8 @@ export async function POST(req: NextRequest) {
           createdById: creator.id,
           assignedToId: assigneeId,
           type: body.type,
+          taskType,
+          managedByChiefId,
           priority: body.priority || 'MEDIUM',
           status: 'ASSIGNED',
           scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,

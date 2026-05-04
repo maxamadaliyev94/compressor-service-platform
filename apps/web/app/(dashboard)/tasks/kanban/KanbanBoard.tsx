@@ -64,9 +64,14 @@ export default function KanbanBoard({ tasks }: { tasks: any[] }) {
                   onDragStart={() => onDragStart(task.id)}
                   onClick={() => router.push(`/tasks/${task.id}`)}
                   className="bg-white rounded-lg p-3 border border-gray-200 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${priorityColors[task.priority]}`}/>
                     <span className="text-xs text-gray-500 truncate">{typeLabels[task.type] || task.type}</span>
+                    {task.taskType === 'LONG_TERM' && (
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-100 px-1 rounded border border-amber-200" title="Долгосрочная">
+                        📅
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm font-semibold text-gray-800 mb-1">
                     {task.equipment?.brand} {task.equipment?.model}

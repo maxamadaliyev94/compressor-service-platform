@@ -78,6 +78,12 @@ enum TaskStatus {
   CANCELLED
 }
 
+/// Быстрая (обычный цикл) или долгосрочная задача (ежедневные записи, закрытие только ГИ).
+enum TaskWorkType {
+  QUICK
+  LONG_TERM
+}
+
 enum AttachmentType {
   BEFORE
   AFTER
@@ -124,6 +130,8 @@ model User {
   assignedTasks ServiceTask[] @relation("AssignedEngineer")
   createdTasks  ServiceTask[] @relation("TaskCreator")
   deletedTasks  ServiceTask[] @relation("TaskDeleter")
+  managedLongTermTasks ServiceTask[] @relation("LongTermManagedBy")
+  dailyWorkEntries DailyWork[]
   managedClients Client[] @relation("ClientManager")
   clientAccount Client? @relation("ClientPortalUsers", fields: [clientId], references: [id], onDelete: SetNull)
   clientNotifySubscriptions Client[] @relation("ClientAttachedNotifyUser")
@@ -301,6 +309,10 @@ model ServiceTask {
   assignedToId String?
   createdById  String
   type         TaskType
+  /// Быстрая или долгосрочная задача (колонка в БД: task_type).
+  taskType     TaskWorkType @default(QUICK) @map("task_type")
+  /// Главный инженер, ответственный за долгосрочную задачу (назначение/переназначение исполнителей).
+  managedByChiefId String?
   priority     TaskPriority @default(MEDIUM)
   status       TaskStatus   @default(NEW)
   scheduledAt  DateTime?
@@ -319,10 +331,30 @@ model ServiceTask {
   assignedTo User?       @relation("AssignedEngineer", fields: [assignedToId], references: [id])
   createdBy  User        @relation("TaskCreator", fields: [createdById], references: [id])
   deletedBy  User?       @relation("TaskDeleter", fields: [deletedById], references: [id])
+  managedByChief User?  @relation("LongTermManagedBy", fields: [managedByChiefId], references: [id], onDelete: SetNull)
   report     WorkReport?
+  dailyWorks DailyWork[]
 
   @@map("service_tasks")
   @@index([requestNumber])
+}
+
+/// Ежедневная запись по долгосрочной задаче (чек-лист + заметки за день).
+model DailyWork {
+  id          String   @id @default(cuid())
+  taskId      String
+  engineerId  String
+  date        DateTime @db.Date
+  description String   @db.Text
+  checklist   Json     @default("[]")
+  createdAt   DateTime @default(now())
+
+  task     ServiceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  engineer User        @relation(fields: [engineerId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, engineerId, date])
+  @@index([taskId])
+  @@map("daily_work")
 }
 
 model WorkReport {

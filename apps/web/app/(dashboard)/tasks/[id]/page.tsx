@@ -5,6 +5,7 @@ import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import TaskAdminActions from './TaskAdminActions'
 import TaskDelegatePanel from './TaskDelegatePanel'
+import TaskLongTermChiefPanel from './TaskLongTermChiefPanel'
 import TaskScheduledAtEditor from './TaskScheduledAtEditor'
 import ClientSignaturePanel from './ClientSignaturePanel'
 
@@ -43,9 +44,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       assignedTo: true,
       createdBy: true,
       report: {
-        include: { checklistItems: true, partsUsed: true, attachments: true }
-      }
-    }
+        include: { checklistItems: true, partsUsed: true, attachments: true },
+      },
+      dailyWorks: {
+        include: { engineer: { select: { id: true, name: true } } },
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      },
+    },
   })
   if (!task || task.deletedAt) notFound()
 
@@ -62,10 +67,18 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
   const isNotDone = !['DONE', 'CANCELLED'].includes(task.status)
   const showChiefDelegate =
+    task.taskType !== 'LONG_TERM' &&
     session?.user?.role === 'CHIEF_ENGINEER' &&
     task.assignedToId === session.user.id &&
     isNotDone &&
     !task.report
+
+  const showLongTermChiefPanel =
+    task.taskType === 'LONG_TERM' &&
+    isNotDone &&
+    !task.report &&
+    (session.user.role === 'ADMIN' ||
+      (session.user.role === 'CHIEF_ENGINEER' && task.managedByChiefId === session.user.id))
 
   let chiefOwnsDelegatedSubtree = false
   if (session.user.role === 'CHIEF_ENGINEER') {
@@ -96,6 +109,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       : `https://yandex.ru/maps/?text=${encodeURIComponent(destinationText)}`
 
   const role = session?.user?.role ?? ''
+  const showWorkDayLink =
+    task.taskType === 'LONG_TERM' &&
+    isNotDone &&
+    role === 'ENGINEER' &&
+    task.assignedToId === session.user.id
+  const showExecuteLink = task.taskType !== 'LONG_TERM' && canExecute && isNotDone
   const sessionClientId = session?.user?.clientId ?? null
   const clientSignaturePending =
     task.status === 'DONE' && task.report && !task.report.clientSignature
@@ -120,7 +139,17 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
       <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-start mb-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">№{task.requestNumber} · {typeLabels[task.type]}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold">№{task.requestNumber} · {typeLabels[task.type]}</h1>
+            {task.taskType === 'LONG_TERM' && (
+              <span
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-900 border border-amber-200"
+                title="Долгосрочная задача"
+              >
+                📅 Долгосрочная
+              </span>
+            )}
+          </div>
           <p className="text-gray-500 text-sm mt-1">
             {eq.brand} {eq.model} · {client.name}
           </p>
@@ -141,7 +170,15 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[task.status]}`}>
             {statusLabels[task.status]}
           </span>
-          {canExecute && isNotDone && (
+          {showWorkDayLink && (
+            <a
+              href={`/tasks/${task.id}/daily`}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-2"
+            >
+              📅 Работа за день
+            </a>
+          )}
+          {showExecuteLink && (
             <a
               href={`/tasks/${task.id}/execute`}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 flex items-center gap-2"
@@ -228,6 +265,9 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         <div className="bg-white border rounded-xl p-5">
           <h2 className="font-semibold mb-3">Детали задачи</h2>
           <div className="space-y-2 text-sm">
+            <div className="flex gap-2"><span className="text-gray-500 w-28">Формат:</span>
+              <span>{task.taskType === 'LONG_TERM' ? 'Долгосрочная' : 'Быстрая'}</span>
+            </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[task.type]}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Приоритет:</span>
               <span className={`font-medium ${task.priority === 'EMERGENCY' ? 'text-red-600' : task.priority === 'HIGH' ? 'text-orange-600' : 'text-gray-700'}`}>
@@ -257,6 +297,57 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
           <h3 className="font-semibold text-sm text-yellow-800 mb-1">Комментарий</h3>
           <p className="text-sm text-yellow-700">{task.comment}</p>
+        </div>
+      )}
+
+      {showLongTermChiefPanel && (
+        <TaskLongTermChiefPanel
+          taskId={task.id}
+          initialAssigneeId={task.assignedToId ?? ''}
+          equipmentCurrentHours={eq.currentHours}
+          equipmentNextServiceHours={eq.nextServiceHours}
+        />
+      )}
+
+      {task.taskType === 'LONG_TERM' && (
+        <div className="bg-white border rounded-xl p-5 mb-6">
+          <h2 className="font-semibold mb-3 flex items-center gap-2 text-gray-900">
+            <span aria-hidden>📅</span>
+            Журнал работ по дням
+          </h2>
+          {task.dailyWorks.length === 0 ? (
+            <p className="text-sm text-gray-500">Записей пока нет</p>
+          ) : (
+            <ul className="space-y-4">
+              {task.dailyWorks.map((dw) => {
+                const items = Array.isArray(dw.checklist)
+                  ? (dw.checklist as { label?: string; checked?: boolean }[])
+                  : []
+                const checkedItems = items.filter((c) => c.checked && typeof c.label === 'string')
+                return (
+                  <li key={dw.id} className="border-l-2 border-indigo-200 pl-4 ml-0.5">
+                    <div className="text-xs font-semibold text-indigo-700">
+                      {new Date(dw.date).toLocaleDateString('ru-RU', {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </div>
+                    <div className="text-sm font-medium text-gray-900 mt-0.5">{dw.engineer.name}</div>
+                    <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{dw.description}</p>
+                    {checkedItems.length > 0 && (
+                      <ul className="mt-2 text-xs text-gray-600 list-disc pl-4 space-y-0.5">
+                        {checkedItems.map((c, idx) => (
+                          <li key={idx}>{c.label}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       )}
 

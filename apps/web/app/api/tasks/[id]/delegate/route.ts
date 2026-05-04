@@ -97,6 +97,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           createdById: chief.id,
           assignedToId: engineerId,
           type: task.type,
+          taskType: 'QUICK',
+          managedByChiefId: null,
           priority: task.priority,
           status: 'ASSIGNED',
           scheduledAt: task.scheduledAt,

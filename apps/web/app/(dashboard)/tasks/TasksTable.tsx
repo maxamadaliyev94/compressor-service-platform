@@ -7,6 +7,7 @@ type TaskRow = {
   id: string
   requestNumber: number
   type: string
+  taskType?: string
   priority: string
   status: string
   scheduledAt: Date | null
@@ -406,6 +407,11 @@ export default function TasksTable({
             <div className="font-medium text-sm">
               <span className={`mr-1 ${priorityColors[rep.priority]}`}>●</span>
               №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+              {rep.taskType === 'LONG_TERM' && (
+                <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-200" title="Долгосрочная">
+                  📅 Долгоср.
+                </span>
+              )}
               {multi && <BundleEngineerCountBadge bundle={bundle} />}
             </div>
             <div className="flex flex-col items-end gap-1">
@@ -490,8 +496,15 @@ export default function TasksTable({
         <td className="p-3">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className={`font-medium ${priorityColors[rep.priority]}`}>●</span>
-            <span>
-              №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+            <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <span>
+                №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+              </span>
+              {rep.taskType === 'LONG_TERM' && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-200" title="Долгосрочная задача">
+                  📅 Долгосрочная
+                </span>
+              )}
             </span>
             {multi && <BundleEngineerCountBadge bundle={bundle} />}
           </div>

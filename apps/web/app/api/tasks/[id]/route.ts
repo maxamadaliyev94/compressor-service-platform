@@ -83,24 +83,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'Нельзя переназначить задачу с отчётом' }, { status: 400 })
     }
 
-    const parentId = parseDelegationParentTaskId(task.comment)
-    if (!parentId) {
-      return NextResponse.json({ error: 'Переназначение доступно только для распределённых задач' }, { status: 400 })
-    }
-
-    const parent = await db.serviceTask.findUnique({
-      where: { id: parentId },
-      select: { id: true, assignedToId: true, deletedAt: true },
-    })
-    if (!parent || parent.deletedAt) {
-      return NextResponse.json({ error: 'Родительская задача не найдена' }, { status: 400 })
-    }
-
-    const chiefOk = role === 'CHIEF_ENGINEER' && parent.assignedToId === session.user.id
-    if (role !== 'ADMIN' && !chiefOk) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     const rawId = body.assignedToId
     if (rawId === null || rawId === undefined || rawId === '') {
       return NextResponse.json({ error: 'Укажите инженера' }, { status: 400 })
@@ -114,28 +96,56 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'Инженер не найден' }, { status: 400 })
     }
 
-    const marker = `[Распределено ГИ из задачи ${parentId}]`
-    const siblings = await db.serviceTask.findMany({
-      where: {
-        id: { not: params.id },
-        deletedAt: null,
-        comment: { contains: marker },
-      },
-      select: { id: true, assignedToId: true, comment: true },
-    })
-    const siblingSameEngineer = siblings.some(
-      (s) =>
-        parseDelegationParentTaskId(s.comment) === parentId && s.assignedToId === engineer.id
-    )
-    if (siblingSameEngineer) {
-      return NextResponse.json(
-        { error: 'Этот инженер уже назначен на другую задачу по этой заявке' },
-        { status: 400 }
-      )
-    }
+    if (task.taskType === 'LONG_TERM') {
+      const chiefOk =
+        role === 'CHIEF_ENGINEER' && task.managedByChiefId && task.managedByChiefId === session.user.id
+      if (role !== 'ADMIN' && !chiefOk) {
+        return NextResponse.json({ error: 'Нет прав на переназначение по этой задаче' }, { status: 403 })
+      }
+      newEngineerId = engineer.id
+      parentForNotify = null
+    } else {
+      const parentId = parseDelegationParentTaskId(task.comment)
+      if (!parentId) {
+        return NextResponse.json({ error: 'Переназначение доступно только для распределённых задач' }, { status: 400 })
+      }
 
-    newEngineerId = engineer.id
-    parentForNotify = parent
+      const parent = await db.serviceTask.findUnique({
+        where: { id: parentId },
+        select: { id: true, assignedToId: true, deletedAt: true },
+      })
+      if (!parent || parent.deletedAt) {
+        return NextResponse.json({ error: 'Родительская задача не найдена' }, { status: 400 })
+      }
+
+      const chiefOk = role === 'CHIEF_ENGINEER' && parent.assignedToId === session.user.id
+      if (role !== 'ADMIN' && !chiefOk) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+
+      const marker = `[Распределено ГИ из задачи ${parentId}]`
+      const siblings = await db.serviceTask.findMany({
+        where: {
+          id: { not: params.id },
+          deletedAt: null,
+          comment: { contains: marker },
+        },
+        select: { id: true, assignedToId: true, comment: true },
+      })
+      const siblingSameEngineer = siblings.some(
+        (s) =>
+          parseDelegationParentTaskId(s.comment) === parentId && s.assignedToId === engineer.id
+      )
+      if (siblingSameEngineer) {
+        return NextResponse.json(
+          { error: 'Этот инженер уже назначен на другую задачу по этой заявке' },
+          { status: 400 }
+        )
+      }
+
+      newEngineerId = engineer.id
+      parentForNotify = parent
+    }
   }
 
   const previousAssigneeId = task.assignedToId
@@ -153,10 +163,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   if (hasAssignee && newEngineerId && previousAssigneeId !== newEngineerId) {
     await markEngineerBusy(newEngineerId)
+    const chiefId =
+      parentForNotify?.assignedToId ||
+      (task.taskType === 'LONG_TERM' ? task.managedByChiefId : null)
     const chief =
-      parentForNotify?.assignedToId &&
+      chiefId &&
       (await db.user.findUnique({
-        where: { id: parentForNotify.assignedToId },
+        where: { id: chiefId },
         select: { id: true, name: true },
       }))
     if (chief) {

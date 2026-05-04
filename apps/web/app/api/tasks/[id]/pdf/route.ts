@@ -18,8 +18,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         include: { object: { include: { branch: { include: { client: true } } } } },
       },
       assignedTo: true,
+      dailyWorks: {
+        include: { engineer: { select: { name: true } } },
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      },
       report: {
-        include: { checklistItems: true, partsUsed: true },
+        include: {
+          checklistItems: true,
+          partsUsed: true,
+          engineer: { select: { name: true } },
+        },
       },
     },
   })
@@ -32,10 +40,47 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const eq = task.equipment
   const client = eq.object.branch.client
   const report = task.report
-  const engineerName = task.assignedTo?.name || '—'
+  const engineerName =
+    task.taskType === 'LONG_TERM' && report?.engineer?.name
+      ? report.engineer.name
+      : task.assignedTo?.name || '—'
   const clientSignerName = client.contactPerson?.trim() || client.name || '—'
 
   const checkedItems = report?.checklistItems?.filter((item) => item.checked) ?? []
+
+  const longTermJournalSection =
+    task.taskType === 'LONG_TERM' && task.dailyWorks.length > 0
+      ? `
+<div class="section">
+  <div class="section-title">Журнал работ по дням (долгосрочная задача)</div>
+  <table>
+    <thead><tr><th>Дата</th><th>Инженер</th><th>Описание</th></tr></thead>
+    <tbody>
+      ${task.dailyWorks
+        .map(
+          (dw) => `
+        <tr>
+          <td>${esc(new Date(dw.date).toLocaleDateString('ru-RU'))}</td>
+          <td>${esc(dw.engineer.name)}</td>
+          <td>${esc(dw.description)}</td>
+        </tr>`
+        )
+        .join('')}
+    </tbody>
+  </table>
+</div>
+`
+      : ''
+
+  const reportNotesSection =
+    report?.notes && report.notes.trim().length > 0
+      ? `
+<div class="section">
+  <div class="section-title">Заметки и сводный журнал</div>
+  <p style="white-space:pre-wrap">${esc(report.notes)}</p>
+</div>
+`
+      : ''
 
   const roomCondition = report?.roomCondition ?? ''
   const extractMetric = (re: RegExp) => {
@@ -175,6 +220,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 </div>
 
+${longTermJournalSection}
+${reportNotesSection}
+
 <div class="section">
   <div class="section-title">Показатели</div>
   <div class="grid">
@@ -218,7 +266,7 @@ ${
     ? `
 <div class="section">
   <div class="section-title">Рекомендации клиенту</div>
-  <p>${task.report.recommendations}</p>
+  <p>${esc(task.report.recommendations)}</p>
 </div>
 `
     : ''
@@ -227,7 +275,7 @@ ${
 <div class="section">
   <div class="section-title">Данные о работе</div>
   <div class="grid">
-    <div class="field"><div class="label">Инженер</div><div class="value">${task.assignedTo?.name || '—'}</div></div>
+    <div class="field"><div class="label">Инженер / ответственный</div><div class="value">${esc(engineerName)}</div></div>
     <div class="field"><div class="label">Дата выполнения</div><div class="value">${
       task.scheduledAt ? new Date(task.scheduledAt).toLocaleDateString('ru-RU') : new Date().toLocaleDateString('ru-RU')
     }</div></div>

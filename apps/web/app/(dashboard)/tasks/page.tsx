@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/roles'
 import { hasPermission, requirePermission } from '@/lib/permissions'
-import type { Role } from '@prisma/client'
+import type { Role, TaskStatus } from '@prisma/client'
 import TasksTable from './TasksTable'
 import { prismaWhereClientTasks, prismaWhereManagerTasks } from '@/lib/api-access'
 
@@ -13,7 +13,8 @@ export default async function TasksPage() {
   const canCreateTask = role !== 'ENGINEER' && (await hasPermission(role as Role, 'action:task.create'))
 
   /** На списке «Задачи» показываем только незавершённые (без выполненных и отменённых). */
-  const activeOnlyWhere = { status: { notIn: ['DONE', 'CANCELLED'] as const } }
+  const closedStatuses: TaskStatus[] = ['DONE', 'CANCELLED']
+  const activeOnlyWhere = { status: { notIn: closedStatuses } }
 
   const tasks = await db.serviceTask.findMany({
     where:

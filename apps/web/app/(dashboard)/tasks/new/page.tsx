@@ -16,6 +16,7 @@ export default function NewTaskPage() {
     equipmentId: '',
     assignedToId: '',
     type: 'PLANNED_MAINTENANCE',
+    taskType: 'QUICK' as 'QUICK' | 'LONG_TERM',
     priority: 'MEDIUM',
     scheduledAt: '',
     comment: '',
@@ -235,6 +236,36 @@ export default function NewTaskPage() {
             </div>
           )}
         </div>
+
+        {(currentUser?.role === 'CHIEF_ENGINEER' ||
+          currentUser?.role === 'MANAGER' ||
+          currentUser?.role === 'ADMIN') && (
+          <div>
+            <label className="block text-sm font-medium mb-2">Формат задачи</label>
+            <div className="flex flex-col sm:flex-row gap-3 text-sm">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="task-work-type"
+                  checked={form.taskType === 'QUICK'}
+                  onChange={() => set('taskType', 'QUICK')}
+                  className="accent-blue-600"
+                />
+                <span>Быстрая (обычный цикл)</span>
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="task-work-type"
+                  checked={form.taskType === 'LONG_TERM'}
+                  onChange={() => set('taskType', 'LONG_TERM')}
+                  className="accent-blue-600"
+                />
+                <span>Долгосрочная (закрывает главный инженер, дневной журнал)</span>
+              </label>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
