@@ -2,7 +2,7 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { hasPermission } from '@/lib/permissions'
 import { verifyRegistrationChallengeToken } from '@/lib/webauthn-challenge'
-import { getWebAuthnExpectedOrigins, getWebAuthnRpId } from '@/lib/webauthn-config'
+import { resolveWebAuthnForRequest } from '@/lib/webauthn-config'
 import { verifyRegistrationResponse } from '@simplewebauthn/server'
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 import type { Role } from '@prisma/client'
@@ -11,8 +11,6 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const canManageUsers = await hasPermission(session.user.role as Role, 'action:user.manage')
-  if (!canManageUsers) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json().catch(() => null) as {
     response?: RegistrationResponseJSON
@@ -25,8 +23,13 @@ export async function POST(req: NextRequest) {
   const payload = verifyRegistrationChallengeToken(body.challengeToken)
   if (!payload) return NextResponse.json({ error: 'Недействительный или истёкший challenge' }, { status: 400 })
 
-  const expectedOrigins = getWebAuthnExpectedOrigins()
-  const rpID = getWebAuthnRpId()
+  const isSelf = session.user.id === payload.userId
+  if (!isSelf) {
+    const canManageUsers = await hasPermission(session.user.role as Role, 'action:user.manage')
+    if (!canManageUsers) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { rpId: rpID, expectedOrigins } = resolveWebAuthnForRequest(req)
 
   let verification
   try {

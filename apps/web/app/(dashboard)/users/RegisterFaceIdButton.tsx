@@ -1,5 +1,6 @@
 'use client'
 
+import { webAuthnUserVisibleError } from '@/lib/webauthn-client-error'
 import { startRegistration } from '@simplewebauthn/browser'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -48,11 +49,8 @@ export default function RegisterFaceIdButton({
       }
       setMessage({ type: 'ok', text: 'Face ID / биометрия сохранены' })
       router.refresh()
-    } catch {
-      setMessage({
-        type: 'err',
-        text: 'Не удалось выполнить запрос к устройству. Убедитесь, что используется HTTPS или localhost и разрешён доступ к биометрии.',
-      })
+    } catch (e) {
+      setMessage({ type: 'err', text: webAuthnUserVisibleError(e) })
     } finally {
       setLoading(false)
     }

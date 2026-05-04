@@ -14,7 +14,13 @@ const enc = (o: object) => Buffer.from(JSON.stringify(o), 'utf8').toString('base
 const dec = <T>(s: string): T => JSON.parse(Buffer.from(s, 'base64url').toString('utf8')) as T
 
 export type RegChallengePayload = { t: 'reg'; userId: string; challenge: string; exp: number }
-export type LoginChallengePayload = { t: 'login'; login: string; challenge: string; exp: number }
+export type LoginChallengePayload = {
+  t: 'login'
+  challenge: string
+  exp: number
+  discoverable: boolean
+  login?: string | undefined
+}
 
 function verifySignedPayload<T extends { t: string; exp: number }>(token: string, kind: string): T | null {
   const lastDot = token.lastIndexOf('.')
@@ -45,14 +51,38 @@ export function verifyRegistrationChallengeToken(token: string): RegChallengePay
   return verifySignedPayload<RegChallengePayload>(token, 'reg')
 }
 
-export function issueLoginChallengeToken(login: string, challenge: string): string {
+export function issueLoginChallengeUser(login: string, challenge: string): string {
   const exp = Date.now() + CHALLENGE_TTL_MS
-  const payload = enc({ t: 'login', login, challenge, exp })
+  const payload = enc({
+    t: 'login',
+    challenge,
+    exp,
+    discoverable: false,
+    login: login.trim().toLowerCase(),
+  })
+  return `${payload}.${signPayload(payload)}`
+}
+
+export function issueLoginChallengeDiscoverable(challenge: string): string {
+  const exp = Date.now() + CHALLENGE_TTL_MS
+  const payload = enc({ t: 'login', challenge, exp, discoverable: true })
   return `${payload}.${signPayload(payload)}`
 }
 
 export function verifyLoginChallengeToken(token: string): LoginChallengePayload | null {
-  return verifySignedPayload<LoginChallengePayload>(token, 'login')
+  const data = verifySignedPayload<LoginChallengePayload>(token, 'login')
+  if (!data) return null
+  if (data.discoverable === true) return data
+  if (typeof data.login === 'string' && data.login.length > 0) {
+    return {
+      t: 'login',
+      challenge: data.challenge,
+      exp: data.exp,
+      discoverable: false,
+      login: data.login,
+    }
+  }
+  return null
 }
 
 export type SessionHandoffPayload = { t: 'session'; userId: string; exp: number }

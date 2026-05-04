@@ -20,7 +20,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const role = session.user.role as string
   const hasPermission = (key: string) => permissions.has('*') || permissions.has(key)
 
-  const navItems = [
+  type NavDef = { href: string; label: string; icon: string; roles: string[]; key?: string }
+
+  const navRaw: NavDef[] = [
+    {
+      href: '/account',
+      label: 'Настройка аккаунта',
+      icon: '👤',
+      roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'],
+    },
     { href: '/', label: 'Dashboard', icon: '▦', roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'], key: 'section:dashboard' },
     { href: '/clients', label: 'Клиенты', icon: '👥', roles: ['ADMIN', 'MANAGER'], key: 'section:clients' },
     {
@@ -45,7 +53,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/access', label: 'Доступы', icon: '🔐', roles: ['ADMIN'], key: 'action:user.manage' },
     { href: '/map', label: 'Карта', icon: '🗺️', roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'], key: 'section:map' },
     { href: '/references', label: 'Справочники', icon: '📋', roles: ['ADMIN', 'MANAGER'], key: 'section:references' },
-  ].filter((item) => item.roles.includes(role) && hasPermission(item.key))
+  ]
+
+  const navItems = navRaw
+    .filter((item) => item.roles.includes(role) && (item.key === undefined || hasPermission(item.key)))
+    .map(({ href, label, icon }) => ({ href, label, icon }))
   const userName = session.user?.name ?? 'Пользователь'
   const userRole = session.user.role
   const profile = await db.user.findUnique({

@@ -1,4 +1,5 @@
 'use client'
+import { webAuthnUserVisibleError } from '@/lib/webauthn-client-error'
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -15,10 +16,14 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError('')
+    if (!login.trim() || !password) {
+      setError('Введите логин и пароль')
+      return
+    }
+    setLoading(true)
     const res = await signIn('credentials', {
-      login,
+      login: login.trim().toLowerCase(),
       password,
       redirect: false,
     })
@@ -33,17 +38,13 @@ export default function LoginPage() {
   async function handleFaceId() {
     setFaceIdMessage('')
     setError('')
-    const trimmed = login.trim().toLowerCase()
-    if (!trimmed) {
-      setFaceIdMessage('Сначала введите логин')
-      return
-    }
     setFaceIdLoading(true)
     try {
+      const trimmed = login.trim().toLowerCase()
       const optRes = await fetch('/api/webauthn/login/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: trimmed }),
+        body: JSON.stringify(trimmed ? { login: trimmed } : {}),
       })
       if (optRes.status === 404) {
         setFaceIdMessage('Face ID не настроен, войдите через пароль')
@@ -78,15 +79,15 @@ export default function LoginPage() {
         return
       }
       router.push('/')
-    } catch {
-      setFaceIdMessage('Браузер не поддерживает WebAuthn или доступ запрещён.')
+    } catch (e) {
+      setFaceIdMessage(webAuthnUserVisibleError(e))
     } finally {
       setFaceIdLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl border p-8 w-full max-w-md shadow-sm">
         <div className="mb-8">
           <h1 className="text-2xl font-bold">Compressor Service</h1>
@@ -99,9 +100,9 @@ export default function LoginPage() {
               type="text"
               value={login}
               onChange={(e) => setLogin(e.target.value)}
-              placeholder="admin"
+              placeholder="необязательно для Face ID"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              autoComplete="username"
             />
           </div>
           <div>
@@ -110,15 +111,15 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="необязательно для Face ID"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              autoComplete="current-password"
             />
           </div>
           {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{error}</div>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || faceIdLoading}
             className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? 'Вход...' : 'Войти'}
@@ -134,6 +135,9 @@ export default function LoginPage() {
           {faceIdMessage && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm px-3 py-2 rounded-lg">{faceIdMessage}</div>
           )}
+          <p className="text-xs text-gray-400">
+            Для Face ID один раз войдите по паролю и включите биометрию в «Настройка аккаунта». Для кнопки Face ID логин и пароль не обязательны.
+          </p>
         </form>
         <div className="mt-4 text-sm text-gray-500">
           Нет аккаунта?{' '}
@@ -142,10 +146,8 @@ export default function LoginPage() {
           </a>
         </div>
         <div className="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
-          <p className="font-medium mb-1">Тестовые аккаунты:</p>
-          <p>admin — Администратор</p>
-          <p>manager — Менеджер</p>
-          <p>engineer1 — Инженер</p>
+          <p className="font-medium mb-1">Тестовые аккаунты (пароль — см. seed):</p>
+          <p>admin, manager, engineer1</p>
         </div>
       </div>
     </div>
