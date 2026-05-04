@@ -2,12 +2,27 @@
 
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import type { ChecklistItemAction } from '@prisma/client'
+import {
+  CHECKLIST_ACTION_LABELS,
+  isDiagnosticsChecklistAutoRowLabel,
+  isValidDiagnosticsActionForLabel,
+  needsDiagnosticsPerformedAction,
+  validDiagnosticsActionsForLabel,
+} from '@/lib/checklist-diagnostics'
 
-type ChecklistRow = { id: string; label: string; checked: boolean }
+type ChecklistRow = {
+  id: string
+  label: string
+  checked: boolean
+  isAuto: boolean
+  action: ChecklistItemAction | null
+}
 type PartRow = { id: string; name: string; quantity: string; unit: string }
 
 export default function EditCompletedTaskClient({ task }: { task: any }) {
   const router = useRouter()
+  const diagnosticsChecklistActions = task.type === 'DIAGNOSTICS'
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
     comment: task.comment || '',
@@ -27,6 +42,8 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
       id: i.id,
       label: i.label,
       checked: Boolean(i.checked),
+      isAuto: isDiagnosticsChecklistAutoRowLabel(String(i.label)),
+      action: (i.performedAction as ChecklistItemAction | null) ?? null,
     }))
   )
   const [partsUsed, setPartsUsed] = useState<PartRow[]>(
@@ -76,8 +93,23 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
     e.target.value = ''
   }
 
+  function setChecklistAction(index: number, action: ChecklistItemAction) {
+    setChecklist((prev) => prev.map((row, i) => (i === index ? { ...row, action } : row)))
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (diagnosticsChecklistActions) {
+      for (const row of checklist) {
+        if (
+          needsDiagnosticsPerformedAction(row) &&
+          !isValidDiagnosticsActionForLabel(row.label, row.action)
+        ) {
+          alert('Для диагностики у каждого отмеченного пункта выберите действие.')
+          return
+        }
+      }
+    }
     setLoading(true)
     const res = await fetch(`/api/tasks/${task.id}/edit`, {
       method: 'PATCH',
@@ -95,7 +127,12 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
           roomCondition: form.roomCondition || null,
           notes: form.notes,
           recommendations: form.recommendations,
-          checklist: checklist.map((item) => ({ label: item.label, checked: item.checked })),
+          checklist: checklist.map((item) => ({
+            label: item.label,
+            checked: item.checked,
+            isAuto: item.isAuto,
+            action: diagnosticsChecklistActions && needsDiagnosticsPerformedAction(item) ? item.action : null,
+          })),
           partsUsed: partsUsed
             .filter((p) => p.name.trim())
             .map((p) => ({
@@ -235,22 +272,60 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
 
       <div>
         <label className="block text-sm font-medium mb-2">Чек-лист работ</label>
-        <div className="space-y-2 border rounded-lg p-3 bg-gray-50">
+        {diagnosticsChecklistActions && (
+          <p className="text-xs text-blue-700 mb-2">
+            Для диагностики у отмеченных пунктов (кроме строки типа работ) укажите действие — оно отображается в акте.
+          </p>
+        )}
+        <div className="space-y-3 border rounded-lg p-3 bg-gray-50">
           {checklist.length === 0 && <div className="text-sm text-gray-500">Нет пунктов чек-листа</div>}
           {checklist.map((item, idx) => (
-            <label key={item.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={item.checked}
-                onChange={() =>
-                  setChecklist((prev) =>
-                    prev.map((row, i) => (i === idx ? { ...row, checked: !row.checked } : row))
-                  )
-                }
-                className="w-4 h-4 accent-blue-600"
-              />
-              <span>{item.label}</span>
-            </label>
+            <div key={item.id} className="text-sm space-y-2">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={item.checked}
+                  disabled={item.isAuto}
+                  onChange={() =>
+                    setChecklist((prev) =>
+                      prev.map((row, i) =>
+                        i === idx
+                          ? { ...row, checked: !row.checked, action: !row.checked ? row.action : null }
+                          : row
+                      )
+                    )
+                  }
+                  className="w-4 h-4 mt-0.5 accent-blue-600 shrink-0 disabled:opacity-50"
+                />
+                <span className="flex-1">
+                  {item.label}
+                  {item.isAuto && <span className="text-xs text-blue-600 ml-2">авто</span>}
+                  {diagnosticsChecklistActions && needsDiagnosticsPerformedAction(item) && item.action && (
+                    <span className="block sm:inline sm:ml-2 mt-1 sm:mt-0 text-xs font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-100">
+                      {CHECKLIST_ACTION_LABELS[item.action]}
+                    </span>
+                  )}
+                </span>
+              </label>
+              {diagnosticsChecklistActions && needsDiagnosticsPerformedAction(item) && (
+                <div className="pl-6 flex flex-wrap gap-2">
+                  {validDiagnosticsActionsForLabel(item.label).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setChecklistAction(idx, a)}
+                      className={`text-xs font-medium px-2.5 py-1 rounded-lg border ${
+                        item.action === a
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      {CHECKLIST_ACTION_LABELS[a]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>

@@ -92,6 +92,13 @@ enum ChecklistItemType {
   PART
 }
 
+/// Действие по пункту чек-листа (актуально для задач «Диагностика»).
+enum ChecklistItemAction {
+  REPLACE
+  TOP_UP
+  REPAIR
+}
+
 model User {
   id         String   @id @default(cuid())
   login      String   @unique
@@ -351,12 +358,14 @@ model WorkReport {
 }
 
 model ChecklistItem {
-  id       String            @id @default(cuid())
-  reportId String
-  label    String
-  checked  Boolean           @default(false)
-  itemType ChecklistItemType @default(CONTROL)
-  order    Int               @default(0)
+  id                String             @id @default(cuid())
+  reportId          String
+  label             String
+  checked           Boolean            @default(false)
+  itemType          ChecklistItemType  @default(CONTROL)
+  order             Int                @default(0)
+  /// Заполняется при выполнении диагностики (выбор инженера).
+  performedAction   ChecklistItemAction?
 
   report WorkReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 

@@ -15,7 +15,14 @@ import type {
   Client as ClientModel,
   MaintenanceRegulation,
   MaintenanceRegulationItem,
+  ChecklistItemAction,
 } from '@prisma/client'
+import {
+  CHECKLIST_ACTION_LABELS,
+  isValidDiagnosticsActionForLabel,
+  needsDiagnosticsPerformedAction,
+  validDiagnosticsActionsForLabel,
+} from '@/lib/checklist-diagnostics'
 
 type TaskWithRelations = ServiceTask & {
   equipment: Equipment & {
@@ -34,6 +41,8 @@ interface ChecklistItem {
   checked: boolean
   isRequired: boolean
   isAuto?: boolean
+  /** Только для задач «Диагностика» после отметки пункта. */
+  action?: ChecklistItemAction | null
 }
 
 interface Props {
@@ -174,6 +183,7 @@ function buildFallbackChecklist(taskType: string): ChecklistItem[] {
         checked,
         isRequired,
         isAuto,
+        action: null,
       }
     })
   )
@@ -217,6 +227,7 @@ export default function ExecuteTaskClient({
         label: item.label,
         checked: false,
         isRequired: false,
+        action: null,
       })) ?? []
 
     if (regulationItems.length > 0) return regulationItems
@@ -234,6 +245,7 @@ export default function ExecuteTaskClient({
   const [faceSignMsg, setFaceSignMsg] = useState('')
   const [faceSignLoading, setFaceSignLoading] = useState(false)
 
+  const diagnosticsChecklistActions = task.type === 'DIAGNOSTICS'
   const checkedCount = checklist.filter((i) => i.checked).length
 
   function applySavedTemplateSignature() {
@@ -295,9 +307,14 @@ export default function ExecuteTaskClient({
     setChecklist((prev) =>
       prev.map((i) => {
         if (i.id !== id || i.isAuto) return i
-        return { ...i, checked: !i.checked }
+        const nextChecked = !i.checked
+        return { ...i, checked: nextChecked, action: nextChecked ? i.action : null }
       })
     )
+  }
+
+  function setChecklistAction(id: string, action: ChecklistItemAction) {
+    setChecklist((prev) => prev.map((i) => (i.id === id ? { ...i, action } : i)))
   }
 
   function addPart() {
@@ -361,6 +378,17 @@ export default function ExecuteTaskClient({
       alert('Нужна подпись инженера на вкладке «Завершить»')
       return
     }
+    if (diagnosticsChecklistActions) {
+      for (const row of checklist) {
+        if (
+          needsDiagnosticsPerformedAction(row) &&
+          !isValidDiagnosticsActionForLabel(row.label, row.action)
+        ) {
+          alert('Для диагностики у каждого отмеченного пункта чек-листа выберите действие (Заменить / Долить или Ремонт).')
+          return
+        }
+      }
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/tasks/${task.id}/complete`, {
@@ -380,7 +408,15 @@ export default function ExecuteTaskClient({
           oilTemp: oilTemp ? Number(oilTemp) : null,
           pressureUpper: pressureUpper ? Number(pressureUpper) : null,
           pressureLower: pressureLower ? Number(pressureLower) : null,
-          checklist: checklist.map((i) => ({ label: i.label, checked: i.checked })),
+          checklist: checklist.map((i) => ({
+            label: i.label,
+            checked: i.checked,
+            isAuto: Boolean(i.isAuto),
+            action:
+              diagnosticsChecklistActions && needsDiagnosticsPerformedAction(i) && i.action
+                ? i.action
+                : null,
+          })),
           partsUsed: parts,
           notes,
           recommendations,
@@ -554,9 +590,16 @@ export default function ExecuteTaskClient({
       {step === 'checklist' && (
         <div className="space-y-4">
           <div className="bg-white border rounded-xl overflow-hidden">
-            <div className="p-4 border-b bg-gray-50 flex justify-between">
-              <h2 className="font-semibold">Чек-лист работ</h2>
-              <span className="text-sm text-gray-500">
+            <div className="p-4 border-b bg-gray-50 flex justify-between items-start gap-3">
+              <div>
+                <h2 className="font-semibold">Чек-лист работ</h2>
+                {diagnosticsChecklistActions && (
+                  <p className="text-xs text-blue-700 mt-1">
+                    Для диагностики после галочки выберите действие по пункту — оно попадёт в акт.
+                  </p>
+                )}
+              </div>
+              <span className="text-sm text-gray-500 flex-shrink-0">
                 {checkedCount} / {checklist.length}
               </span>
             </div>
@@ -575,29 +618,72 @@ export default function ExecuteTaskClient({
                     {category}
                   </div>
                   {items.map((item) => (
-                    <label
+                    <div
                       key={item.id}
-                      className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 ${
-                        item.isAuto ? 'cursor-not-allowed bg-gray-50/60' : 'cursor-pointer'
+                      className={`px-4 py-3 hover:bg-gray-50 ${
+                        item.isAuto ? 'bg-gray-50/60' : ''
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={item.checked}
-                        disabled={item.isAuto}
-                        onChange={() => toggleChecklist(item.id)}
-                        className="w-5 h-5 rounded accent-blue-600 disabled:opacity-60"
-                      />
-                      <span
-                        className={`text-sm flex-1 ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
-                      >
-                        {item.label}
-                      </span>
-                      {item.isAuto && (
-                        <span className="text-xs text-blue-500 flex-shrink-0">авто</span>
-                      )}
-                      {item.checked && <span className="text-green-500 text-sm flex-shrink-0">✓</span>}
-                    </label>
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id={`chk-${item.id}`}
+                          checked={item.checked}
+                          disabled={item.isAuto}
+                          onChange={() => toggleChecklist(item.id)}
+                          className="w-5 h-5 mt-0.5 rounded accent-blue-600 disabled:opacity-60 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <label
+                            htmlFor={`chk-${item.id}`}
+                            className={`flex flex-wrap items-center gap-2 text-sm ${
+                              item.isAuto ? 'cursor-not-allowed' : 'cursor-pointer'
+                            }`}
+                          >
+                            <span
+                              className={
+                                item.checked && !diagnosticsChecklistActions
+                                  ? 'line-through text-gray-400'
+                                  : 'text-gray-700'
+                              }
+                            >
+                              {item.label}
+                            </span>
+                            {item.isAuto && (
+                              <span className="text-xs text-blue-500">авто</span>
+                            )}
+                            {item.checked && (
+                              <span className="text-green-600 text-sm">✓</span>
+                            )}
+                            {diagnosticsChecklistActions &&
+                              needsDiagnosticsPerformedAction(item) &&
+                              item.action && (
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-100">
+                                  {CHECKLIST_ACTION_LABELS[item.action]}
+                                </span>
+                              )}
+                          </label>
+                          {diagnosticsChecklistActions && needsDiagnosticsPerformedAction(item) && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {validDiagnosticsActionsForLabel(item.label).map((a) => (
+                                <button
+                                  key={a}
+                                  type="button"
+                                  onClick={() => setChecklistAction(item.id, a)}
+                                  className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                                    item.action === a
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                  }`}
+                                >
+                                  {CHECKLIST_ACTION_LABELS[a]}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               ))}
@@ -609,7 +695,22 @@ export default function ExecuteTaskClient({
             </div>
           </div>
           <button
-            onClick={() => setStep('hours')}
+            onClick={() => {
+              if (diagnosticsChecklistActions) {
+                for (const row of checklist) {
+                  if (
+                    needsDiagnosticsPerformedAction(row) &&
+                    !isValidDiagnosticsActionForLabel(row.label, row.action)
+                  ) {
+                    alert(
+                      'Для диагностики у каждого отмеченного пункта выберите действие (Заменить / Долить или Ремонт).'
+                    )
+                    return
+                  }
+                }
+              }
+              setStep('hours')
+            }}
             className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-blue-700"
           >
             Далее → Моточасы

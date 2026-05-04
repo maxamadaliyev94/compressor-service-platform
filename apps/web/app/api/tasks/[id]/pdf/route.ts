@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { canReadTask, type AuthedSession } from '@/lib/api-access'
+import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -151,7 +152,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       .map(
         (item) => `
       <li class="checked">
-        ✓ ${item.label}
+        ✓ ${esc(item.label)}${
+          item.performedAction
+            ? ` — <span style="font-weight:600">${esc(checklistActionLabelRu(item.performedAction))}</span>`
+            : ''
+        }
       </li>
     `
       )

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/auth'
+import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
 import TaskAdminActions from './TaskAdminActions'
 import TaskDelegatePanel from './TaskDelegatePanel'
 import ClientSignaturePanel from './ClientSignaturePanel'
@@ -348,9 +349,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 {task.report.checklistItems
                   .filter(item => item.checked)
                   .map(item => (
-                  <div key={item.id} className="flex items-center gap-2 text-sm py-1">
+                  <div key={item.id} className="flex items-center gap-2 text-sm py-1 flex-wrap">
                     <span className="text-green-500">✓</span>
                     <span className="text-gray-700">{item.label}</span>
+                    {item.performedAction && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-100">
+                        {checklistActionLabelRu(item.performedAction)}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

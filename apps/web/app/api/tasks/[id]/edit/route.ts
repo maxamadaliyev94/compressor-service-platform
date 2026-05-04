@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { getTaskClientId } from '@/lib/api-access'
+import type { ChecklistItemAction } from '@prisma/client'
+import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -33,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           roomCondition?: string | null
           notes?: string | null
           recommendations?: string | null
-          checklist?: Array<{ label?: string; checked?: boolean }>
+          checklist?: Array<{ label?: string; checked?: boolean; isAuto?: boolean; action?: string | null }>
           partsUsed?: Array<{ name?: string; quantity?: number; unit?: string }>
           reportPhotos?: string[]
         }
@@ -93,8 +95,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const checklistItems = Array.isArray(body.report?.checklist)
     ? body.report!.checklist
         .filter((c) => typeof c?.label === 'string' && typeof c?.checked === 'boolean')
-        .map((c) => ({ label: c.label as string, checked: c.checked as boolean }))
+        .map((c) => ({
+          label: c.label as string,
+          checked: c.checked as boolean,
+          isAuto: Boolean(c.isAuto),
+          action: typeof c.action === 'string' || c.action === null ? c.action : null,
+        }))
     : null
+
+  if (checklistItems && task.type === 'DIAGNOSTICS') {
+    for (const row of checklistItems) {
+      if (needsDiagnosticsPerformedAction(row)) {
+        if (!isValidDiagnosticsActionForLabel(row.label, row.action ?? undefined)) {
+          return NextResponse.json(
+            { error: 'Для диагностики у каждого отмеченного пункта выберите действие' },
+            { status: 400 }
+          )
+        }
+      }
+    }
+  }
   const partsUsed = Array.isArray(body.report?.partsUsed)
     ? body.report!.partsUsed
         .filter(
@@ -146,6 +166,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
                   label: item.label,
                   checked: item.checked,
                   order: index,
+                  performedAction:
+                    task.type === 'DIAGNOSTICS' && needsDiagnosticsPerformedAction(item) && item.action
+                      ? (item.action as ChecklistItemAction)
+                      : null,
                 })),
               }
             : undefined,

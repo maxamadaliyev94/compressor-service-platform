@@ -4,7 +4,8 @@ import { auth } from '@/auth'
 import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
-import type { Role, ServiceTask } from '@prisma/client'
+import type { ChecklistItemAction, Role, ServiceTask } from '@prisma/client'
+import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
 
 function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
   if (role === 'CLIENT') return false
@@ -53,6 +54,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       typeof (c as { checked?: unknown }).checked !== 'boolean'
     ) {
       return NextResponse.json({ error: 'Некорректный чек-лист' }, { status: 400 })
+    }
+    const extra = c as { isAuto?: unknown; action?: unknown }
+    if (extra.isAuto !== undefined && typeof extra.isAuto !== 'boolean') {
+      return NextResponse.json({ error: 'Некорректный чек-лист (isAuto)' }, { status: 400 })
+    }
+    if (extra.action !== undefined && extra.action !== null && typeof extra.action !== 'string') {
+      return NextResponse.json({ error: 'Некорректный чек-лист (action)' }, { status: 400 })
     }
   }
 
@@ -136,6 +144,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  if (task.type === 'DIAGNOSTICS') {
+    for (const c of checklist) {
+      const row = c as { label: string; checked: boolean; isAuto?: boolean; action?: string | null }
+      if (needsDiagnosticsPerformedAction(row)) {
+        if (!isValidDiagnosticsActionForLabel(row.label, row.action)) {
+          return NextResponse.json(
+            { error: 'Для диагностики у каждого отмеченного пункта чек-листа выберите действие (Заменить / Долить или Ремонт)' },
+            { status: 400 }
+          )
+        }
+      }
+    }
+  }
+
   const actNumber = `AKT-${task.id.slice(-8).toUpperCase()}`
 
   const prevHours = task.equipment.currentHours
@@ -162,11 +184,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           engineerSignedAt,
           clientSignedAt: optionalClient ? parseSignedAt((body as { clientSignedAt?: unknown }).clientSignedAt) : null,
           checklistItems: {
-            create: checklist.map((c, i) => ({
-              label: (c as { label: string }).label,
-              checked: (c as { checked: boolean }).checked,
-              order: i,
-            })),
+            create: checklist.map((c, i) => {
+              const row = c as {
+                label: string
+                checked: boolean
+                isAuto?: boolean
+                action?: string | null
+              }
+              const performedAction: ChecklistItemAction | null =
+                task.type === 'DIAGNOSTICS' && needsDiagnosticsPerformedAction(row) && row.action
+                  ? (row.action as ChecklistItemAction)
+                  : null
+              return {
+                label: row.label,
+                checked: row.checked,
+                order: i,
+                performedAction,
+              }
+            }),
           },
           partsUsed: {
             create: partsUsed.map((p) => ({
