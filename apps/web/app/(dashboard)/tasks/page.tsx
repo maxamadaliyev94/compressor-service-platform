@@ -12,15 +12,18 @@ export default async function TasksPage() {
   const isAdmin = role === 'ADMIN'
   const canCreateTask = role !== 'ENGINEER' && (await hasPermission(role as Role, 'action:task.create'))
 
+  /** На списке «Задачи» показываем только незавершённые (без выполненных и отменённых). */
+  const activeOnlyWhere = { status: { notIn: ['DONE', 'CANCELLED'] as const } }
+
   const tasks = await db.serviceTask.findMany({
     where:
       role === 'ENGINEER'
-        ? { assignedToId: session.user.id, deletedAt: null }
+        ? { assignedToId: session.user.id, deletedAt: null, ...activeOnlyWhere }
         : role === 'MANAGER'
-          ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id) }
+          ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id), ...activeOnlyWhere }
           : role === 'CLIENT'
-            ? { deletedAt: null, ...prismaWhereClientTasks(session.user.clientId) }
-            : { deletedAt: null },
+            ? { deletedAt: null, ...prismaWhereClientTasks(session.user.clientId), ...activeOnlyWhere }
+            : { deletedAt: null, ...activeOnlyWhere },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,

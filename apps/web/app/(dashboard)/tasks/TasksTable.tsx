@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ExportTasksButton from './ExportTasksButton'
 
@@ -90,7 +90,57 @@ function toBundles(list: TaskRow[]): TaskBundle[] {
     }
     map.get(key)!.tasks.push(task)
   }
-  return [...map.values()]
+  return [...map.values()].map((b) =>
+    b.key.startsWith('source:') ? { ...b, sourceTaskId: b.key.slice('source:'.length) } : b
+  )
+}
+
+/** Задача-«лидер» распределения (родительская заявка). */
+function getRepresentativeTask(bundle: TaskBundle): TaskRow {
+  if (bundle.sourceTaskId) {
+    const t = bundle.tasks.find((x) => x.id === bundle.sourceTaskId)
+    if (t) return t
+  }
+  return bundle.tasks[0]
+}
+
+/** Ответственный первый, остальные по ФИО. */
+function sortBundleTasksForDisplay(bundle: TaskBundle): TaskRow[] {
+  const rep = getRepresentativeTask(bundle)
+  const others = bundle.tasks
+    .filter((t) => t.id !== rep.id)
+    .sort((a, b) => (a.assignedTo?.name || '').localeCompare(b.assignedTo?.name || '', 'ru'))
+  return [rep, ...others]
+}
+
+function bundleAssigneeSectionKey(bundle: TaskBundle): string {
+  return getRepresentativeTask(bundle).assignedToId || '_none'
+}
+
+function bundleAssigneeSectionLabel(bundle: TaskBundle, currentUserId: string): string {
+  const rep = getRepresentativeTask(bundle)
+  const id = rep.assignedToId || '_none'
+  if (id === currentUserId) return 'На мне (распределить / выполнить)'
+  if (id === '_none') return 'Без исполнителя'
+  return rep.assignedTo?.name || 'Не назначен'
+}
+
+function bundleStatusKey(bundle: TaskBundle): string {
+  return getRepresentativeTask(bundle).status
+}
+
+function bundleToExportTask(bundle: TaskBundle): TaskRow {
+  const rep = getRepresentativeTask(bundle)
+  const sorted = sortBundleTasksForDisplay(bundle)
+  const names = sorted
+    .map((t) => t.assignedTo?.name)
+    .filter(Boolean)
+    .join(', ')
+  const firstId = sorted.find((t) => t.assignedTo)?.assignedTo?.id ?? rep.assignedTo?.id ?? rep.id
+  return {
+    ...rep,
+    assignedTo: names ? { id: firstId, name: names } : rep.assignedTo,
+  }
 }
 
 export default function TasksTable({
@@ -143,38 +193,42 @@ export default function TasksTable({
     if (!dayOptions.includes(filterDay)) setFilterDay('all')
   }, [filterDay, dayOptions])
 
-  const filteredTasks = useMemo(
-    () => tasks.filter((t) => matchesScheduleFilter(t, filterYear, filterMonth, filterDay)),
-    [tasks, filterYear, filterMonth, filterDay]
+  const allBundles = useMemo(() => toBundles(tasks), [tasks])
+
+  const filteredBundles = useMemo(
+    () =>
+      allBundles.filter((b) =>
+        b.tasks.some((t) => matchesScheduleFilter(t, filterYear, filterMonth, filterDay))
+      ),
+    [allBundles, filterYear, filterMonth, filterDay]
   )
 
-  const statusGroups = useMemo(() => {
-    const groups = [
+  type Section = { key: string; label: string; bundles: TaskBundle[] }
+
+  const statusGroups = useMemo((): Section[] => {
+    const groups: Section[] = [
       ...STATUS_ORDER.map((status) => ({
         key: status,
         label: statusLabels[status] || status,
-        tasks: filteredTasks.filter((t) => t.status === status),
-      })).filter((g) => g.tasks.length > 0),
+        bundles: filteredBundles.filter((b) => bundleStatusKey(b) === status),
+      })).filter((g) => g.bundles.length > 0),
     ]
-    const otherStatusTasks = filteredTasks.filter((t) => !STATUS_ORDER.includes(t.status as (typeof STATUS_ORDER)[number]))
-    if (otherStatusTasks.length > 0) {
-      groups.push({ key: 'OTHER', label: 'Другое', tasks: otherStatusTasks })
+    const otherBundles = filteredBundles.filter(
+      (b) => !STATUS_ORDER.includes(bundleStatusKey(b) as (typeof STATUS_ORDER)[number])
+    )
+    if (otherBundles.length > 0) {
+      groups.push({ key: 'OTHER', label: 'Другое', bundles: otherBundles })
     }
     return groups
-  }, [filteredTasks, statusLabels])
+  }, [filteredBundles, statusLabels])
 
-  const assigneeGroups = useMemo(() => {
-    const map = new Map<string, { key: string; label: string; tasks: TaskRow[] }>()
-    for (const task of filteredTasks) {
-      const id = task.assignedToId || '_none'
-      const label =
-        task.assignedToId === currentUserId
-          ? 'На мне (распределить / выполнить)'
-          : task.assignedTo
-            ? task.assignedTo.name
-            : 'Без исполнителя'
-      if (!map.has(id)) map.set(id, { key: id, label, tasks: [] })
-      map.get(id)!.tasks.push(task)
+  const assigneeGroups = useMemo((): Section[] => {
+    const map = new Map<string, { key: string; label: string; bundles: TaskBundle[] }>()
+    for (const b of filteredBundles) {
+      const id = bundleAssigneeSectionKey(b)
+      const label = bundleAssigneeSectionLabel(b, currentUserId)
+      if (!map.has(id)) map.set(id, { key: id, label, bundles: [] })
+      map.get(id)!.bundles.push(b)
     }
     const list = [...map.values()]
     list.sort((a, b) => {
@@ -185,24 +239,12 @@ export default function TasksTable({
       return a.label.localeCompare(b.label, 'ru')
     })
     return list
-  }, [filteredTasks, currentUserId])
+  }, [filteredBundles, currentUserId])
 
   const tableColSpan = isAdmin ? 8 : 7
   const sections = !canGroupByAssignee || groupBy === 'status' ? statusGroups : assigneeGroups
 
-  function isResponsibleTask(task: TaskRow, sourceTaskId: string | null) {
-    return sourceTaskId !== null && task.id === sourceTaskId
-  }
-
-  function getRenderedStatusLabel(task: TaskRow, sourceTaskId: string | null) {
-    if (isResponsibleTask(task, sourceTaskId)) return 'Ответственный'
-    return statusLabels[task.status] || task.status
-  }
-
-  function getRenderedStatusColor(task: TaskRow, sourceTaskId: string | null) {
-    if (isResponsibleTask(task, sourceTaskId)) return 'bg-indigo-100 text-indigo-700'
-    return statusColors[task.status]
-  }
+  const exportTasks = useMemo(() => filteredBundles.map(bundleToExportTask), [filteredBundles])
 
   function getYandexRouteUrl(task: TaskRow) {
     const branch = task.equipment.object.branch
@@ -245,20 +287,67 @@ export default function TasksTable({
     router.refresh()
   }
 
-  function renderMobileCard(task: TaskRow, sourceTaskId: string | null) {
+  function renderEngineersCell(bundle: TaskBundle) {
+    const rep = getRepresentativeTask(bundle)
+    const sorted = sortBundleTasksForDisplay(bundle)
+    const others = sorted.slice(1)
+    const multi = bundle.tasks.length > 1
+    const namesLine2 = others
+      .map((t) => t.assignedTo?.name)
+      .filter(Boolean) as string[]
+    const showPlus = namesLine2.length > 2
+    const line2 = showPlus ? namesLine2.slice(0, 2).join(', ') : namesLine2.join(', ')
+    const plusN = showPlus ? namesLine2.length - 2 : 0
+
     return (
-      <div key={task.id} className="border rounded-lg p-3 bg-white">
-        <a href={`/tasks/${task.id}`} className="block">
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+          <span className="font-medium text-gray-900 truncate">
+            {rep.assignedTo?.name || <span className="text-gray-400 font-normal">Не назначен</span>}
+          </span>
+          {multi && bundle.sourceTaskId && rep.id === bundle.sourceTaskId && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 shrink-0">
+              Ответственный
+            </span>
+          )}
+        </div>
+        {multi && namesLine2.length > 0 && (
+          <div className="text-xs text-gray-500 leading-snug">
+            <span>{line2}</span>
+            {plusN > 0 && <span className="text-gray-400"> · +{plusN}</span>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderMobileBundleCard(bundle: TaskBundle) {
+    const rep = getRepresentativeTask(bundle)
+    const multi = bundle.tasks.length > 1
+    const hrefId = bundle.sourceTaskId || rep.id
+    const busy = bundle.tasks.some((t) => busyId === t.id)
+
+    return (
+      <div
+        key={bundle.key}
+        className={`border rounded-lg p-3 bg-white ${multi ? 'border-indigo-200 bg-indigo-50/25' : ''}`}
+      >
+        <a href={`/tasks/${hrefId}`} className="block">
           <div className="flex items-center justify-between gap-2">
             <div className="font-medium text-sm">
-              <span className={`mr-1 ${priorityColors[task.priority]}`}>●</span>
-              №{task.requestNumber} · {typeLabels[task.type] || task.type}
+              <span className={`mr-1 ${priorityColors[rep.priority]}`}>●</span>
+              №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+              {multi && (
+                <span className="ml-1.5 text-[10px] font-medium text-indigo-700">· {bundle.tasks.length} инж.</span>
+              )}
             </div>
             <div className="flex flex-col items-end gap-1">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRenderedStatusColor(task, sourceTaskId)}`}>
-                {getRenderedStatusLabel(task, sourceTaskId)}
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[rep.status] || 'bg-gray-100 text-gray-800'}`}
+              >
+                {statusLabels[rep.status] || rep.status}
               </span>
-              {task.status === 'DONE' && task.report && !task.report.clientSignature && (
+              {rep.status === 'DONE' && rep.report && !rep.report.clientSignature && (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 text-right">
                   Нет подписи клиента
                 </span>
@@ -266,18 +355,21 @@ export default function TasksTable({
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-700">
-            {task.equipment.brand} {task.equipment.model}
+            {rep.equipment.brand} {rep.equipment.model}
           </div>
-          <div className="text-xs text-gray-500">{task.equipment.serialNumber}</div>
-          <div className="mt-2 text-xs text-gray-600">Клиент: {task.equipment.object.branch.client.name}</div>
-          <div className="text-xs text-gray-600">Инженер: {task.assignedTo?.name || 'Не назначен'}</div>
-          <div className="text-xs text-gray-600">
-            Срок: {task.scheduledAt ? new Date(task.scheduledAt).toLocaleDateString('ru-RU') : '—'}
+          <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
+          <div className="mt-2 text-xs text-gray-600">Клиент: {rep.equipment.object.branch.client.name}</div>
+          <div className="mt-1 text-xs text-gray-700 space-y-0.5">
+            <div className="font-medium text-gray-800">Инженеры</div>
+            {renderEngineersCell(bundle)}
+          </div>
+          <div className="text-xs text-gray-600 mt-1">
+            Срок: {rep.scheduledAt ? new Date(rep.scheduledAt).toLocaleDateString('ru-RU') : '—'}
           </div>
         </a>
         <div className="mt-3">
           <a
-            href={getYandexRouteUrl(task)}
+            href={getYandexRouteUrl(rep)}
             target="_blank"
             rel="noreferrer"
             className="w-full min-h-11 inline-flex items-center justify-center gap-1 border border-amber-200 text-amber-700 px-2.5 py-1 rounded text-xs hover:bg-amber-50"
@@ -287,21 +379,21 @@ export default function TasksTable({
         </div>
         {isAdmin && (
           <div className="mt-3 flex flex-col gap-2">
-            {!['DONE', 'CANCELLED'].includes(task.status) && (
+            {!['DONE', 'CANCELLED'].includes(rep.status) && (
               <button
                 type="button"
-                onClick={() => cancelTask(task.id)}
-                disabled={busyId === task.id}
+                onClick={() => void cancelTask(rep.id)}
+                disabled={busy}
                 className="w-full min-h-11 border border-orange-200 text-orange-700 px-2.5 py-1 rounded text-xs hover:bg-orange-50 disabled:opacity-50"
               >
                 Отменить
               </button>
             )}
-            {!task.report && (
+            {!bundle.tasks.some((t) => t.report) && (
               <button
                 type="button"
-                onClick={() => deleteTask(task.id)}
-                disabled={busyId === task.id}
+                onClick={() => void deleteTask(rep.id)}
+                disabled={busy}
                 className="w-full min-h-11 border border-red-200 text-red-700 px-2.5 py-1 rounded text-xs hover:bg-red-50 disabled:opacity-50"
               >
                 Удалить
@@ -313,40 +405,51 @@ export default function TasksTable({
     )
   }
 
-  function renderDesktopRow(task: TaskRow, sourceTaskId: string | null, bundled = false, first = false, last = false) {
-    const frame = bundled
-      ? `${first ? 'border-t border-indigo-200' : ''} ${last ? 'border-b border-indigo-200' : ''} border-x border-indigo-200 bg-indigo-50/20`
-      : ''
+  function renderDesktopBundleRow(bundle: TaskBundle) {
+    const rep = getRepresentativeTask(bundle)
+    const multi = bundle.tasks.length > 1
+    const hrefId = bundle.sourceTaskId || rep.id
+    const busy = bundle.tasks.some((t) => busyId === t.id)
+    const rowFrame = multi ? 'border-l-4 border-indigo-300 bg-indigo-50/20' : ''
 
     return (
       <tr
-        key={task.id}
-        className={`border-b last:border-0 hover:bg-gray-50 cursor-pointer ${frame}`}
-        onClick={() => (window.location.href = `/tasks/${task.id}`)}
+        key={bundle.key}
+        className={`border-b last:border-0 hover:bg-gray-50 cursor-pointer ${rowFrame}`}
+        onClick={() => {
+          window.location.href = `/tasks/${hrefId}`
+        }}
       >
         <td className="p-3">
-          <span className={`font-medium ${priorityColors[task.priority]}`}>●</span>{' '}
-          №{task.requestNumber} · {typeLabels[task.type] || task.type}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className={`font-medium ${priorityColors[rep.priority]}`}>●</span>
+            <span>
+              №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+            </span>
+            {multi && (
+              <span className="text-[10px] font-medium text-indigo-700">· {bundle.tasks.length} инж.</span>
+            )}
+          </div>
         </td>
         <td className="p-3">
           <div>
-            {task.equipment.brand} {task.equipment.model}
+            {rep.equipment.brand} {rep.equipment.model}
           </div>
-          <div className="text-xs text-gray-500">{task.equipment.serialNumber}</div>
+          <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
         </td>
-        <td className="p-3 text-gray-600">{task.equipment.object.branch.client.name}</td>
+        <td className="p-3 text-gray-600">{rep.equipment.object.branch.client.name}</td>
+        <td className="p-3 text-gray-600 max-w-[14rem]">{renderEngineersCell(bundle)}</td>
         <td className="p-3 text-gray-600">
-          {task.assignedTo?.name || <span className="text-gray-400">Не назначен</span>}
-        </td>
-        <td className="p-3 text-gray-600">
-          {task.scheduledAt ? new Date(task.scheduledAt).toLocaleDateString('ru-RU') : '—'}
+          {rep.scheduledAt ? new Date(rep.scheduledAt).toLocaleDateString('ru-RU') : '—'}
         </td>
         <td className="p-3">
           <div className="flex flex-col gap-1 items-start">
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRenderedStatusColor(task, sourceTaskId)}`}>
-              {getRenderedStatusLabel(task, sourceTaskId)}
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[rep.status] || 'bg-gray-100 text-gray-800'}`}
+            >
+              {statusLabels[rep.status] || rep.status}
             </span>
-            {task.status === 'DONE' && task.report && !task.report.clientSignature && (
+            {rep.status === 'DONE' && rep.report && !rep.report.clientSignature && (
               <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 max-w-[11rem] leading-tight">
                 Нет подписи клиента
               </span>
@@ -355,7 +458,7 @@ export default function TasksTable({
         </td>
         <td className="p-3">
           <a
-            href={getYandexRouteUrl(task)}
+            href={getYandexRouteUrl(rep)}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -367,27 +470,27 @@ export default function TasksTable({
         {isAdmin && (
           <td className="p-3">
             <div className="flex items-center gap-2">
-              {!['DONE', 'CANCELLED'].includes(task.status) && (
+              {!['DONE', 'CANCELLED'].includes(rep.status) && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    void cancelTask(task.id)
+                    void cancelTask(rep.id)
                   }}
-                  disabled={busyId === task.id}
+                  disabled={busy}
                   className="border border-orange-200 text-orange-700 px-2 py-1 rounded text-xs hover:bg-orange-50 disabled:opacity-50"
                 >
                   Отменить
                 </button>
               )}
-              {!task.report && (
+              {!bundle.tasks.some((t) => t.report) && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    void deleteTask(task.id)
+                    void deleteTask(rep.id)
                   }}
-                  disabled={busyId === task.id}
+                  disabled={busy}
                   className="border border-red-200 text-red-700 px-2 py-1 rounded text-xs hover:bg-red-50 disabled:opacity-50"
                 >
                   Удалить
@@ -483,11 +586,11 @@ export default function TasksTable({
               </button>
             )}
           </div>
-          <ExportTasksButton tasks={filteredTasks} typeLabels={typeLabels} statusLabels={statusLabels} />
+          <ExportTasksButton tasks={exportTasks} typeLabels={typeLabels} statusLabels={statusLabels} />
           <span className="text-xs text-slate-400 sm:ml-auto">
-            Всего: {filteredTasks.length}
-            {filteredTasks.length !== tasks.length && (
-              <span className="text-slate-300"> · из {tasks.length}</span>
+            Всего: {filteredBundles.length}
+            {filteredBundles.length !== allBundles.length && (
+              <span className="text-slate-300"> · из {allBundles.length}</span>
             )}
           </span>
         </div>
@@ -495,7 +598,7 @@ export default function TasksTable({
 
       {tasks.length === 0 ? (
         <div className="p-8 text-center text-sm text-gray-400">Нет задач</div>
-      ) : filteredTasks.length === 0 ? (
+      ) : filteredBundles.length === 0 ? (
         <div className="p-8 text-center text-sm text-gray-500 space-y-2">
           <p>Нет задач с выбранным сроком.</p>
           <button
@@ -517,19 +620,10 @@ export default function TasksTable({
               <div key={section.key}>
                 <div className="sticky top-0 z-10 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 border-b border-slate-200">
                   {section.label}
-                  <span className="text-slate-400 font-normal"> · {section.tasks.length}</span>
+                  <span className="text-slate-400 font-normal"> · {section.bundles.length}</span>
                 </div>
                 <div className="space-y-3 p-3">
-                  {toBundles(section.tasks).map((bundle) => (
-                    <div key={bundle.key} className={bundle.tasks.length > 1 ? 'border-2 border-indigo-200 rounded-xl p-2 bg-indigo-50/30' : ''}>
-                      {bundle.tasks.length > 1 && (
-                        <div className="px-2 py-1 text-xs font-semibold text-indigo-700">
-                          Распределенная заявка №{bundle.tasks[0].requestNumber} · инженеров: {bundle.tasks.length}
-                        </div>
-                      )}
-                      <div className="space-y-3">{bundle.tasks.map((task) => renderMobileCard(task, bundle.sourceTaskId))}</div>
-                    </div>
-                  ))}
+                  {section.bundles.map((bundle) => renderMobileBundleCard(bundle))}
                 </div>
               </div>
             ))}
@@ -553,23 +647,10 @@ export default function TasksTable({
                 <tr className="bg-slate-100 border-y border-slate-200">
                   <td colSpan={tableColSpan} className="p-2.5 text-xs font-semibold text-slate-700">
                     {section.label}
-                    <span className="text-slate-400 font-normal"> · {section.tasks.length}</span>
+                    <span className="text-slate-400 font-normal"> · {section.bundles.length}</span>
                   </td>
                 </tr>
-                {toBundles(section.tasks).map((bundle) => (
-                  <Fragment key={bundle.key}>
-                    {bundle.tasks.length > 1 && (
-                      <tr key={`${bundle.key}-header`} className="bg-indigo-50 border-x border-t border-indigo-200">
-                        <td colSpan={tableColSpan} className="px-3 py-2 text-xs font-semibold text-indigo-700 border-b border-indigo-100">
-                          Распределенная заявка №{bundle.tasks[0].requestNumber} · инженеров: {bundle.tasks.length}
-                        </td>
-                      </tr>
-                    )}
-                    {bundle.tasks.map((task, idx) =>
-                      renderDesktopRow(task, bundle.sourceTaskId, bundle.tasks.length > 1, idx === 0, idx === bundle.tasks.length - 1)
-                    )}
-                  </Fragment>
-                ))}
+                {section.bundles.map((bundle) => renderDesktopBundleRow(bundle))}
               </tbody>
             ))}
           </table>
