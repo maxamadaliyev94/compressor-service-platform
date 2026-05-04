@@ -93,6 +93,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       deletedAt: true,
       assignedToId: true,
       report: { select: { id: true } },
+      longTermEngineers: {
+        where: { engineerId: session.user.id },
+        select: { id: true },
+      },
     },
   })
   if (!task || task.deletedAt) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -102,7 +106,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (['DONE', 'CANCELLED'].includes(task.status)) {
     return NextResponse.json({ error: 'Задача закрыта' }, { status: 400 })
   }
-  if (task.assignedToId !== session.user.id) {
+  const isLongTermMember =
+    task.assignedToId === session.user.id || task.longTermEngineers.length > 0
+  if (!isLongTermMember) {
     return NextResponse.json({ error: 'Вы не назначены на эту задачу' }, { status: 403 })
   }
   if (task.report) {

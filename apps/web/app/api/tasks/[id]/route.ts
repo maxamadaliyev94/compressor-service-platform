@@ -214,6 +214,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data,
   })
 
+  if (hasAssignee && task.taskType === 'LONG_TERM' && newEngineerId) {
+    await db.longTermTaskEngineer.deleteMany({ where: { taskId: params.id } })
+    await db.longTermTaskEngineer.create({
+      data: { taskId: params.id, engineerId: newEngineerId },
+    })
+  }
+
   if (hasAssignee && previousAssigneeId && previousAssigneeId !== newEngineerId) {
     await syncEngineerFreeIfNoActiveTasks(previousAssigneeId)
   }

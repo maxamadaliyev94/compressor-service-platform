@@ -18,10 +18,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         include: { object: { include: { branch: { include: { client: true } } } } },
       },
       assignedTo: true,
-      dailyWorks: {
-        include: { engineer: { select: { name: true } } },
-        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
-      },
       report: {
         include: {
           checklistItems: true,
@@ -48,32 +44,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const checkedItems = report?.checklistItems?.filter((item) => item.checked) ?? []
 
-  const longTermJournalSection =
-    task.taskType === 'LONG_TERM' && task.dailyWorks.length > 0
-      ? `
-<div class="section">
-  <div class="section-title">Журнал работ по дням (долгосрочная задача)</div>
-  <table>
-    <thead><tr><th>Дата</th><th>Инженер</th><th>Описание</th></tr></thead>
-    <tbody>
-      ${task.dailyWorks
-        .map(
-          (dw) => `
-        <tr>
-          <td>${esc(new Date(dw.date).toLocaleDateString('ru-RU'))}</td>
-          <td>${esc(dw.engineer.name)}</td>
-          <td>${esc(dw.description)}</td>
-        </tr>`
-        )
-        .join('')}
-    </tbody>
-  </table>
-</div>
-`
-      : ''
-
   const reportNotesSection =
-    report?.notes && report.notes.trim().length > 0
+    task.taskType !== 'LONG_TERM' &&
+    report?.notes &&
+    report.notes.trim().length > 0
       ? `
 <div class="section">
   <div class="section-title">Заметки и сводный журнал</div>
@@ -220,7 +194,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 </div>
 
-${longTermJournalSection}
 ${reportNotesSection}
 
 <div class="section">

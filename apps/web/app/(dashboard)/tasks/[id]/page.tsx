@@ -27,6 +27,20 @@ const statusColors: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-500', REVISION: 'bg-orange-100 text-orange-700',
 }
 
+/** Префикс «ДД.ММ.ГГГГ — » в пунктах сводного чек-листа долгосрочной задачи */
+function longTermChecklistLabelForClient(label: string): string {
+  return label.replace(/^\d{1,2}\.\d{1,2}\.\d{4}\s*[\u2014\u2013-]\s*/u, '')
+}
+
+/** Убирает заголовки журнала «--- дата · ФИО ---» из текста заметок акта для клиента */
+function longTermReportNotesForClient(raw: string): string {
+  const normalized = raw.replace(/\r\n/g, '\n')
+  return normalized
+    .replace(/\n*--- \d{1,2}\.\d{1,2}\.\d{4} · (.+?) ---\s*\n/g, '\n\n$1:\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export default async function TaskDetailPage({ params }: { params: { id: string } }) {
   const session = await auth()
   if (!session) redirect('/login')
@@ -50,6 +64,10 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       dailyWorks: {
         include: { engineer: { select: { id: true, name: true } } },
         orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      },
+      longTermEngineers: {
+        include: { engineer: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'asc' },
       },
     },
   })
@@ -110,11 +128,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       : `https://yandex.ru/maps/?text=${encodeURIComponent(destinationText)}`
 
   const role = session?.user?.role ?? ''
+  const clientHidesLongTermDayDetails = role === 'CLIENT'
+  const longTermEngineerIds = new Set(task.longTermEngineers.map((r) => r.engineerId))
   const showWorkDayLink =
     task.taskType === 'LONG_TERM' &&
     isNotDone &&
     role === 'ENGINEER' &&
-    task.assignedToId === session.user.id
+    (task.assignedToId === session.user.id || longTermEngineerIds.has(session.user.id))
   const showExecuteLink = task.taskType !== 'LONG_TERM' && canExecute && isNotDone
   const isDelegatedChild = Boolean(parseDelegationParentTaskId(task.comment))
   const canChiefSetWorkType =
@@ -286,7 +306,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 {task.priority === 'LOW' ? 'Низкий' : task.priority === 'MEDIUM' ? 'Средний' : task.priority === 'HIGH' ? 'Высокий' : 'Аварийный'}
               </span>
             </div>
-            <div className="flex gap-2"><span className="text-gray-500 w-28">Инженер:</span><span>{task.assignedTo?.name || 'Не назначен'}</span></div>
+            <div className="flex gap-2">
+              <span className="text-gray-500 w-28 shrink-0">Инженер:</span>
+              <span>
+                {task.taskType === 'LONG_TERM' && task.longTermEngineers.length > 0
+                  ? task.longTermEngineers.map((r) => r.engineer.name).join(', ')
+                  : task.assignedTo?.name || 'Не назначен'}
+              </span>
+            </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Создал:</span><span>{task.createdBy.name}</span></div>
             <div className="flex gap-2 items-baseline">
               <span className="text-gray-500 w-28 shrink-0">Срок:</span>
@@ -315,13 +342,19 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       {showLongTermChiefPanel && (
         <TaskLongTermChiefPanel
           taskId={task.id}
-          initialAssigneeId={task.assignedToId ?? ''}
+          initialEngineerIds={
+            task.longTermEngineers.length > 0
+              ? task.longTermEngineers.map((r) => r.engineerId)
+              : task.assignedToId
+                ? [task.assignedToId]
+                : []
+          }
           equipmentCurrentHours={eq.currentHours}
           equipmentNextServiceHours={eq.nextServiceHours}
         />
       )}
 
-      {task.taskType === 'LONG_TERM' && (
+      {task.taskType === 'LONG_TERM' && !clientHidesLongTermDayDetails && (
         <div className="bg-white border rounded-xl p-5 mb-6">
           <h2 className="font-semibold mb-3 flex items-center gap-2 text-gray-900">
             <span aria-hidden>📅</span>
@@ -393,7 +426,11 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             {task.report.notes && (
               <div className="mb-3">
                 <div className="text-xs text-gray-500 mb-1">Комментарий инженера</div>
-                <p className="text-sm text-gray-700">{task.report.notes}</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                  {clientHidesLongTermDayDetails && task.taskType === 'LONG_TERM'
+                    ? longTermReportNotesForClient(task.report.notes)
+                    : task.report.notes}
+                </p>
               </div>
             )}
             {task.report.recommendations && (
@@ -481,7 +518,11 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                   .map(item => (
                   <div key={item.id} className="flex items-center gap-2 text-sm py-1 flex-wrap">
                     <span className="text-green-500">✓</span>
-                    <span className="text-gray-700">{item.label}</span>
+                    <span className="text-gray-700">
+                      {clientHidesLongTermDayDetails && task.taskType === 'LONG_TERM'
+                        ? longTermChecklistLabelForClient(item.label)
+                        : item.label}
+                    </span>
                     {item.performedAction && (
                       <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-100">
                         {checklistActionLabelRu(item.performedAction)}

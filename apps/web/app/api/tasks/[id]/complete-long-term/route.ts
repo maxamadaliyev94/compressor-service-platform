@@ -90,7 +90,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    include: { report: true, equipment: true },
+    include: {
+      report: true,
+      equipment: true,
+      longTermEngineers: { select: { engineerId: true } },
+    },
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (task.deletedAt) return NextResponse.json({ error: 'Задача находится в корзине' }, { status: 400 })
@@ -241,8 +245,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     { skipUserIds: task.createdById ? [task.createdById] : [] }
   )
 
+  const engineersToFree = new Set<string>()
+  for (const row of task.longTermEngineers) {
+    engineersToFree.add(row.engineerId)
+  }
   if (task.assignedToId) {
-    await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
+    engineersToFree.add(task.assignedToId)
+  }
+  for (const uid of engineersToFree) {
+    await syncEngineerFreeIfNoActiveTasks(uid)
   }
 
   return NextResponse.json({ ok: true })

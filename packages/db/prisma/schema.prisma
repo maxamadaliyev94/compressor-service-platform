@@ -132,6 +132,7 @@ model User {
   deletedTasks  ServiceTask[] @relation("TaskDeleter")
   managedLongTermTasks ServiceTask[] @relation("LongTermManagedBy")
   dailyWorkEntries DailyWork[]
+  longTermTaskAssignments LongTermTaskEngineer[]
   managedClients Client[] @relation("ClientManager")
   clientAccount Client? @relation("ClientPortalUsers", fields: [clientId], references: [id], onDelete: SetNull)
   clientNotifySubscriptions Client[] @relation("ClientAttachedNotifyUser")
@@ -334,9 +335,25 @@ model ServiceTask {
   managedByChief User?  @relation("LongTermManagedBy", fields: [managedByChiefId], references: [id], onDelete: SetNull)
   report     WorkReport?
   dailyWorks DailyWork[]
+  longTermEngineers LongTermTaskEngineer[]
 
   @@map("service_tasks")
   @@index([requestNumber])
+}
+
+/// Назначенные на долгосрочную задачу инженеры (несколько исполнителей).
+model LongTermTaskEngineer {
+  id         String   @id @default(cuid())
+  taskId     String
+  engineerId String
+  createdAt  DateTime @default(now())
+
+  task     ServiceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  engineer User        @relation(fields: [engineerId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, engineerId])
+  @@index([taskId])
+  @@map("long_term_task_engineers")
 }
 
 /// Ежедневная запись по долгосрочной задаче (чек-лист + заметки за день).

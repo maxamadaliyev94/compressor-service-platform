@@ -11,11 +11,23 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
     where: { id: params.id },
     include: {
       equipment: {
-        include: { object: { include: { branch: { include: { client: true } } } } }
+        include: {
+          object: {
+            include: {
+              branch: {
+                include: { client: true },
+              },
+            },
+          },
+        },
       },
       assignedTo: true,
       createdBy: true,
-    }
+      longTermEngineers: {
+        where: { engineerId: session.user.id },
+        select: { id: true },
+      },
+    },
   })
   if (!task || task.deletedAt) notFound()
 
@@ -33,7 +45,10 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
   }
 
   if (task.taskType === 'LONG_TERM') {
-    if (session.user.role === 'ENGINEER' && task.assignedToId === session.user.id) {
+    const isLtMember =
+      session.user.role === 'ENGINEER' &&
+      (task.assignedToId === session.user.id || task.longTermEngineers.length > 0)
+    if (isLtMember) {
       redirect(`/tasks/${params.id}/daily`)
     }
     redirect(`/tasks/${params.id}`)

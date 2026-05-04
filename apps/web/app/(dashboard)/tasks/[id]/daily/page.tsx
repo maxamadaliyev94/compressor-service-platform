@@ -28,6 +28,10 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
+      longTermEngineers: {
+        where: { engineerId: session.user.id },
+        select: { id: true },
+      },
     },
   })
   if (!task || task.deletedAt) notFound()
@@ -41,7 +45,9 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
     if (c.managerId !== session.user.id) notFound()
   }
 
-  if (session.user.role === 'ENGINEER' && task.assignedToId !== session.user.id) {
+  const isLongTermMember =
+    task.assignedToId === session.user.id || task.longTermEngineers.length > 0
+  if (session.user.role === 'ENGINEER' && !isLongTermMember) {
     redirect(`/tasks/${params.id}`)
   }
   if (session.user.role !== 'ENGINEER') {
