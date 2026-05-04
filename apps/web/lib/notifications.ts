@@ -89,3 +89,79 @@ export async function notifyTaskAssigned(
     link: `/tasks/${task.id}`,
   })
 }
+
+export async function notifyLongTermEngineerAssigned(
+  taskId: string,
+  requestNumber: number,
+  engineerId: string,
+  periodText: string
+) {
+  const period = periodText.trim()
+  await createNotification({
+    userId: engineerId,
+    title: `Долгосрочная задача №${requestNumber}`,
+    message: `Вы назначены на долгосрочную задачу №${requestNumber}${period ? ` ${period}` : ''}.`,
+    type: 'TASK',
+    link: `/tasks/${taskId}`,
+  })
+}
+
+export async function notifyEngineerRemovedFromTask(
+  taskId: string,
+  requestNumber: number,
+  engineerId: string
+) {
+  await createNotification({
+    userId: engineerId,
+    title: `Задача №${requestNumber}`,
+    message: `Вы сняты с задачи №${requestNumber}.`,
+    type: 'INFO',
+    link: `/tasks/${taskId}`,
+  })
+}
+
+export async function notifyEngineerAssignedQuickTask(
+  taskId: string,
+  requestNumber: number,
+  engineerId: string
+) {
+  await createNotification({
+    userId: engineerId,
+    title: `Задача №${requestNumber}`,
+    message: `Вы назначены на задачу №${requestNumber}.`,
+    type: 'TASK',
+    link: `/tasks/${taskId}`,
+  })
+}
+
+export async function notifyLongTermEndDateChanged(
+  taskId: string,
+  requestNumber: number,
+  engineerIds: string[],
+  newEndDateLabel: string
+) {
+  const unique = [...new Set(engineerIds)]
+  for (const userId of unique) {
+    await createNotification({
+      userId,
+      title: `Задача №${requestNumber}`,
+      message: `Срок задачи №${requestNumber} изменён на ${newEndDateLabel}.`,
+      type: 'INFO',
+      link: `/tasks/${taskId}`,
+    })
+  }
+}
+
+export async function notifyTaskCompletedForUser(
+  taskId: string,
+  requestNumber: number,
+  userId: string
+) {
+  await createNotification({
+    userId,
+    title: `Задача №${requestNumber} завершена`,
+    message: `Задача №${requestNumber} завершена.`,
+    type: 'SUCCESS',
+    link: `/tasks/${taskId}`,
+  })
+}

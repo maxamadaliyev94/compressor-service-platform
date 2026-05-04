@@ -7,9 +7,26 @@ export type TaskScheduleFields = {
   endDate?: Date | null
 }
 
-function atUtcMidnight(d: Date): Date {
+export function atUtcMidnight(d: Date): Date {
   const x = new Date(d)
   return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()))
+}
+
+/** Все календарные дни UTC от a до b включительно (a ≤ b). */
+export function* eachUtcDateInclusive(a: Date, b: Date): Generator<string> {
+  const t0 = atUtcMidnight(a).getTime()
+  const t1 = atUtcMidnight(b).getTime()
+  for (let t = t0; t <= t1; t += 86400000) {
+    yield new Date(t).toISOString().slice(0, 10)
+  }
+}
+
+/** Текст периода для уведомлений: «с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ» */
+export function formatLongTermNotifyPeriod(start: Date | null, end: Date | null): string {
+  if (start && end) return `с ${formatDateRu(start)} по ${formatDateRu(end)}`
+  if (start) return `с ${formatDateRu(start)}`
+  if (end) return `по ${formatDateRu(end)}`
+  return ''
 }
 
 export function formatDateRu(d: Date): string {

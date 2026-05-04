@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
+import { notifyClientSubscriberForEquipmentWork, notifyTaskCompletedForUser } from '@/lib/notifications'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { Role } from '@prisma/client'
@@ -224,14 +224,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 })
   }
 
-  if (task.createdById && task.createdById !== session.user.id) {
-    await createNotification({
-      userId: task.createdById,
-      title: '✅ Долгосрочная задача закрыта',
-      message: 'Главный инженер закрыл долгосрочную задачу и сформировал сводный акт.',
-      type: 'SUCCESS',
-      link: `/tasks/${task.id}`,
-    })
+  const completionRecipients = new Set<string>()
+  if (task.createdById) completionRecipients.add(task.createdById)
+  for (const row of task.longTermEngineers) completionRecipients.add(row.engineerId)
+  if (task.assignedToId) completionRecipients.add(task.assignedToId)
+  if (task.managedByChiefId) completionRecipients.add(task.managedByChiefId)
+  for (const userId of completionRecipients) {
+    await notifyTaskCompletedForUser(task.id, task.requestNumber, userId)
   }
 
   await notifyClientSubscriberForEquipmentWork(
@@ -242,7 +241,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       type: 'SUCCESS',
       link: `/tasks/${task.id}`,
     },
-    { skipUserIds: task.createdById ? [task.createdById] : [] }
+    { skipUserIds: [...completionRecipients] }
   )
 
   const engineersToFree = new Set<string>()

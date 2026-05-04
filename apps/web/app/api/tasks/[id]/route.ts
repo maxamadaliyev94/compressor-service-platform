@@ -3,7 +3,13 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { syncEngineerFreeIfNoActiveTasks, markEngineerBusy } from '@/lib/engineerPresence'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
-import { notifyTaskAssigned } from '@/lib/notifications'
+import {
+  notifyEngineerRemovedFromTask,
+  notifyLongTermEndDateChanged,
+  notifyLongTermEngineerAssigned,
+  notifyTaskAssigned,
+} from '@/lib/notifications'
+import { formatDateRu, formatLongTermNotifyPeriod } from '@/lib/task-schedule-display'
 import type { Role, TaskWorkType } from '@prisma/client'
 
 function utcDateOnlyFromDate(d: Date): Date {
@@ -76,6 +82,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id },
     select: {
       id: true,
+      requestNumber: true,
       deletedAt: true,
       status: true,
       taskType: true,
@@ -338,26 +345,47 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   if (hasAssignee && newEngineerId && previousAssigneeId !== newEngineerId) {
     await markEngineerBusy(newEngineerId)
-    const chiefId =
-      parentForNotify?.assignedToId ||
-      (task.taskType === 'LONG_TERM' ? task.managedByChiefId : null)
-    const chief =
-      chiefId &&
-      (await db.user.findUnique({
-        where: { id: chiefId },
-        select: { id: true, name: true },
-      }))
-    if (chief) {
-      await notifyTaskAssigned(
-        {
-          id: updated.id,
-          type: updated.type,
-          priority: updated.priority,
-          comment: updated.comment,
-        },
-        { id: newEngineerId },
-        chief
-      )
+    if (task.taskType === 'LONG_TERM') {
+      const period = formatLongTermNotifyPeriod(updated.startDate, updated.endDate).trim()
+      if (previousAssigneeId) {
+        await notifyEngineerRemovedFromTask(updated.id, task.requestNumber, previousAssigneeId)
+      }
+      await notifyLongTermEngineerAssigned(updated.id, task.requestNumber, newEngineerId, period)
+    } else {
+      const chiefId = parentForNotify?.assignedToId
+      const chief =
+        chiefId &&
+        (await db.user.findUnique({
+          where: { id: chiefId },
+          select: { id: true, name: true },
+        }))
+      if (chief) {
+        await notifyTaskAssigned(
+          {
+            id: updated.id,
+            type: updated.type,
+            priority: updated.priority,
+            comment: updated.comment,
+          },
+          { id: newEngineerId },
+          chief
+        )
+      }
+    }
+  }
+
+  if (hasLtDates && 'endDate' in body && task.taskType === 'LONG_TERM') {
+    const prevMs = task.endDate ? task.endDate.getTime() : null
+    const nextMs = updated.endDate ? updated.endDate.getTime() : null
+    if (prevMs !== nextMs) {
+      const rows = await db.longTermTaskEngineer.findMany({
+        where: { taskId: params.id },
+        select: { engineerId: true },
+      })
+      const notifyIds = [...rows.map((r) => r.engineerId)]
+      if (updated.assignedToId) notifyIds.push(updated.assignedToId)
+      const label = updated.endDate ? formatDateRu(new Date(updated.endDate)) : '—'
+      await notifyLongTermEndDateChanged(updated.id, task.requestNumber, notifyIds, label)
     }
   }
 

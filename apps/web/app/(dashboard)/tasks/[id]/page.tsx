@@ -138,6 +138,23 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   const role = session?.user?.role ?? ''
   const clientHidesLongTermDayDetails = role === 'CLIENT'
   const longTermEngineerIds = new Set(task.longTermEngineers.map((r) => r.engineerId))
+  const longTermEngineerDisplayNames =
+    task.taskType === 'LONG_TERM'
+      ? (() => {
+          const seen = new Set<string>()
+          const names: string[] = []
+          for (const r of task.longTermEngineers) {
+            if (!seen.has(r.engineerId)) {
+              seen.add(r.engineerId)
+              names.push(r.engineer.name)
+            }
+          }
+          if (task.assignedToId && task.assignedTo && !seen.has(task.assignedToId)) {
+            names.push(task.assignedTo.name)
+          }
+          return names.length > 0 ? names.join(', ') : null
+        })()
+      : null
   const showWorkDayLink =
     task.taskType === 'LONG_TERM' &&
     isNotDone &&
@@ -317,9 +334,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             <div className="flex gap-2">
               <span className="text-gray-500 w-28 shrink-0">Инженер:</span>
               <span>
-                {task.taskType === 'LONG_TERM' && task.longTermEngineers.length > 0
-                  ? task.longTermEngineers.map((r) => r.engineer.name).join(', ')
-                  : task.assignedTo?.name || 'Не назначен'}
+                {longTermEngineerDisplayNames ?? task.assignedTo?.name ?? 'Не назначен'}
               </span>
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Создал:</span><span>{task.createdBy.name}</span></div>

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
-import { notifyTaskAssigned } from '@/lib/notifications'
+import {
+  notifyEngineerRemovedFromTask,
+  notifyLongTermEngineerAssigned,
+} from '@/lib/notifications'
+import { formatLongTermNotifyPeriod } from '@/lib/task-schedule-display'
 import type { Role } from '@prisma/client'
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -21,6 +25,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     where: { id: params.id },
     select: {
       id: true,
+      requestNumber: true,
       taskType: true,
       status: true,
       deletedAt: true,
@@ -29,6 +34,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       comment: true,
       managedByChiefId: true,
       assignedToId: true,
+      startDate: true,
+      endDate: true,
       report: { select: { id: true } },
     },
   })
@@ -44,6 +51,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (role !== 'ADMIN' && !chiefOk) {
     return NextResponse.json({ error: 'Нет прав на назначение' }, { status: 403 })
   }
+
+  const periodText = formatLongTermNotifyPeriod(task.startDate, task.endDate)
 
   if (engineerIds.length === 0) {
     const prevRows = await db.longTermTaskEngineer.findMany({
@@ -63,6 +72,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     for (const uid of toFree) {
       await syncEngineerFreeIfNoActiveTasks(uid)
+      await notifyEngineerRemovedFromTask(task.id, task.requestNumber, uid)
     }
     return NextResponse.json({ ok: true, engineerIds: [] })
   }
@@ -110,34 +120,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   for (const uid of oldAssignees) {
     if (!newSet.has(uid)) {
       await syncEngineerFreeIfNoActiveTasks(uid)
+      await notifyEngineerRemovedFromTask(task.id, task.requestNumber, uid)
     }
   }
   for (const uid of engineerIdsNorm) {
     if (!oldAssignees.has(uid)) {
       await markEngineerBusy(uid)
-    }
-  }
-
-  const chief =
-    task.managedByChiefId &&
-    (await db.user.findUnique({
-      where: { id: task.managedByChiefId },
-      select: { id: true, name: true },
-    }))
-  if (chief) {
-    for (const eng of engineers) {
-      if (!oldAssignees.has(eng.id)) {
-        await notifyTaskAssigned(
-          {
-            id: task.id,
-            type: task.type,
-            priority: task.priority,
-            comment: task.comment,
-          },
-          eng,
-          chief
-        )
-      }
+      await notifyLongTermEngineerAssigned(task.id, task.requestNumber, uid, periodText)
     }
   }
 
