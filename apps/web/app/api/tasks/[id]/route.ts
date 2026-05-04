@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { syncEngineerFreeIfNoActiveTasks, markEngineerBusy } from '@/lib/engineerPresence'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import { notifyTaskAssigned } from '@/lib/notifications'
-import type { Role } from '@prisma/client'
+import type { Role, TaskWorkType } from '@prisma/client'
 
 /** ГИ владеет родительской заявкой для этой дочерней распределённой задачи. */
 async function chiefOwnsDelegationParent(task: { comment: string | null }, chiefUserId: string): Promise<boolean> {
@@ -24,6 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = (await req.json().catch(() => null)) as {
     scheduledAt?: string | null
     assignedToId?: string | null
+    taskType?: TaskWorkType
   } | null
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'Некорректное тело запроса' }, { status: 400 })
@@ -31,8 +32,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const hasScheduled = 'scheduledAt' in body
   const hasAssignee = 'assignedToId' in body
-  if (!hasScheduled && !hasAssignee) {
-    return NextResponse.json({ error: 'Укажите scheduledAt или assignedToId' }, { status: 400 })
+  const hasTaskType = 'taskType' in body
+  if (!hasScheduled && !hasAssignee && !hasTaskType) {
+    return NextResponse.json({ error: 'Укажите scheduledAt, assignedToId или taskType' }, { status: 400 })
   }
 
   const role = session.user.role as Role
@@ -46,6 +48,51 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (['DONE', 'CANCELLED'].includes(task.status)) {
     return NextResponse.json({ error: 'Нельзя изменить закрытую задачу' }, { status: 400 })
+  }
+
+  let nextTaskType: TaskWorkType | undefined
+  let nextManagedByChiefId: string | null | undefined
+
+  if (hasTaskType) {
+    const tt = body.taskType
+    if (tt !== 'QUICK' && tt !== 'LONG_TERM') {
+      return NextResponse.json({ error: 'taskType должен быть QUICK или LONG_TERM' }, { status: 400 })
+    }
+    if (task.report) {
+      return NextResponse.json({ error: 'Нельзя менять формат задачи с отчётом' }, { status: 400 })
+    }
+    if (parseDelegationParentTaskId(task.comment)) {
+      return NextResponse.json({ error: 'Нельзя менять формат распределённой дочерней задачи' }, { status: 400 })
+    }
+    if (role !== 'ADMIN' && role !== 'CHIEF_ENGINEER') {
+      return NextResponse.json({ error: 'Формат задачи задаёт только главный инженер' }, { status: 403 })
+    }
+    if (role === 'CHIEF_ENGINEER') {
+      const ok =
+        task.assignedToId === session.user.id ||
+        (task.managedByChiefId !== null && task.managedByChiefId === session.user.id)
+      if (!ok) {
+        return NextResponse.json({ error: 'Нет прав менять формат этой задачи' }, { status: 403 })
+      }
+    }
+    if (tt === 'QUICK' && task.taskType === 'LONG_TERM') {
+      const dwCount = await db.dailyWork.count({ where: { taskId: task.id } })
+      if (dwCount > 0) {
+        return NextResponse.json(
+          { error: 'Уже есть записи дневника — нельзя вернуть формат «быстрая»' },
+          { status: 400 }
+        )
+      }
+    }
+    nextTaskType = tt
+    if (tt === 'LONG_TERM') {
+      nextManagedByChiefId =
+        role === 'CHIEF_ENGINEER'
+          ? task.managedByChiefId ?? session.user.id
+          : task.managedByChiefId ?? task.assignedToId
+    } else {
+      nextManagedByChiefId = null
+    }
   }
 
   let nextScheduledAt: Date | null | undefined
@@ -149,9 +196,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const previousAssigneeId = task.assignedToId
-  const data: { scheduledAt?: Date | null; assignedToId?: string } = {}
+  const data: {
+    scheduledAt?: Date | null
+    assignedToId?: string
+    taskType?: TaskWorkType
+    managedByChiefId?: string | null
+  } = {}
   if (hasScheduled) data.scheduledAt = nextScheduledAt!
   if (hasAssignee) data.assignedToId = newEngineerId!
+  if (hasTaskType) {
+    data.taskType = nextTaskType!
+    data.managedByChiefId = nextManagedByChiefId ?? null
+  }
 
   const updated = await db.serviceTask.update({
     where: { id: params.id },
@@ -192,6 +248,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       id: updated.id,
       scheduledAt: updated.scheduledAt,
       assignedToId: updated.assignedToId,
+      taskType: updated.taskType,
+      managedByChiefId: updated.managedByChiefId,
     },
   })
 }

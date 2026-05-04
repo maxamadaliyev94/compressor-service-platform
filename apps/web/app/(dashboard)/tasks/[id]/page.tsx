@@ -5,6 +5,7 @@ import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import TaskAdminActions from './TaskAdminActions'
 import TaskDelegatePanel from './TaskDelegatePanel'
+import TaskChiefWorkTypePanel from './TaskChiefWorkTypePanel'
 import TaskLongTermChiefPanel from './TaskLongTermChiefPanel'
 import TaskScheduledAtEditor from './TaskScheduledAtEditor'
 import ClientSignaturePanel from './ClientSignaturePanel'
@@ -115,6 +116,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     role === 'ENGINEER' &&
     task.assignedToId === session.user.id
   const showExecuteLink = task.taskType !== 'LONG_TERM' && canExecute && isNotDone
+  const isDelegatedChild = Boolean(parseDelegationParentTaskId(task.comment))
+  const canChiefSetWorkType =
+    isNotDone &&
+    !task.report &&
+    !isDelegatedChild &&
+    role === 'CHIEF_ENGINEER' &&
+    (task.assignedToId === session.user.id ||
+      (task.managedByChiefId !== null && task.managedByChiefId === session.user.id))
   const sessionClientId = session?.user?.clientId ?? null
   const clientSignaturePending =
     task.status === 'DONE' && task.report && !task.report.clientSignature
@@ -265,9 +274,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         <div className="bg-white border rounded-xl p-5">
           <h2 className="font-semibold mb-3">Детали задачи</h2>
           <div className="space-y-2 text-sm">
-            <div className="flex gap-2"><span className="text-gray-500 w-28">Формат:</span>
-              <span>{task.taskType === 'LONG_TERM' ? 'Долгосрочная' : 'Быстрая'}</span>
-            </div>
+            <TaskChiefWorkTypePanel
+              taskId={task.id}
+              taskType={task.taskType === 'LONG_TERM' ? 'LONG_TERM' : 'QUICK'}
+              canEdit={canChiefSetWorkType}
+              hasDailyEntries={task.dailyWorks.length > 0}
+            />
             <div className="flex gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[task.type]}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Приоритет:</span>
               <span className={`font-medium ${task.priority === 'EMERGENCY' ? 'text-red-600' : task.priority === 'HIGH' ? 'text-orange-600' : 'text-gray-700'}`}>

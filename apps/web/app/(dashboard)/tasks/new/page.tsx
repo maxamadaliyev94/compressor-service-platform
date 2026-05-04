@@ -16,7 +16,6 @@ export default function NewTaskPage() {
     equipmentId: '',
     assignedToId: '',
     type: 'PLANNED_MAINTENANCE',
-    taskType: 'QUICK' as 'QUICK' | 'LONG_TERM',
     priority: 'MEDIUM',
     scheduledAt: '',
     comment: '',
@@ -138,6 +137,11 @@ export default function NewTaskPage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
         <h3 className="text-sm font-semibold text-blue-800 mb-2">Цепочка назначения</h3>
+        {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
+          <p className="text-xs text-blue-800/90 mb-2 leading-snug">
+            Формат работы (быстрая или долгосрочная) выбирает главный инженер на странице задачи после получения заявки.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2 text-sm text-blue-700">
           <span className="bg-blue-200 px-2 py-1 rounded">
             {currentUser?.role === 'ADMIN'
@@ -236,36 +240,6 @@ export default function NewTaskPage() {
             </div>
           )}
         </div>
-
-        {(currentUser?.role === 'CHIEF_ENGINEER' ||
-          currentUser?.role === 'MANAGER' ||
-          currentUser?.role === 'ADMIN') && (
-          <div>
-            <label className="block text-sm font-medium mb-2">Формат задачи</label>
-            <div className="flex flex-col sm:flex-row gap-3 text-sm">
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="task-work-type"
-                  checked={form.taskType === 'QUICK'}
-                  onChange={() => set('taskType', 'QUICK')}
-                  className="accent-blue-600"
-                />
-                <span>Быстрая (обычный цикл)</span>
-              </label>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="task-work-type"
-                  checked={form.taskType === 'LONG_TERM'}
-                  onChange={() => set('taskType', 'LONG_TERM')}
-                  className="accent-blue-600"
-                />
-                <span>Долгосрочная (закрывает главный инженер, дневной журнал)</span>
-              </label>
-            </div>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

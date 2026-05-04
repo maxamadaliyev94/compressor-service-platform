@@ -4,21 +4,7 @@ import { auth } from '@/auth'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy } from '@/lib/engineerPresence'
-import type { Role, TaskWorkType } from '@prisma/client'
-
-function resolveManagedByChiefId(
-  taskType: TaskWorkType,
-  role: Role,
-  creatorId: string,
-  assigneeList: { id: string; role: Role }[] | null,
-): string | null {
-  if (taskType !== 'LONG_TERM') return null
-  if (role === 'CHIEF_ENGINEER') return creatorId
-  if (assigneeList && assigneeList.length === 1 && assigneeList[0].role === 'CHIEF_ENGINEER') {
-    return assigneeList[0].id
-  }
-  return null
-}
+import type { Role } from '@prisma/client'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -99,18 +85,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let taskType: TaskWorkType = 'QUICK'
-  if (body.taskType === 'LONG_TERM') {
-    if (!['CHIEF_ENGINEER', 'MANAGER', 'ADMIN'].includes(role)) {
-      return NextResponse.json(
-        { error: 'Долгосрочные задачи может создавать только главный инженер, менеджер или администратор' },
-        { status: 403 }
-      )
-    }
-    taskType = 'LONG_TERM'
-  }
-
-  const managedByChiefId = resolveManagedByChiefId(taskType, role, creator.id, assignees)
+  /** Формат «быстрая / долгосрочная» задаёт только главный инженер на странице задачи, не при создании. */
+  const taskType = 'QUICK' as const
+  const managedByChiefId = null
 
   const createdByUser = await db.user.findUnique({ where: { id: creator.id } })
   const createdTasks = []
