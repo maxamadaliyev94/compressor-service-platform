@@ -1,6 +1,7 @@
 'use client'
 
 import { webAuthnUserVisibleError } from '@/lib/webauthn-client-error'
+import { getWebAuthnUnsupportedReason } from '@/lib/webauthn-support'
 import { startRegistration } from '@simplewebauthn/browser'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -20,6 +21,11 @@ export default function RegisterFaceIdButton({
 
   async function register() {
     setMessage(null)
+    const unsupported = getWebAuthnUnsupportedReason()
+    if (unsupported) {
+      setMessage({ type: 'err', text: unsupported })
+      return
+    }
     setLoading(true)
     try {
       const optRes = await fetch('/api/webauthn/register/options', {

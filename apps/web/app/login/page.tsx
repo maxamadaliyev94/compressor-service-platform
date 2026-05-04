@@ -1,5 +1,6 @@
 'use client'
 import { webAuthnUserVisibleError } from '@/lib/webauthn-client-error'
+import { getWebAuthnUnsupportedReason } from '@/lib/webauthn-support'
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -38,6 +39,11 @@ export default function LoginPage() {
   async function handleFaceId() {
     setFaceIdMessage('')
     setError('')
+    const unsupported = getWebAuthnUnsupportedReason()
+    if (unsupported) {
+      setFaceIdMessage(unsupported)
+      return
+    }
     setFaceIdLoading(true)
     try {
       const trimmed = login.trim().toLowerCase()

@@ -2,7 +2,7 @@ import { db } from '@/lib/db'
 import { auth } from '@/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { hasPermission } from '@/lib/permissions'
-import { notifyTaskAssigned } from '@/lib/notifications'
+import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
 import { markEngineerBusy } from '@/lib/engineerPresence'
 import type { Role } from '@prisma/client'
 
@@ -111,6 +111,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
     }
   }
+
+  const n = createdIds.length
+  await notifyClientSubscriberForEquipmentWork(
+    task.equipmentId,
+    {
+      title: n === 1 ? 'Новая задача по клиенту' : `Новые задачи по клиенту (${n})`,
+      message:
+        n === 1
+          ? 'Главный инженер распределил задачу на исполнителя.'
+          : `Главный инженер распределил задачи на исполнителей (${n}).`,
+      type: 'TASK',
+      link: `/tasks/${createdIds[0]}`,
+    },
+    { skipUserIds: engineerIds }
+  )
 
   return NextResponse.json({ ok: true, taskIds: createdIds })
 }

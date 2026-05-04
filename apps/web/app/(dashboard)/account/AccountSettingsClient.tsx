@@ -2,6 +2,7 @@
 
 import ActSignaturePad from '../tasks/[id]/execute/ActSignaturePad'
 import RegisterFaceIdButton from '../users/RegisterFaceIdButton'
+import { getWebAuthnUnsupportedReason } from '@/lib/webauthn-support'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -35,10 +36,15 @@ export default function AccountSettingsClient({
 
   const [templateSig, setTemplateSig] = useState<string | null>(initialSavedActSignature)
   const [sigMsg, setSigMsg] = useState('')
+  const [webauthnEnvHint, setWebauthnEnvHint] = useState<string | null>(null)
 
   useEffect(() => {
     setTemplateSig(initialSavedActSignature)
   }, [initialSavedActSignature])
+
+  useEffect(() => {
+    setWebauthnEnvHint(getWebAuthnUnsupportedReason())
+  }, [])
 
   async function persistTemplate(dataUrl: string | null) {
     const res = await fetch('/api/users/me', {
@@ -220,6 +226,14 @@ export default function AccountSettingsClient({
         <p className="text-sm text-gray-500 mb-4">
           Зарегистрируйте вход по лицу или отпечатку на <strong>этом устройстве</strong>. После этого на экране входа можно нажать «Войти через Face ID» без ввода логина и пароля.
         </p>
+        <ul className="text-xs text-gray-600 list-disc pl-5 mb-3 space-y-1">
+          <li>На Android чаще всего нужен <strong>Chrome</strong> или <strong>Samsung Internet</strong>, адрес должен быть <strong>https://</strong>.</li>
+          <li>Если зашли из Telegram / Instagram / VK — откройте меню <strong>⋯</strong> → «В браузере» / «Открыть в Chrome».</li>
+          <li>Включите блокировку экрана с отпечатком или лицом — иначе ключ может не создаться.</li>
+        </ul>
+        {webauthnEnvHint && (
+          <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">{webauthnEnvHint}</p>
+        )}
         <RegisterFaceIdButton userId={userId} />
       </section>
     </div>

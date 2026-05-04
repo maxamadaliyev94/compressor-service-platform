@@ -6,6 +6,7 @@ import EditBranchButton from './EditBranchButton'
 import ClientActions from './ClientActions'
 import { auth } from '@/auth'
 import ClientManagerCard from './ClientManagerCard'
+import ClientAttachedNotifyUserCard from './ClientAttachedNotifyUserCard'
 
 type Branch = {
   id: string
@@ -43,6 +44,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     where: { id: params.id },
     include: {
       manager: { select: { id: true, name: true, email: true, phone: true } },
+      attachedNotifyUser: { select: { id: true, name: true, login: true, email: true } },
       branches: {
         include: {
           objects: {
@@ -58,6 +60,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   })
   if (!client) notFound()
   if (role === 'MANAGER' && client.managerId !== session.user.id) notFound()
+
+  const canManageNotify = isAdmin || (role === 'MANAGER' && client.managerId === session.user.id)
 
   const allEquipment = client.branches.flatMap((b: Branch) => b.objects.flatMap((o) => o.equipment))
   const allTasks = allEquipment.flatMap((e) => e.tasks)
@@ -118,6 +122,12 @@ export default async function ClientPage({ params }: { params: { id: string } })
         clientId={client.id}
         manager={client.manager}
         canManage={isAdmin}
+      />
+
+      <ClientAttachedNotifyUserCard
+        clientId={client.id}
+        attachedUser={client.attachedNotifyUser}
+        canManage={canManageNotify}
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 mb-6">

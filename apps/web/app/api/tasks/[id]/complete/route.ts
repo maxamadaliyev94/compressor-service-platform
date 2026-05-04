@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { createNotification } from '@/lib/notifications'
+import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { Role, ServiceTask } from '@prisma/client'
@@ -233,6 +233,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       link: `/tasks/${task.id}`,
     })
   }
+
+  await notifyClientSubscriberForEquipmentWork(
+    task.equipmentId,
+    {
+      title: '✅ Задача выполнена',
+      message: 'Задача закрыта по акту (отчёт сохранён).',
+      type: 'SUCCESS',
+      link: `/tasks/${task.id}`,
+    },
+    { skipUserIds: task.createdById ? [task.createdById] : [] }
+  )
 
   if (task.assignedToId) {
     await syncEngineerFreeIfNoActiveTasks(task.assignedToId)

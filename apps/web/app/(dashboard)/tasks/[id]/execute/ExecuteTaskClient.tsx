@@ -1,6 +1,7 @@
 'use client'
 
 import { webAuthnUserVisibleError } from '@/lib/webauthn-client-error'
+import { getWebAuthnUnsupportedReason } from '@/lib/webauthn-support'
 import { startAuthentication } from '@simplewebauthn/browser'
 import { useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
@@ -244,6 +245,11 @@ export default function ExecuteTaskClient({
 
   async function applySignatureWithFaceId() {
     setFaceSignMsg('')
+    const unsupported = getWebAuthnUnsupportedReason()
+    if (unsupported) {
+      setFaceSignMsg(unsupported)
+      return
+    }
     if (!savedActSignature) {
       setFaceSignMsg('Сначала сохраните шаблон подписи в «Настройка аккаунта».')
       return

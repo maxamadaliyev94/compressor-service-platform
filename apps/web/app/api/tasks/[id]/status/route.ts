@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { createNotification } from '@/lib/notifications'
+import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import type { Role, ServiceTask, TaskStatus } from '@prisma/client'
@@ -61,12 +61,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
-  if (
+  const notifyCreatorInProgress =
     status === 'IN_PROGRESS' &&
     previousStatus !== 'IN_PROGRESS' &&
-    task.createdById &&
+    !!task.createdById &&
     task.createdById !== session.user.id
-  ) {
+
+  if (notifyCreatorInProgress && task.createdById) {
     await createNotification({
       userId: task.createdById,
       title: 'Задача взята в работу',
@@ -82,6 +83,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       title: '✅ Задача выполнена',
       message: 'Задача успешно закрыта инженером',
       type: 'SUCCESS',
+      link: `/tasks/${task.id}`,
+    })
+  }
+
+  if (status === 'IN_PROGRESS' && previousStatus !== 'IN_PROGRESS') {
+    await notifyClientSubscriberForEquipmentWork(
+      task.equipmentId,
+      {
+        title: 'Задача в работе',
+        message: 'Инженер приступил к выполнению задачи.',
+        type: 'INFO',
+        link: `/tasks/${task.id}`,
+      },
+      { skipUserIds: notifyCreatorInProgress && task.createdById ? [task.createdById] : [] }
+    )
+  }
+
+  if (status === 'DONE') {
+    await notifyClientSubscriberForEquipmentWork(
+      task.equipmentId,
+      {
+        title: '✅ Задача выполнена',
+        message: 'Задача закрыта (смена статуса).',
+        type: 'SUCCESS',
+        link: `/tasks/${task.id}`,
+      },
+      { skipUserIds: task.createdById ? [task.createdById] : [] }
+    )
+  }
+
+  if (status === 'CANCELLED' && previousStatus !== 'CANCELLED') {
+    await notifyClientSubscriberForEquipmentWork(task.equipmentId, {
+      title: 'Задача отменена',
+      message: 'Задача по оборудованию клиента отменена.',
+      type: 'WARNING',
       link: `/tasks/${task.id}`,
     })
   }

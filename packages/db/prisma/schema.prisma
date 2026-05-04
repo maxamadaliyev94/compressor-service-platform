@@ -119,6 +119,7 @@ model User {
   deletedTasks  ServiceTask[] @relation("TaskDeleter")
   managedClients Client[] @relation("ClientManager")
   clientAccount Client? @relation("ClientPortalUsers", fields: [clientId], references: [id], onDelete: SetNull)
+  clientNotifySubscriptions Client[] @relation("ClientAttachedNotifyUser")
   workReports   WorkReport[]
   auditLogs     AuditLog[]
   notifications Notification[]
@@ -190,6 +191,8 @@ model RolePermission {
 model Client {
   id            String       @id @default(cuid())
   managerId     String?
+  /// Пользователь, которому слать уведомления о работах по этому клиенту (задачи на оборудовании клиента).
+  attachedNotifyUserId String?
   name          String
   inn           String?
   contactPerson String?
@@ -203,6 +206,7 @@ model Client {
   updatedAt     DateTime     @updatedAt
 
   manager  User?    @relation("ClientManager", fields: [managerId], references: [id])
+  attachedNotifyUser User? @relation("ClientAttachedNotifyUser", fields: [attachedNotifyUserId], references: [id], onDelete: SetNull)
   branches Branch[]
   portalUsers User[] @relation("ClientPortalUsers")
 
