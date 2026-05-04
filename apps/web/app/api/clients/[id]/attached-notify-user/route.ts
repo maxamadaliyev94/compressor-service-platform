@@ -28,17 +28,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (userId) {
     const user = await db.user.findFirst({
-      where: { id: userId, isActive: true, role: { not: 'CLIENT' } },
-      select: { id: true },
+      where: { id: userId, isActive: true, role: 'CLIENT' },
+      select: { id: true, clientId: true },
     })
     if (!user) {
-      return NextResponse.json({ error: 'Пользователь не найден или недоступен' }, { status: 400 })
+      return NextResponse.json({ error: 'Укажите учётную запись с ролью «Клиент»' }, { status: 400 })
     }
+    if (user.clientId && user.clientId !== params.id) {
+      return NextResponse.json({ error: 'Этот пользователь привязан к другой компании' }, { status: 400 })
+    }
+
+    await db.$transaction(async (tx) => {
+      if (!user.clientId) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { clientId: params.id },
+        })
+      }
+      await tx.client.update({
+        where: { id: params.id },
+        data: { attachedNotifyUserId: userId },
+      })
+    })
+
+    const client = await db.client.findUnique({
+      where: { id: params.id },
+      include: {
+        attachedNotifyUser: { select: { id: true, name: true, login: true, email: true } },
+      },
+    })
+    return NextResponse.json(client)
   }
 
   const client = await db.client.update({
     where: { id: params.id },
-    data: { attachedNotifyUserId: userId },
+    data: { attachedNotifyUserId: null },
     include: {
       attachedNotifyUser: { select: { id: true, name: true, login: true, email: true } },
     },

@@ -14,8 +14,8 @@ type UserOption = {
   id: string
   name: string
   login: string
-  role: string
-  isActive: boolean
+  email?: string | null
+  clientId: string | null
 }
 
 export default function ClientAttachedNotifyUserCard({
@@ -36,27 +36,33 @@ export default function ClientAttachedNotifyUserCard({
   async function loadUsers() {
     if (users.length > 0) return
     setLoading(true)
-    const response = await fetch('/api/users')
+    const response = await fetch(`/api/clients/${clientId}/notify-candidates`)
     const list = await response.json()
+    if (!response.ok) {
+      alert((list as { error?: string }).error || 'Не удалось загрузить список')
+      setUsers([])
+      setLoading(false)
+      return
+    }
     const arr = Array.isArray(list) ? list : []
-    setUsers(
-      arr.filter(
-        (u: UserOption) =>
-          u.isActive && u.role !== 'CLIENT'
-      )
-    )
+    setUsers(arr as UserOption[])
     setLoading(false)
   }
 
   async function saveAttached() {
     if (!selectedUserId) return
     setLoading(true)
-    await fetch(`/api/clients/${clientId}/attached-notify-user`, {
+    const res = await fetch(`/api/clients/${clientId}/attached-notify-user`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: selectedUserId }),
     })
+    const data = await res.json().catch(() => ({}))
     setLoading(false)
+    if (!res.ok) {
+      alert((data as { error?: string }).error || 'Не удалось сохранить')
+      return
+    }
     setModalOpen(false)
     setSelectedUserId('')
     router.refresh()
@@ -76,7 +82,8 @@ export default function ClientAttachedNotifyUserCard({
         <div>
           <h2 className="font-semibold">Уведомления о работах</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Прикрепите пользователя системы — ему будут приходить оповещения о задачах на оборудовании этого клиента.
+            Выберите учётную запись владельца или представителя компании (роль «Клиент», вход в личный кабинет) — на
+            неё будут приходить уведомления о задачах на оборудовании этого клиента.
           </p>
         </div>
         {canManage && (
@@ -100,25 +107,36 @@ export default function ClientAttachedNotifyUserCard({
           {attachedUser.email && <div className="text-gray-600">{attachedUser.email}</div>}
         </div>
       ) : (
-        <div className="text-sm text-gray-500">Пользователь для уведомлений не прикреплён</div>
+        <div className="text-sm text-gray-500">Представитель компании для уведомлений не выбран</div>
       )}
 
       {modalOpen && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-white border p-4">
-            <h3 className="text-base font-semibold mb-2">Прикрепить пользователя</h3>
+            <h3 className="text-base font-semibold mb-2">Представитель компании</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              В списке — пользователи с ролью «Клиент», привязанные к этой компании или ещё без привязки (при сохранении
+              учётная запись будет привязана к этому клиенту).
+            </p>
             <select
               value={selectedUserId}
               onChange={(e) => setSelectedUserId(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm mb-3"
             >
-              <option value="">Выберите пользователя</option>
+              <option value="">Выберите учётную запись</option>
               {users.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} ({item.login}) — {item.role}
+                  {item.name} ({item.login})
+                  {item.clientId === clientId ? ' — эта компания' : ' — без привязки к компании'}
                 </option>
               ))}
             </select>
+            {users.length === 0 && !loading && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+                Нет подходящих учётных записей. Создайте пользователя с ролью «Клиент» в разделе «Пользователи», затем
+                откройте этот диалог снова.
+              </p>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
               {attachedUser && (
                 <button
