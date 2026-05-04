@@ -23,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   type NavDef = { href: string; label: string; icon: string; roles: string[]; key?: string }
 
   const navRaw: NavDef[] = [
+    { href: '/my-company', label: 'Моя компания', icon: '🏢', roles: ['CLIENT'] },
     {
       href: '/account',
       label: 'Настройка аккаунта',

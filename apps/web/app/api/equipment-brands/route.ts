@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 
 export async function GET() {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (session.user.role === 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const brands = await db.equipmentBrandRef.findMany({
     where: { isActive: true },
     orderBy: { name: 'asc' }
@@ -12,7 +18,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   const { name } = await req.json()
   if (!name?.trim()) return NextResponse.json({ error: 'Название обязательно' }, { status: 400 })
 

@@ -1,7 +1,15 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/auth'
+import { canReadTask, type AuthedSession } from '@/lib/api-access'
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const allowed = await canReadTask(session as AuthedSession, params.id)
+  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
     include: {

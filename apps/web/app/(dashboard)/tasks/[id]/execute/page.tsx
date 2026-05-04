@@ -19,6 +19,15 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
   })
   if (!task || task.deletedAt) notFound()
 
+  if (session.user.role === 'CLIENT') {
+    redirect(`/tasks/${params.id}`)
+  }
+
+  if (session.user.role === 'MANAGER') {
+    const c = task.equipment.object.branch.client
+    if (c.managerId !== session.user.id) notFound()
+  }
+
   if (['DONE', 'CANCELLED'].includes(task.status)) {
     redirect(`/tasks/${params.id}`)
   }

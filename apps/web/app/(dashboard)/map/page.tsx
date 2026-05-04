@@ -1,9 +1,15 @@
 import { db } from '@/lib/db'
+import { auth } from '@/auth'
+import { redirect } from 'next/navigation'
 import { nearestMapCityName, parseBranchCoords } from '@/lib/mapCities'
 import MapView from './MapView'
 
 export default async function MapPage() {
+  const session = await auth()
+  if (!session) redirect('/login')
+
   const clients = await db.client.findMany({
+    where: session.user.role === 'MANAGER' ? { managerId: session.user.id } : {},
     include: {
       branches: {
         include: { objects: { include: { equipment: true } } },

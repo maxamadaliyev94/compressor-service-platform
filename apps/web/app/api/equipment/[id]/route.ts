@@ -1,12 +1,20 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { getEquipmentClientId } from '@/lib/api-access'
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (session.user.role === 'MANAGER') {
+    const cid = await getEquipmentClientId(params.id)
+    if (!cid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const c = await db.client.findUnique({ where: { id: cid }, select: { managerId: true } })
+    if (c?.managerId !== session.user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const body = await req.json()
@@ -28,9 +36,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (session.user.role === 'MANAGER') {
+    const cid = await getEquipmentClientId(params.id)
+    if (!cid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const c = await db.client.findUnique({ where: { id: cid }, select: { managerId: true } })
+    if (c?.managerId !== session.user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const eq = await db.equipment.findUnique({

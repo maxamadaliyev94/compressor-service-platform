@@ -2,12 +2,18 @@ import { db } from '@/lib/db'
 import { getSession } from '@/lib/roles'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import EngineerShiftToggle from './EngineerShiftToggle'
+import { prismaWhereManagerEquipment, prismaWhereManagerTasks } from '@/lib/api-access'
 
 export default async function DashboardPage() {
   const session = await getSession()
   const role = session.user.role
   const userId = session.user.id
+
+  if (role === 'CLIENT') {
+    redirect('/my-company')
+  }
 
   if (role === 'ENGINEER') {
     const myTasks = await db.serviceTask.findMany({
@@ -153,11 +159,15 @@ export default async function DashboardPage() {
   const allEquipment = await db.equipment.findMany({
     where: {
       status: { not: 'DECOMMISSIONED' },
-      object: {
-        branch: {
-          client: { status: { not: 'PASSIVE' } },
-        },
-      },
+      ...(role === 'MANAGER'
+        ? prismaWhereManagerEquipment(userId)
+        : {
+            object: {
+              branch: {
+                client: { status: { not: 'PASSIVE' } },
+              },
+            },
+          }),
     },
   })
 
@@ -178,11 +188,18 @@ export default async function DashboardPage() {
   )
 
   const activeTasks = await db.serviceTask.count({
-    where: { status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] }, deletedAt: null },
+    where: {
+      status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] },
+      deletedAt: null,
+      ...(role === 'MANAGER' ? prismaWhereManagerTasks(userId) : {}),
+    },
   })
 
   const allTasks = await db.serviceTask.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(role === 'MANAGER' ? prismaWhereManagerTasks(userId) : {}),
+    },
     include: {
       assignedTo: true,
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
@@ -230,7 +247,10 @@ export default async function DashboardPage() {
 
   const maxCount = Math.max(...tasksByMonth.map((m) => m.count), 1)
   const recentTasks = await db.serviceTask.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(role === 'MANAGER' ? prismaWhereManagerTasks(userId) : {}),
+    },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,

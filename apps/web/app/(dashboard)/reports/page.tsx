@@ -1,9 +1,21 @@
 import { db } from '@/lib/db'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import { requirePermission } from '@/lib/permissions'
+import { auth } from '@/auth'
+import { redirect } from 'next/navigation'
+import { prismaWhereManagerEquipment, prismaWhereManagerTasks } from '@/lib/api-access'
 
 export default async function ReportsPage() {
   await requirePermission('section:reports')
+  const session = await auth()
+  if (!session) redirect('/login')
+
+  const isManager = session.user.role === 'MANAGER'
+  const managerId = session.user.id
+
+  const equipmentWhere = isManager ? prismaWhereManagerEquipment(managerId) : undefined
+  const taskWhereBase = { deletedAt: null as const, ...(isManager ? prismaWhereManagerTasks(managerId) : {}) }
+
   const [
     totalEquipment,
     totalClients,
@@ -13,20 +25,38 @@ export default async function ReportsPage() {
     allTasks,
     engineers,
   ] = await Promise.all([
-    db.equipment.count(),
-    db.client.count({ where: { status: { not: 'PASSIVE' } } }),
-    db.serviceTask.count({ where: { deletedAt: null } }),
-    db.serviceTask.count({ where: { status: 'DONE', deletedAt: null } }),
+    db.equipment.count({ where: equipmentWhere }),
+    db.client.count({
+      where: isManager
+        ? { status: { not: 'PASSIVE' }, managerId }
+        : { status: { not: 'PASSIVE' } },
+    }),
+    db.serviceTask.count({ where: taskWhereBase }),
+    db.serviceTask.count({ where: { ...taskWhereBase, status: 'DONE' } }),
     db.equipment.findMany({
+      where: equipmentWhere,
       include: { object: { include: { branch: { include: { client: true } } } } },
     }),
     db.serviceTask.findMany({
-      where: { deletedAt: null },
+      where: taskWhereBase,
       include: { assignedTo: true, equipment: true },
       orderBy: { createdAt: 'desc' },
     }),
     db.user.findMany({
-      where: { role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] }, isActive: true },
+      where: {
+        role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] },
+        isActive: true,
+        ...(isManager
+          ? {
+              assignedTasks: {
+                some: {
+                  deletedAt: null,
+                  ...prismaWhereManagerTasks(managerId),
+                },
+              },
+            }
+          : {}),
+      },
       select: { id: true, name: true },
     }),
   ])
@@ -125,7 +155,9 @@ export default async function ReportsPage() {
       <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Отчёты и аналитика</h1>
-          <p className="text-sm text-gray-500 mt-1">Общая картина по всей системе</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {isManager ? 'Показатели только по вашим закреплённым клиентам' : 'Общая картина по всей системе'}
+          </p>
         </div>
       </div>
 

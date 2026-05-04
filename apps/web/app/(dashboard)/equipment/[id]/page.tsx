@@ -8,14 +8,22 @@ import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
 import EquipmentPhotoGallery from './EquipmentPhotoGallery'
 import { auth } from '@/auth'
+import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
 
 export default async function EquipmentPage({ params }: { params: { id: string } }) {
-  await requirePermission('section:equipment')
   const session = await auth()
-  const role = session?.user.role ?? 'CLIENT'
-  const canViewWarranty = await hasPermission(role as Role, 'field:equipment.warranty')
+  if (!session) redirect('/login')
+  const role = session.user.role as Role
+  const isClientPortal = role === 'CLIENT'
+  if (!isClientPortal) {
+    await requirePermission('section:equipment')
+  } else if (!session.user.clientId) {
+    redirect('/403')
+  }
+  const canViewWarranty =
+    isClientPortal || (await hasPermission(role, 'field:equipment.warranty'))
   const eq = await db.equipment.findUnique({
     where: { id: params.id },
     include: {
@@ -44,6 +52,12 @@ export default async function EquipmentPage({ params }: { params: { id: string }
   if (!eq) notFound()
 
   const client = eq.object.branch.client
+  if (isClientPortal && session.user.clientId !== client.id) {
+    notFound()
+  }
+  if (role === 'MANAGER' && client.managerId !== session.user.id) {
+    notFound()
+  }
   const ws = getWarrantyStatus(eq.warrantyUntil, eq.warrantyVoided)
 
   const wsColors: Record<string, string> = {
@@ -90,9 +104,17 @@ export default async function EquipmentPage({ params }: { params: { id: string }
   return (
     <div className="p-4 md:p-8 max-w-7xl">
       <div className="flex flex-wrap items-center gap-2 mb-6 text-sm text-gray-500">
-        <a href="/equipment" className="hover:text-gray-700">← Оборудование</a>
+        <a href={isClientPortal ? '/my-company' : '/equipment'} className="hover:text-gray-700">
+          ← {isClientPortal ? 'Моя компания' : 'Оборудование'}
+        </a>
         <span>/</span>
-        <a href={`/clients/${client.id}`} className="hover:text-gray-700">{client.name}</a>
+        {isClientPortal ? (
+          <span className="hover:text-gray-700">{client.name}</span>
+        ) : (
+          <a href={`/clients/${client.id}`} className="hover:text-gray-700">
+            {client.name}
+          </a>
+        )}
         <span>/</span>
         <span className="text-gray-900 font-medium">{eq.brand} {eq.model}</span>
       </div>
@@ -116,14 +138,20 @@ export default async function EquipmentPage({ params }: { params: { id: string }
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
-        <div className="xl:col-span-2 space-y-4">
+      <div className={`grid grid-cols-1 gap-4 md:gap-6 ${isClientPortal ? '' : 'xl:grid-cols-3'}`}>
+        <div className={isClientPortal ? 'space-y-4' : 'xl:col-span-2 space-y-4'}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-white border rounded-xl p-4 md:p-5">
               <h2 className="font-semibold mb-3 flex items-center gap-2">👥 Клиент</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Компания:</span>
-                  <a href={`/clients/${client.id}`} className="font-medium text-blue-600 hover:underline truncate">{client.name}</a>
+                  {isClientPortal ? (
+                    <span className="font-medium truncate">{client.name}</span>
+                  ) : (
+                    <a href={`/clients/${client.id}`} className="font-medium text-blue-600 hover:underline truncate">
+                      {client.name}
+                    </a>
+                  )}
                 </div>
                 {client.city && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Город:</span><span>{client.city}</span></div>}
                 {client.contactPerson && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Контакт:</span><span>{client.contactPerson}</span></div>}
@@ -183,7 +211,9 @@ export default async function EquipmentPage({ params }: { params: { id: string }
             </div>
           </div>
 
-          <UpdateHours equipmentId={eq.id} currentHours={eq.currentHours} nextServiceHours={eq.nextServiceHours} />
+          {!isClientPortal && (
+            <UpdateHours equipmentId={eq.id} currentHours={eq.currentHours} nextServiceHours={eq.nextServiceHours} />
+          )}
 
           <div className="bg-white border rounded-xl p-5">
             <h2 className="font-semibold mb-3 flex items-center gap-2">🖼️ Фото оборудования</h2>
@@ -197,7 +227,9 @@ export default async function EquipmentPage({ params }: { params: { id: string }
           <div className="bg-white border rounded-xl overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b">
               <h2 className="font-semibold">История обслуживания ({eq.tasks.length})</h2>
-              <QuickTaskButton equipmentId={eq.id} createdById={session?.user?.id || ''} role={role} />
+              {!isClientPortal && (
+                <QuickTaskButton equipmentId={eq.id} createdById={session.user.id} role={role} />
+              )}
             </div>
             {eq.tasks.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">
@@ -335,9 +367,11 @@ export default async function EquipmentPage({ params }: { params: { id: string }
           </div>
         </div>
 
-        <div className="xl:col-span-1">
-          <EquipmentHistory equipmentId={eq.id} />
-        </div>
+        {!isClientPortal && (
+          <div className="xl:col-span-1">
+            <EquipmentHistory equipmentId={eq.id} />
+          </div>
+        )}
       </div>
     </div>
   )

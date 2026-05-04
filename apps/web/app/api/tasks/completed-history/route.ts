@@ -4,10 +4,15 @@ import { db } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const managerScope =
+    session.user.role === 'MANAGER'
+      ? { equipment: { object: { branch: { client: { managerId: session.user.id } } } } }
+      : {}
 
   const now = new Date()
   const month = Number(req.nextUrl.searchParams.get('month') ?? now.getMonth() + 1)
@@ -22,15 +27,6 @@ export async function GET(req: NextRequest) {
   const start = new Date(Date.UTC(year, month - 1, 1))
   const end = new Date(Date.UTC(year, month, 1))
 
-  const engineers = await db.user.findMany({
-    where: {
-      role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] },
-      isActive: true,
-    },
-    select: { id: true, name: true, role: true },
-    orderBy: { name: 'asc' },
-  })
-
   const tasks = await db.serviceTask.findMany({
     where: {
       deletedAt: null,
@@ -39,6 +35,7 @@ export async function GET(req: NextRequest) {
       assignedToId: engineerId && engineerId !== 'ALL' ? engineerId : undefined,
       type: taskType && taskType !== 'ALL' ? taskType : undefined,
       assignedTo: { role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] } },
+      ...managerScope,
     },
     select: {
       id: true,
@@ -61,6 +58,22 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { completedAt: 'desc' },
   })
+
+  const engineerIdsInTasks = [...new Set(tasks.map((t) => t.assignedToId).filter(Boolean))] as string[]
+
+  const engineers =
+    session.user.role === 'MANAGER' && engineerIdsInTasks.length === 0
+      ? []
+      : await db.user.findMany({
+          where: {
+            role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] },
+            isActive: true,
+            ...(session.user.role === 'MANAGER' ? { id: { in: engineerIdsInTasks } } : {}),
+            ...(engineerId && engineerId !== 'ALL' ? { id: engineerId } : {}),
+          },
+          select: { id: true, name: true, role: true },
+          orderBy: { name: 'asc' },
+        })
 
   const groupedMap = new Map<string, { engineerId: string; engineerName: string; tasks: typeof tasks }>()
   for (const task of tasks) {

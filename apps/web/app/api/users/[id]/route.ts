@@ -2,8 +2,16 @@ import { db } from '@/lib/db'
 import { auth } from '@/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { hasPermission } from '@/lib/permissions'
+import type { Role } from '@prisma/client'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const canManage = await hasPermission(session.user.role as Role, 'action:user.manage')
+  if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const body = await req.json()
 
   if (body.action === 'toggle') {
@@ -28,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

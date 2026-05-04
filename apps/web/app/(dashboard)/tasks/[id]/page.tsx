@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import TaskAdminActions from './TaskAdminActions'
 import TaskDelegatePanel from './TaskDelegatePanel'
@@ -24,6 +24,7 @@ const statusColors: Record<string, string> = {
 
 export default async function TaskDetailPage({ params }: { params: { id: string } }) {
   const session = await auth()
+  if (!session) redirect('/login')
   const isAdmin = session?.user?.role === 'ADMIN'
   const canEditDone = ['ADMIN', 'MANAGER'].includes(session?.user?.role ?? '')
   const canExecute = ['ENGINEER', 'CHIEF_ENGINEER', 'ADMIN', 'MANAGER'].includes(
@@ -45,6 +46,17 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   })
   if (!task || task.deletedAt) notFound()
 
+  const client = task.equipment.object.branch.client
+  if (session.user.role === 'CLIENT') {
+    const sessionClientId = session.user.clientId ?? null
+    if (!sessionClientId || sessionClientId !== client.id) {
+      notFound()
+    }
+  }
+  if (session.user.role === 'MANAGER' && client.managerId !== session.user.id) {
+    notFound()
+  }
+
   const isNotDone = !['DONE', 'CANCELLED'].includes(task.status)
   const showChiefDelegate =
     session?.user?.role === 'CHIEF_ENGINEER' &&
@@ -54,7 +66,6 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
   const eq = task.equipment
   const branch = eq.object.branch
-  const client = eq.object.branch.client
   const destinationText = [client.city, branch.address, eq.object.name, client.name].filter(Boolean).join(', ')
   const yandexRouteUrl =
     branch.latitude !== null && branch.longitude !== null
@@ -74,7 +85,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   return (
     <div className="p-4 md:p-8 max-w-4xl">
       <div className="flex items-center gap-2 mb-6 text-sm">
-        <a href="/tasks" className="text-gray-400 hover:text-gray-600">← Задачи</a>
+        <a
+          href={session.user.role === 'CLIENT' ? '/my-company' : '/tasks'}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          ← {session.user.role === 'CLIENT' ? 'Моя компания' : 'Задачи'}
+        </a>
         <span className="text-gray-300">/</span>
         <span className="font-medium">{typeLabels[task.type]}</span>
       </div>
@@ -172,7 +188,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Серийный №:</span><span>{eq.serialNumber}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Клиент:</span>
-              <a href={`/clients/${client.id}`} className="hover:text-blue-600">{client.name}</a>
+              {session.user.role === 'CLIENT' ? (
+                <span>{client.name}</span>
+              ) : (
+                <a href={`/clients/${client.id}`} className="hover:text-blue-600">
+                  {client.name}
+                </a>
+              )}
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Объект:</span><span>{eq.object.name}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Адрес:</span><span>{branch.address || 'Не указан'}</span></div>

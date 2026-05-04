@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
+import { getTaskClientId } from '@/lib/api-access'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (session.user.role === 'MANAGER') {
+    const taskClientId = await getTaskClientId(params.id)
+    if (!taskClientId) return NextResponse.json({ error: 'Задача не найдена' }, { status: 404 })
+    const c = await db.client.findUnique({ where: { id: taskClientId }, select: { managerId: true } })
+    if (c?.managerId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   const body = (await req.json().catch(() => null)) as

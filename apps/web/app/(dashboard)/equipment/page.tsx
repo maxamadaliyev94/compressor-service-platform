@@ -5,6 +5,7 @@ import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
 import SearchableEquipment from './SearchableEquipment'
 import ExportButton from './ExportButton'
+import { prismaWhereManagerEquipment } from '@/lib/api-access'
 
 export default async function EquipmentPage() {
   await requirePermission('section:equipment')
@@ -44,6 +45,19 @@ export default async function EquipmentPage() {
             },
             orderBy: { createdAt: 'desc' },
           })
+  } else if (role === 'MANAGER') {
+    equipment = await db.equipment.findMany({
+      where: prismaWhereManagerEquipment(userId),
+      include: {
+        object: { include: { branch: { include: { client: true } } } },
+        tasks: {
+          where: { status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] } },
+          take: 1,
+          include: { assignedTo: { select: { name: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
   } else {
     equipment = await db.equipment.findMany({
       where: {
@@ -75,7 +89,9 @@ export default async function EquipmentPage() {
           <p className="text-sm text-gray-500 mt-1">
             {role === 'ENGINEER'
               ? `Моё оборудование — ${equipment.length} единиц по активным задачам`
-              : `Всё оборудование — ${equipment.length} единиц`}
+              : role === 'MANAGER'
+                ? `Оборудование ваших клиентов — ${equipment.length} ед.`
+                : `Всё оборудование — ${equipment.length} единиц`}
           </p>
         </div>
         <div className="flex flex-col w-full md:w-auto md:flex-row gap-2 md:gap-3">

@@ -3,6 +3,12 @@ import { auth } from '@/auth'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET() {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (session.user.role === 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const types = await db.equipmentTypeRef.findMany({
     where: { isActive: true },
     orderBy: [{ isSystem: 'desc' }, { nameRu: 'asc' }],

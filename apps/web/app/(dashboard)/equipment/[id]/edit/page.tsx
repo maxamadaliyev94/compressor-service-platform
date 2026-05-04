@@ -8,8 +8,17 @@ export default async function EditEquipmentPage({ params }: { params: { id: stri
   if (!session) redirect('/login')
   if (!['ADMIN', 'MANAGER'].includes(session.user.role)) redirect('/403')
 
-  const equipment = await db.equipment.findUnique({ where: { id: params.id } })
+  const equipment = await db.equipment.findUnique({
+    where: { id: params.id },
+    include: { object: { include: { branch: { include: { client: { select: { managerId: true } } } } } } },
+  })
   if (!equipment) notFound()
+  if (
+    session.user.role === 'MANAGER' &&
+    equipment.object.branch.client.managerId !== session.user.id
+  ) {
+    notFound()
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-3xl">

@@ -45,12 +45,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ month, year, engineers: [], schedule: [] })
   }
 
+  const managerScope =
+    session.user.role === 'MANAGER'
+      ? { equipment: { object: { branch: { client: { managerId: session.user.id } } } } }
+      : {}
+
   const tasks = (await db.serviceTask.findMany({
     where: {
       assignedToId: { in: engineerIds },
       deletedAt: null,
       status: { notIn: ['CANCELLED', 'DONE'] },
       scheduledAt: { gte: start, lt: end },
+      ...managerScope,
     },
     select: {
       id: true,
@@ -86,5 +92,11 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json({ month, year, engineers, schedule })
+  const engineerIdsInSchedule = new Set(tasks.map((t) => t.assignedToId).filter(Boolean) as string[])
+  const engineersResponse =
+    session.user.role === 'MANAGER'
+      ? engineers.filter((e) => engineerIdsInSchedule.has(e.id))
+      : engineers
+
+  return NextResponse.json({ month, year, engineers: engineersResponse, schedule })
 }

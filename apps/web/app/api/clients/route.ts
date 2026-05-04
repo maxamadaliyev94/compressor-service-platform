@@ -33,10 +33,11 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const role = session.user.role
 
-  const where =
-    role === 'MANAGER'
-      ? { managerId: session.user.id }
-      : {}
+  if (!['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'].includes(role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const where = role === 'MANAGER' ? { managerId: session.user.id } : {}
 
   const clients = await db.client.findMany({
     where,
