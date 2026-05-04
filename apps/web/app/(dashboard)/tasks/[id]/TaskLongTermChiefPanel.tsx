@@ -42,8 +42,13 @@ export default function TaskLongTermChiefPanel({
   }, [])
 
   useEffect(() => {
-    setSelectedIds([...initialEngineerIds])
-  }, [initialEngineerIds])
+    if (users.length === 0) {
+      setSelectedIds([...initialEngineerIds])
+      return
+    }
+    const allowed = new Set(users.map((u) => u.id))
+    setSelectedIds(initialEngineerIds.filter((id) => allowed.has(id)))
+  }, [initialEngineerIds, users])
 
   function toggle(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -54,10 +59,12 @@ export default function TaskLongTermChiefPanel({
       if (!confirm('Снять всех инженеров с задачи?')) return
     }
     setAssignBusy(true)
+    const allowed = new Set(users.map((u) => u.id))
+    const engineerIds = [...new Set(selectedIds)].filter((id) => allowed.has(id))
     const r = await fetch(`/api/tasks/${taskId}/long-term-engineers`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ engineerIds: selectedIds }),
+      body: JSON.stringify({ engineerIds }),
     })
     setAssignBusy(false)
     if (!r.ok) {

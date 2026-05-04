@@ -1,12 +1,16 @@
 'use client'
 
 import * as XLSX from 'xlsx'
+import { formatTaskScheduleRangeRu } from '@/lib/task-schedule-display'
 
 type ExportTask = {
   requestNumber: number
   type: string
   status: string
+  taskType?: string | null
   scheduledAt: Date | null
+  startDate?: Date | null
+  endDate?: Date | null
   equipment: {
     brand: string
     model: string
@@ -41,7 +45,7 @@ export default function ExportTasksButton({
       Клиент: t.equipment.object.branch.client.name,
       Город: t.equipment.object.branch.client.city || '',
       Инженер: t.assignedTo?.name || 'Не назначен',
-      Срок: t.scheduledAt ? new Date(t.scheduledAt).toLocaleDateString('ru-RU') : '',
+      Срок: formatTaskScheduleRangeRu(t),
       Статус: statusLabels[t.status] || t.status,
       'Подпись клиента':
         t.status === 'DONE' ? (t.report?.clientSignature ? 'Да' : 'Нет') : '—',

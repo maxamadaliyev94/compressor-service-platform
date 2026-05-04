@@ -317,6 +317,10 @@ model ServiceTask {
   priority     TaskPriority @default(MEDIUM)
   status       TaskStatus   @default(NEW)
   scheduledAt  DateTime?
+  /// Дата начала работ (долгосрочная задача), календарный день.
+  startDate    DateTime?    @map("start_date") @db.Date
+  /// Планируемая дата окончания (долгосрочная задача).
+  endDate      DateTime?    @map("end_date") @db.Date
   completedAt  DateTime?
   comment      String?
   cancelReason String?

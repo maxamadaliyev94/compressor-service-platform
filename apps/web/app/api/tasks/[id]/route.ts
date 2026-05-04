@@ -6,6 +6,34 @@ import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import { notifyTaskAssigned } from '@/lib/notifications'
 import type { Role, TaskWorkType } from '@prisma/client'
 
+function utcDateOnlyFromDate(d: Date): Date {
+  const x = new Date(d)
+  return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()))
+}
+
+function parseBodyDateOnly(v: unknown): Date | null {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v !== 'string') return null
+  const raw = v.length <= 10 ? `${v}T12:00:00.000Z` : v
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : utcDateOnlyFromDate(d)
+}
+
+function canEditLongTermPlanDates(
+  role: Role,
+  userId: string,
+  task: { taskType: TaskWorkType; managedByChiefId: string | null; assignedToId: string | null }
+): boolean {
+  if (task.taskType !== 'LONG_TERM') return false
+  if (role === 'ADMIN') return true
+  if (role === 'CHIEF_ENGINEER') {
+    if (task.managedByChiefId === userId) return true
+    if (!task.managedByChiefId && task.assignedToId === userId) return true
+    return false
+  }
+  return false
+}
+
 /** ГИ владеет родительской заявкой для этой дочерней распределённой задачи. */
 async function chiefOwnsDelegationParent(task: { comment: string | null }, chiefUserId: string): Promise<boolean> {
   const parentId = parseDelegationParentTaskId(task.comment)
@@ -25,6 +53,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     scheduledAt?: string | null
     assignedToId?: string | null
     taskType?: TaskWorkType
+    startDate?: string | null
+    endDate?: string | null
   } | null
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'Некорректное тело запроса' }, { status: 400 })
@@ -33,14 +63,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const hasScheduled = 'scheduledAt' in body
   const hasAssignee = 'assignedToId' in body
   const hasTaskType = 'taskType' in body
-  if (!hasScheduled && !hasAssignee && !hasTaskType) {
-    return NextResponse.json({ error: 'Укажите scheduledAt, assignedToId или taskType' }, { status: 400 })
+  const hasLtDates = 'startDate' in body || 'endDate' in body
+  if (!hasScheduled && !hasAssignee && !hasTaskType && !hasLtDates) {
+    return NextResponse.json(
+      { error: 'Укажите scheduledAt, assignedToId, taskType, startDate или endDate' },
+      { status: 400 }
+    )
   }
 
   const role = session.user.role as Role
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    include: { report: { select: { id: true } } },
+    select: {
+      id: true,
+      deletedAt: true,
+      status: true,
+      taskType: true,
+      assignedToId: true,
+      managedByChiefId: true,
+      comment: true,
+      scheduledAt: true,
+      startDate: true,
+      endDate: true,
+      createdAt: true,
+      type: true,
+      priority: true,
+      report: { select: { id: true } },
+    },
   })
   if (!task || task.deletedAt) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -97,6 +146,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   let nextScheduledAt: Date | null | undefined
   if (hasScheduled) {
+    if (task.taskType === 'LONG_TERM') {
+      return NextResponse.json(
+        {
+          error:
+            'Для долгосрочной задачи укажите даты начала и окончания (поля «Дата начала» и «Дата окончания»), а не общий срок',
+        },
+        { status: 400 }
+      )
+    }
     if (role !== 'ADMIN' && role !== 'CHIEF_ENGINEER') {
       return NextResponse.json({ error: 'Нет прав на изменение срока' }, { status: 403 })
     }
@@ -116,6 +174,42 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         return NextResponse.json({ error: 'Некорректная дата' }, { status: 400 })
       }
       nextScheduledAt = d
+    }
+  }
+
+  let nextStartDate: Date | null | undefined
+  let nextEndDate: Date | null | undefined
+  if (hasLtDates) {
+    if (task.taskType !== 'LONG_TERM') {
+      return NextResponse.json(
+        { error: 'Даты начала и окончания задаются только для долгосрочной задачи' },
+        { status: 400 }
+      )
+    }
+    if (!canEditLongTermPlanDates(role, session.user.id, task)) {
+      return NextResponse.json({ error: 'Нет прав на изменение дат плана' }, { status: 403 })
+    }
+    if ('startDate' in body) {
+      const p = parseBodyDateOnly(body.startDate)
+      if (body.startDate !== null && body.startDate !== undefined && body.startDate !== '' && p === null) {
+        return NextResponse.json({ error: 'Некорректная дата начала' }, { status: 400 })
+      }
+      nextStartDate = p
+    }
+    if ('endDate' in body) {
+      const p = parseBodyDateOnly(body.endDate)
+      if (body.endDate !== null && body.endDate !== undefined && body.endDate !== '' && p === null) {
+        return NextResponse.json({ error: 'Некорректная дата окончания' }, { status: 400 })
+      }
+      nextEndDate = p
+    }
+    const effectiveStart = nextStartDate !== undefined ? nextStartDate : task.startDate
+    const effectiveEnd = nextEndDate !== undefined ? nextEndDate : task.endDate
+    if (effectiveStart && effectiveEnd && effectiveStart.getTime() > effectiveEnd.getTime()) {
+      return NextResponse.json(
+        { error: 'Дата начала не может быть позже даты окончания' },
+        { status: 400 }
+      )
     }
   }
 
@@ -201,12 +295,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     assignedToId?: string
     taskType?: TaskWorkType
     managedByChiefId?: string | null
+    startDate?: Date | null
+    endDate?: Date | null
   } = {}
   if (hasScheduled) data.scheduledAt = nextScheduledAt!
   if (hasAssignee) data.assignedToId = newEngineerId!
   if (hasTaskType) {
     data.taskType = nextTaskType!
     data.managedByChiefId = nextManagedByChiefId ?? null
+    if (nextTaskType === 'QUICK') {
+      data.startDate = null
+      data.endDate = null
+    }
+    if (nextTaskType === 'LONG_TERM' && task.taskType !== 'LONG_TERM') {
+      if (!task.startDate) {
+        data.startDate = utcDateOnlyFromDate(task.createdAt)
+      }
+      if (!task.endDate && task.scheduledAt) {
+        data.endDate = utcDateOnlyFromDate(task.scheduledAt)
+      }
+    }
+  }
+  if (hasLtDates) {
+    if (nextStartDate !== undefined) data.startDate = nextStartDate
+    if (nextEndDate !== undefined) data.endDate = nextEndDate
   }
 
   const updated = await db.serviceTask.update({
@@ -257,6 +369,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       assignedToId: updated.assignedToId,
       taskType: updated.taskType,
       managedByChiefId: updated.managedByChiefId,
+      startDate: updated.startDate,
+      endDate: updated.endDate,
     },
   })
 }

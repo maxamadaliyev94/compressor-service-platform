@@ -8,6 +8,7 @@ import TaskDelegatePanel from './TaskDelegatePanel'
 import TaskChiefWorkTypePanel from './TaskChiefWorkTypePanel'
 import TaskLongTermChiefPanel from './TaskLongTermChiefPanel'
 import TaskScheduledAtEditor from './TaskScheduledAtEditor'
+import TaskLongTermDatesEditor from './TaskLongTermDatesEditor'
 import ClientSignaturePanel from './ClientSignaturePanel'
 
 const typeLabels: Record<string, string> = {
@@ -118,6 +119,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     (session.user.role === 'ADMIN' ||
       (session.user.role === 'CHIEF_ENGINEER' &&
         (task.assignedToId === session.user.id || chiefOwnsDelegatedSubtree)))
+
+  const canEditLongTermPlanDates =
+    isNotDone &&
+    (session.user.role === 'ADMIN' ||
+      (session.user.role === 'CHIEF_ENGINEER' &&
+        (task.managedByChiefId === session.user.id ||
+          (!task.managedByChiefId && task.assignedToId === session.user.id))))
 
   const eq = task.equipment
   const branch = eq.object.branch
@@ -315,14 +323,28 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               </span>
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Создал:</span><span>{task.createdBy.name}</span></div>
-            <div className="flex gap-2 items-baseline">
-              <span className="text-gray-500 w-28 shrink-0">Срок:</span>
-              <TaskScheduledAtEditor
-                taskId={task.id}
-                scheduledAtIso={task.scheduledAt ? task.scheduledAt.toISOString() : null}
-                canEdit={canEditScheduledAt}
-              />
-            </div>
+            {task.taskType === 'LONG_TERM' ? (
+              <div className="flex gap-2 items-start">
+                <span className="text-gray-500 w-28 shrink-0 pt-0.5">Период:</span>
+                <div className="flex-1 min-w-0">
+                  <TaskLongTermDatesEditor
+                    taskId={task.id}
+                    startDateIso={task.startDate ? task.startDate.toISOString() : null}
+                    endDateIso={task.endDate ? task.endDate.toISOString() : null}
+                    canEdit={canEditLongTermPlanDates}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2 items-baseline">
+                <span className="text-gray-500 w-28 shrink-0">Срок:</span>
+                <TaskScheduledAtEditor
+                  taskId={task.id}
+                  scheduledAtIso={task.scheduledAt ? task.scheduledAt.toISOString() : null}
+                  canEdit={canEditScheduledAt}
+                />
+              </div>
+            )}
             {task.completedAt && (
               <div className="flex gap-2"><span className="text-gray-500 w-28">Выполнено:</span>
                 <span>{new Date(task.completedAt).toLocaleDateString('ru-RU')}</span>

@@ -2,6 +2,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ExportTasksButton from './ExportTasksButton'
+import {
+  formatTaskScheduleRangeRu,
+  isTaskEndDateOverdue,
+  taskCalendarAnchorDate,
+} from '@/lib/task-schedule-display'
 
 type TaskRow = {
   id: string
@@ -11,6 +16,8 @@ type TaskRow = {
   priority: string
   status: string
   scheduledAt: Date | null
+  startDate?: Date | null
+  endDate?: Date | null
   assignedToId: string | null
   equipment: {
     brand: string
@@ -61,8 +68,9 @@ function matchesScheduleFilter(
   day: number | 'all'
 ): boolean {
   if (year === 'all' && month === 'all' && day === 'all') return true
-  if (!task.scheduledAt) return false
-  const d = new Date(task.scheduledAt)
+  const anchor = taskCalendarAnchorDate(task)
+  if (!anchor) return false
+  const d = new Date(anchor)
   if (year !== 'all' && d.getFullYear() !== year) return false
   if (month !== 'all' && d.getMonth() + 1 !== month) return false
   if (day !== 'all' && d.getDate() !== day) return false
@@ -246,6 +254,8 @@ export default function TasksTable({
     years.add(new Date().getFullYear())
     for (const t of tasks) {
       if (t.scheduledAt) years.add(new Date(t.scheduledAt).getFullYear())
+      if (t.startDate) years.add(new Date(t.startDate).getFullYear())
+      if (t.endDate) years.add(new Date(t.endDate).getFullYear())
     }
     return [...years].sort((a, b) => b - a)
   }, [tasks])
@@ -436,8 +446,10 @@ export default function TasksTable({
             <div className="font-medium text-gray-800">Инженеры</div>
             {renderEngineersCell(bundle)}
           </div>
-          <div className="text-xs text-gray-600 mt-1">
-            Срок: {rep.scheduledAt ? new Date(rep.scheduledAt).toLocaleDateString('ru-RU') : '—'}
+          <div
+            className={`text-xs mt-1 ${isTaskEndDateOverdue(rep) ? 'text-red-600 font-semibold' : 'text-gray-600'}`}
+          >
+            Срок: {formatTaskScheduleRangeRu(rep)}
           </div>
         </a>
         <div className="mt-3">
@@ -517,8 +529,8 @@ export default function TasksTable({
         </td>
         <td className="p-3 text-gray-600">{rep.equipment.object.branch.client.name}</td>
         <td className="p-3 text-gray-600 max-w-[14rem]">{renderEngineersCell(bundle)}</td>
-        <td className="p-3 text-gray-600">
-          {rep.scheduledAt ? new Date(rep.scheduledAt).toLocaleDateString('ru-RU') : '—'}
+        <td className={`p-3 ${isTaskEndDateOverdue(rep) ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+          {formatTaskScheduleRangeRu(rep)}
         </td>
         <td className="p-3">
           <div className="flex flex-col gap-1 items-start">

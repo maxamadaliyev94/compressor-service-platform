@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import EngineerShiftToggle from './EngineerShiftToggle'
 import { prismaWhereManagerEquipment, prismaWhereManagerTasks } from '@/lib/api-access'
+import { formatTaskScheduleRangeRu, isTaskEndDateOverdue } from '@/lib/task-schedule-display'
 
 export default async function DashboardPage() {
   const session = await getSession()
@@ -129,9 +130,13 @@ export default async function DashboardPage() {
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      {task.scheduledAt && (
-                        <div className="text-sm font-medium text-gray-700 mb-2">
-                          📅 {new Date(task.scheduledAt).toLocaleDateString('ru-RU')}
+                      {formatTaskScheduleRangeRu(task) !== '—' && (
+                        <div
+                          className={`text-sm font-medium mb-2 ${
+                            isTaskEndDateOverdue(task) ? 'text-red-600' : 'text-gray-700'
+                          }`}
+                        >
+                          📅 {formatTaskScheduleRangeRu(task)}
                         </div>
                       )}
                       <div className="inline-block bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-medium">

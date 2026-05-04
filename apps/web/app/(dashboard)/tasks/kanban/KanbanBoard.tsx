@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { formatTaskScheduleRangeRu, isTaskEndDateOverdue } from '@/lib/task-schedule-display'
 
 const COLUMNS = [
   { id: 'NEW', label: 'Новые', color: 'bg-gray-100 border-gray-300' },
@@ -87,9 +88,11 @@ export default function KanbanBoard({ tasks }: { tasks: any[] }) {
                       <span className="text-xs text-gray-500 truncate">{task.assignedTo.name}</span>
                     </div>
                   )}
-                  {task.scheduledAt && (
-                    <div className="text-xs text-gray-400 mt-1">
-                      📅 {new Date(task.scheduledAt).toLocaleDateString('ru-RU')}
+                  {formatTaskScheduleRangeRu(task) !== '—' && (
+                    <div
+                      className={`text-xs mt-1 ${isTaskEndDateOverdue(task) ? 'text-red-600 font-semibold' : 'text-gray-400'}`}
+                    >
+                      📅 {formatTaskScheduleRangeRu(task)}
                     </div>
                   )}
                 </div>

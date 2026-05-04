@@ -11,6 +11,7 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
+import { formatTaskScheduleRangeRu } from '@/lib/task-schedule-display'
 
 export default async function EquipmentPage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -343,9 +344,9 @@ export default async function EquipmentPage({ params }: { params: { id: string }
                           <div className="text-xs text-gray-400">
                             {task.completedAt
                               ? new Date(task.completedAt).toLocaleDateString('ru-RU')
-                              : task.scheduledAt
-                              ? new Date(task.scheduledAt).toLocaleDateString('ru-RU')
-                              : '—'}
+                              : formatTaskScheduleRangeRu(task) !== '—'
+                                ? formatTaskScheduleRangeRu(task)
+                                : '—'}
                           </div>
                           {task.report && (
                             <a

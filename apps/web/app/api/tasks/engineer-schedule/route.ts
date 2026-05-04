@@ -7,7 +7,10 @@ type ScheduleTask = {
   type: string
   priority: string
   status: string
+  taskType: string
   scheduledAt: Date | null
+  startDate: Date | null
+  endDate: Date | null
   equipment: { brand: string; model: string; serialNumber: string }
 }
 
@@ -55,25 +58,43 @@ export async function GET(req: NextRequest) {
       assignedToId: { in: engineerIds },
       deletedAt: null,
       status: { notIn: ['CANCELLED', 'DONE'] },
-      scheduledAt: { gte: start, lt: end },
       ...managerScope,
+      OR: [
+        { scheduledAt: { gte: start, lt: end } },
+        {
+          taskType: 'LONG_TERM',
+          startDate: { gte: start, lt: end },
+        },
+        {
+          taskType: 'LONG_TERM',
+          endDate: { gte: start, lt: end },
+        },
+      ],
     },
     select: {
       id: true,
       type: true,
       priority: true,
       status: true,
+      taskType: true,
       scheduledAt: true,
+      startDate: true,
+      endDate: true,
       assignedToId: true,
       equipment: { select: { brand: true, model: true, serialNumber: true } },
     },
-    orderBy: { scheduledAt: 'asc' },
+    orderBy: [{ endDate: 'asc' }, { scheduledAt: 'asc' }],
   })) as Array<ScheduleTask & { assignedToId: string | null }>
 
   const grouped = new Map<string, ScheduleTask[]>()
   for (const task of tasks) {
-    if (!task.assignedToId || !task.scheduledAt) continue
-    const date = task.scheduledAt.toISOString().slice(0, 10)
+    if (!task.assignedToId) continue
+    const anchor =
+      task.taskType === 'LONG_TERM'
+        ? task.endDate ?? task.startDate ?? task.scheduledAt
+        : task.scheduledAt
+    if (!anchor) continue
+    const date = new Date(anchor).toISOString().slice(0, 10)
     const key = `${task.assignedToId}|${date}`
     const arr = grouped.get(key) ?? []
     arr.push(task)

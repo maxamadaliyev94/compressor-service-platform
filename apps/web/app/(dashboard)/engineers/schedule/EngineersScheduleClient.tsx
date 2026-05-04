@@ -8,7 +8,10 @@ type ScheduleTask = {
   type: string
   priority: string
   status: string
+  taskType?: string
   scheduledAt: string | null
+  startDate?: string | null
+  endDate?: string | null
   equipment: { brand: string; model: string; serialNumber: string }
 }
 type ScheduleEntry = {

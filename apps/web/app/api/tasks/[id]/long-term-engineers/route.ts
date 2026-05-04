@@ -71,9 +71,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     where: { id: { in: engineerIds }, role: 'ENGINEER', isActive: true },
     select: { id: true, name: true },
   })
-  if (engineers.length !== engineerIds.length) {
-    return NextResponse.json({ error: 'Некорректный список инженеров' }, { status: 400 })
+  const engineerIdOk = new Set(engineers.map((e) => e.id))
+  const orderedEngineerIds = engineerIds.filter((id) => engineerIdOk.has(id))
+
+  if (orderedEngineerIds.length === 0 && engineerIds.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          'Ни один из выбранных пользователей не является активным инженером. Назначать можно только инженеров из списка.',
+      },
+      { status: 400 }
+    )
   }
+
+  const engineerIdsNorm = orderedEngineerIds
 
   const prevRows = await db.longTermTaskEngineer.findMany({
     where: { taskId: task.id },
@@ -83,16 +94,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const oldAssignees = new Set<string>(prevFromJunction)
   if (task.assignedToId) oldAssignees.add(task.assignedToId)
 
-  const newSet = new Set(engineerIds)
+  const newSet = new Set(engineerIdsNorm)
 
   await db.$transaction(async (tx) => {
     await tx.longTermTaskEngineer.deleteMany({ where: { taskId: task.id } })
     await tx.longTermTaskEngineer.createMany({
-      data: engineerIds.map((engineerId) => ({ taskId: task.id, engineerId })),
+      data: engineerIdsNorm.map((engineerId) => ({ taskId: task.id, engineerId })),
     })
     await tx.serviceTask.update({
       where: { id: task.id },
-      data: { assignedToId: engineerIds[0] ?? null },
+      data: { assignedToId: engineerIdsNorm[0] ?? null },
     })
   })
 
@@ -101,7 +112,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       await syncEngineerFreeIfNoActiveTasks(uid)
     }
   }
-  for (const uid of engineerIds) {
+  for (const uid of engineerIdsNorm) {
     if (!oldAssignees.has(uid)) {
       await markEngineerBusy(uid)
     }
@@ -130,5 +141,5 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
   }
 
-  return NextResponse.json({ ok: true, engineerIds })
+  return NextResponse.json({ ok: true, engineerIds: engineerIdsNorm })
 }
