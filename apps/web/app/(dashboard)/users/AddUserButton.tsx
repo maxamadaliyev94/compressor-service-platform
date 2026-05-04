@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import RegisterFaceIdButton from './RegisterFaceIdButton'
 
 const roleLabels: Record<string, string> = {
   ADMIN: 'Администратор',
@@ -14,36 +15,68 @@ export default function AddUserButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [createdUserId, setCreatedUserId] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', login: '', email: '', phone: '', role: 'ENGINEER', password: 'password123' })
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    setLoading(false)
+  function closeModal() {
     setOpen(false)
+    setCreatedUserId(null)
     setForm({ name: '', login: '', email: '', phone: '', role: 'ENGINEER', password: 'password123' })
     router.refresh()
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setCreatedUserId(null)
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    const data = await res.json().catch(() => ({}))
+    setLoading(false)
+    if (!res.ok) {
+      alert((data as { error?: string }).error || 'Ошибка создания пользователя')
+      return
+    }
+    const id = (data as { id?: string }).id
+    if (id) setCreatedUserId(id)
+    else closeModal()
+  }
+
   return (
     <>
-      <button onClick={() => setOpen(true)} className="w-full md:w-auto min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+      <button
+        onClick={() => {
+          setCreatedUserId(null)
+          setOpen(true)
+        }}
+        className="w-full md:w-auto min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
+      >
         + Добавить пользователя
       </button>
 
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
           <div className="bg-white rounded-t-2xl md:rounded-xl p-4 md:p-6 w-full md:max-w-md shadow-xl max-h-[92vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">Новый пользователь</h2>
+            <h2 className="text-lg font-bold mb-4">{createdUserId ? 'Пользователь создан' : 'Новый пользователь'}</h2>
+            {createdUserId ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  При необходимости зарегистрируйте Face ID или Touch ID на <strong>этом устройстве</strong> для входа под
+                  созданным пользователем.
+                </p>
+                <RegisterFaceIdButton userId={createdUserId} />
+                <button type="button" onClick={closeModal} className="w-full min-h-11 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
+                  Закрыть
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">ФИО *</label>
@@ -122,6 +155,7 @@ export default function AddUserButton() {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

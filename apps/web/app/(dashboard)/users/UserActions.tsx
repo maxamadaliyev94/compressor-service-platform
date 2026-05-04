@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import RegisterFaceIdButton from './RegisterFaceIdButton'
 
 export default function UserActions({ user, currentUserId }: { user: any, currentUserId?: string }) {
   const router = useRouter()
@@ -46,7 +47,8 @@ export default function UserActions({ user, currentUserId }: { user: any, curren
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      {user.isActive && <RegisterFaceIdButton userId={user.id} disabled={loading} compact />}
       <button onClick={toggle} disabled={loading || isSelf}
         title={user.isActive ? 'Деактивировать' : 'Активировать'}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${user.isActive ? 'bg-green-500' : 'bg-gray-300'} ${isSelf ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>

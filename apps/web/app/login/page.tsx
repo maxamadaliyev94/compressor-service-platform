@@ -2,13 +2,16 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { startAuthentication } from '@simplewebauthn/browser'
 
 export default function LoginPage() {
   const router = useRouter()
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [faceIdMessage, setFaceIdMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [faceIdLoading, setFaceIdLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -24,6 +27,61 @@ export default function LoginPage() {
       setError('Неверный логин или пароль')
     } else {
       router.push('/')
+    }
+  }
+
+  async function handleFaceId() {
+    setFaceIdMessage('')
+    setError('')
+    const trimmed = login.trim().toLowerCase()
+    if (!trimmed) {
+      setFaceIdMessage('Сначала введите логин')
+      return
+    }
+    setFaceIdLoading(true)
+    try {
+      const optRes = await fetch('/api/webauthn/login/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: trimmed }),
+      })
+      if (optRes.status === 404) {
+        setFaceIdMessage('Face ID не настроен, войдите через пароль')
+        return
+      }
+      if (!optRes.ok) {
+        setFaceIdMessage('Не удалось начать вход по биометрии')
+        return
+      }
+      const { options, challengeToken } = (await optRes.json()) as {
+        options: Parameters<typeof startAuthentication>[0]['optionsJSON']
+        challengeToken: string
+      }
+      const assertion = await startAuthentication({ optionsJSON: options })
+      const verifyRes = await fetch('/api/webauthn/login/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: assertion, challengeToken }),
+      })
+      if (!verifyRes.ok) {
+        setFaceIdMessage('Биометрия не подтверждена. Попробуйте снова или войдите через пароль.')
+        return
+      }
+      const { token } = (await verifyRes.json()) as { token?: string }
+      if (!token) {
+        setFaceIdMessage('Ошибка сервера')
+        return
+      }
+      const signRes = await signIn('webauthn', { token, redirect: false })
+      if (signRes?.error) {
+        setFaceIdMessage('Не удалось создать сессию. Войдите через пароль.')
+        return
+      }
+      router.push('/')
+    } catch {
+      setFaceIdMessage('Браузер не поддерживает WebAuthn или доступ запрещён.')
+    } finally {
+      setFaceIdLoading(false)
     }
   }
 
@@ -65,6 +123,17 @@ export default function LoginPage() {
           >
             {loading ? 'Вход...' : 'Войти'}
           </button>
+          <button
+            type="button"
+            onClick={handleFaceId}
+            disabled={faceIdLoading || loading}
+            className="w-full border border-gray-200 text-gray-800 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          >
+            {faceIdLoading ? 'Ожидание биометрии…' : 'Войти через Face ID'}
+          </button>
+          {faceIdMessage && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm px-3 py-2 rounded-lg">{faceIdMessage}</div>
+          )}
         </form>
         <div className="mt-4 text-sm text-gray-500">
           Нет аккаунта?{' '}

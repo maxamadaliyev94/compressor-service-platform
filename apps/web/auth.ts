@@ -54,5 +54,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
+    Credentials({
+      id: 'webauthn',
+      credentials: {
+        token: { label: 'Token', type: 'text' },
+      },
+      async authorize(credentials) {
+        const token = credentials?.token as string | undefined
+        if (!token) return null
+        const { verifyWebAuthnSessionToken } = await import('@/lib/webauthn-challenge')
+        const payload = verifyWebAuthnSessionToken(token)
+        if (!payload) return null
+        const user = await db.user.findUnique({ where: { id: payload.userId } })
+        if (!user?.isActive) return null
+        return {
+          id: user.id,
+          email: user.email ?? undefined,
+          name: user.name,
+          role: user.role,
+          clientId: user.clientId,
+        }
+      },
+    }),
   ],
 })
