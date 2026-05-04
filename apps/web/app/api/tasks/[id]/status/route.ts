@@ -4,6 +4,7 @@ import { auth } from '@/auth'
 import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
+import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import type { Role, ServiceTask, TaskStatus } from '@prisma/client'
 
 function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
@@ -38,7 +39,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (status === 'CANCELLED' && session.user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+    if (session.user.role === 'CHIEF_ENGINEER') {
+      const parentId = parseDelegationParentTaskId(task.comment)
+      if (!parentId) {
+        return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+      }
+      const parent = await db.serviceTask.findUnique({
+        where: { id: parentId },
+        select: { assignedToId: true, deletedAt: true },
+      })
+      if (!parent || parent.deletedAt || parent.assignedToId !== session.user.id) {
+        return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+      }
+    } else {
+      return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+    }
   }
 
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
@@ -113,7 +128,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     )
   }
 
-  if (status === 'CANCELLED' && previousStatus !== 'CANCELLED') {
+  if (status === 'CANCELLED') {
     await notifyClientSubscriberForEquipmentWork(task.equipmentId, {
       title: 'Задача отменена',
       message: 'Задача по оборудованию клиента отменена.',

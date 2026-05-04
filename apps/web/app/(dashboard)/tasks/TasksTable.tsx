@@ -143,6 +143,75 @@ function bundleToExportTask(bundle: TaskBundle): TaskRow {
   }
 }
 
+function BundleEngineerCountBadge({ bundle }: { bundle: TaskBundle }) {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    let cancelled = false
+    let onDoc: ((ev: MouseEvent) => void) | undefined
+    const t = window.setTimeout(() => {
+      if (cancelled) return
+      onDoc = () => setMobileOpen(false)
+      document.addEventListener('click', onDoc)
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+      if (onDoc) document.removeEventListener('click', onDoc)
+    }
+  }, [mobileOpen])
+
+  const names = sortBundleTasksForDisplay(bundle)
+    .map((t) => t.assignedTo?.name)
+    .filter((n): n is string => Boolean(n))
+
+  const list = (
+    <ul className="max-h-48 overflow-y-auto space-y-1 py-0.5">
+      {names.length === 0 ? (
+        <li className="text-gray-400">Нет имён</li>
+      ) : (
+        names.map((n, i) => (
+          <li key={`${bundle.key}-n-${i}`} className="leading-snug break-words">
+            {n}
+          </li>
+        ))
+      )}
+    </ul>
+  )
+
+  return (
+    <span
+      className="relative inline-flex group/pill align-baseline ml-1.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="text-[10px] font-medium text-indigo-700 border-b border-dotted border-indigo-400 cursor-pointer md:cursor-help text-left p-0 m-0 bg-transparent font-inherit"
+        onClick={(e) => {
+          e.stopPropagation()
+          if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+            setMobileOpen((o) => !o)
+          }
+        }}
+      >
+        · {bundle.tasks.length} инж.
+      </button>
+      <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden min-w-[11rem] max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 shadow-lg md:block md:opacity-0 md:invisible md:shadow-xl md:transition-opacity md:duration-150 md:group-hover/pill:pointer-events-auto md:group-hover/pill:visible md:group-hover/pill:opacity-100">
+        {list}
+      </div>
+      {mobileOpen && (
+        <div
+          className="pointer-events-auto absolute left-0 top-full z-50 mt-1 block min-w-[11rem] max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 shadow-xl md:hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {list}
+        </div>
+      )}
+    </span>
+  )
+}
+
 export default function TasksTable({
   tasks,
   typeLabels,
@@ -337,9 +406,7 @@ export default function TasksTable({
             <div className="font-medium text-sm">
               <span className={`mr-1 ${priorityColors[rep.priority]}`}>●</span>
               №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
-              {multi && (
-                <span className="ml-1.5 text-[10px] font-medium text-indigo-700">· {bundle.tasks.length} инж.</span>
-              )}
+              {multi && <BundleEngineerCountBadge bundle={bundle} />}
             </div>
             <div className="flex flex-col items-end gap-1">
               <span
@@ -426,9 +493,7 @@ export default function TasksTable({
             <span>
               №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
             </span>
-            {multi && (
-              <span className="text-[10px] font-medium text-indigo-700">· {bundle.tasks.length} инж.</span>
-            )}
+            {multi && <BundleEngineerCountBadge bundle={bundle} />}
           </div>
         </td>
         <td className="p-3">

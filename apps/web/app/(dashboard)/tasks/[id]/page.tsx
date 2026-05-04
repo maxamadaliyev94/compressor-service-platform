@@ -2,8 +2,10 @@ import { db } from '@/lib/db'
 import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
+import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import TaskAdminActions from './TaskAdminActions'
 import TaskDelegatePanel from './TaskDelegatePanel'
+import TaskScheduledAtEditor from './TaskScheduledAtEditor'
 import ClientSignaturePanel from './ClientSignaturePanel'
 
 const typeLabels: Record<string, string> = {
@@ -64,6 +66,26 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     task.assignedToId === session.user.id &&
     isNotDone &&
     !task.report
+
+  let chiefOwnsDelegatedSubtree = false
+  if (session.user.role === 'CHIEF_ENGINEER') {
+    const parentId = parseDelegationParentTaskId(task.comment)
+    if (parentId) {
+      const parentRow = await db.serviceTask.findUnique({
+        where: { id: parentId },
+        select: { assignedToId: true, deletedAt: true },
+      })
+      chiefOwnsDelegatedSubtree = Boolean(
+        parentRow && !parentRow.deletedAt && parentRow.assignedToId === session.user.id
+      )
+    }
+  }
+
+  const canEditScheduledAt =
+    isNotDone &&
+    (session.user.role === 'ADMIN' ||
+      (session.user.role === 'CHIEF_ENGINEER' &&
+        (task.assignedToId === session.user.id || chiefOwnsDelegatedSubtree)))
 
   const eq = task.equipment
   const branch = eq.object.branch
@@ -214,8 +236,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Инженер:</span><span>{task.assignedTo?.name || 'Не назначен'}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Создал:</span><span>{task.createdBy.name}</span></div>
-            <div className="flex gap-2"><span className="text-gray-500 w-28">Срок:</span>
-              <span>{task.scheduledAt ? new Date(task.scheduledAt).toLocaleDateString('ru-RU') : '—'}</span>
+            <div className="flex gap-2 items-baseline">
+              <span className="text-gray-500 w-28 shrink-0">Срок:</span>
+              <TaskScheduledAtEditor
+                taskId={task.id}
+                scheduledAtIso={task.scheduledAt ? task.scheduledAt.toISOString() : null}
+                canEdit={canEditScheduledAt}
+              />
             </div>
             {task.completedAt && (
               <div className="flex gap-2"><span className="text-gray-500 w-28">Выполнено:</span>
