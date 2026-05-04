@@ -85,6 +85,18 @@ export function verifyLoginChallengeToken(token: string): LoginChallengePayload 
   return null
 }
 
+export type SignActChallengePayload = { t: 'signAct'; userId: string; challenge: string; exp: number }
+
+export function issueSignActChallengeToken(userId: string, challenge: string): string {
+  const exp = Date.now() + CHALLENGE_TTL_MS
+  const payload = enc({ t: 'signAct', userId, challenge, exp })
+  return `${payload}.${signPayload(payload)}`
+}
+
+export function verifySignActChallengeToken(token: string): SignActChallengePayload | null {
+  return verifySignedPayload<SignActChallengePayload>(token, 'signAct')
+}
+
 export type SessionHandoffPayload = { t: 'session'; userId: string; exp: number }
 
 export function issueWebAuthnSessionToken(userId: string): string {

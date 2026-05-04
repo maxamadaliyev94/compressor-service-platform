@@ -37,12 +37,22 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
     redirect('/')
   }
 
+  const signerProfile = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      savedActSignature: true,
+      _count: { select: { webauthnCredentials: true } },
+    },
+  })
+
   return (
     <ExecuteTaskClient
       task={task}
       regulation={regulation}
       engineerId={session.user.id}
       engineerName={session.user.name || ''}
+      savedActSignature={signerProfile?.savedActSignature ?? null}
+      hasWebAuthnForSign={(signerProfile?._count.webauthnCredentials ?? 0) > 0}
     />
   )
 }

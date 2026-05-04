@@ -1,5 +1,7 @@
 'use client'
 
+import { webAuthnUserVisibleError } from '@/lib/webauthn-client-error'
+import { startAuthentication } from '@simplewebauthn/browser'
 import { useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import ActSignaturePad from './ActSignaturePad'
@@ -38,6 +40,9 @@ interface Props {
   regulation: RegulationWithItems
   engineerId: string
   engineerName: string
+  /** PNG data URL из «Настройка аккаунта» */
+  savedActSignature: string | null
+  hasWebAuthnForSign: boolean
 }
 
 type ChecklistTemplateGroup = {
@@ -173,7 +178,14 @@ function buildFallbackChecklist(taskType: string): ChecklistItem[] {
   )
 }
 
-export default function ExecuteTaskClient({ task, regulation, engineerId, engineerName }: Props) {
+export default function ExecuteTaskClient({
+  task,
+  regulation,
+  engineerId,
+  engineerName,
+  savedActSignature,
+  hasWebAuthnForSign,
+}: Props) {
   const router = useRouter()
   const eq = task.equipment
   const client = eq.object.branch.client
@@ -218,8 +230,60 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
   const [reportPhotos, setReportPhotos] = useState<string[]>([])
   const [engineerSignature, setEngineerSignature] = useState<string | null>(null)
   const [engineerSignedAt, setEngineerSignedAt] = useState<Date | null>(null)
+  const [faceSignMsg, setFaceSignMsg] = useState('')
+  const [faceSignLoading, setFaceSignLoading] = useState(false)
 
   const checkedCount = checklist.filter((i) => i.checked).length
+
+  function applySavedTemplateSignature() {
+    if (!savedActSignature) return
+    setFaceSignMsg('')
+    setEngineerSignature(savedActSignature)
+    setEngineerSignedAt(new Date())
+  }
+
+  async function applySignatureWithFaceId() {
+    setFaceSignMsg('')
+    if (!savedActSignature) {
+      setFaceSignMsg('Сначала сохраните шаблон подписи в «Настройка аккаунта».')
+      return
+    }
+    if (!hasWebAuthnForSign) {
+      setFaceSignMsg('Сначала настройте Face ID в «Настройка аккаунта».')
+      return
+    }
+    setFaceSignLoading(true)
+    try {
+      const optRes = await fetch('/api/webauthn/sign/options', { method: 'POST' })
+      if (optRes.status === 404) {
+        setFaceSignMsg('Face ID не настроен')
+        return
+      }
+      if (!optRes.ok) {
+        setFaceSignMsg('Не удалось начать подтверждение')
+        return
+      }
+      const { options, challengeToken } = (await optRes.json()) as {
+        options: Parameters<typeof startAuthentication>[0]['optionsJSON']
+        challengeToken: string
+      }
+      const assertion = await startAuthentication({ optionsJSON: options })
+      const verifyRes = await fetch('/api/webauthn/sign/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: assertion, challengeToken }),
+      })
+      if (!verifyRes.ok) {
+        setFaceSignMsg('Биометрия не подтверждена')
+        return
+      }
+      applySavedTemplateSignature()
+    } catch (e) {
+      setFaceSignMsg(webAuthnUserVisibleError(e))
+    } finally {
+      setFaceSignLoading(false)
+    }
+  }
 
   function toggleChecklist(id: string) {
     setChecklist((prev) =>
@@ -796,8 +860,32 @@ export default function ExecuteTaskClient({ task, regulation, engineerId, engine
           <div className="bg-white border rounded-xl p-5 space-y-4">
             <h2 className="font-semibold">Подпись инженера</h2>
             <p className="text-xs text-gray-500">
-              Поставьте подпись перед закрытием задачи. Подпись клиента можно добавить позже в карточке задачи.
+              Поставьте подпись перед закрытием задачи. Можно подставить сохранённый шаблон или подтвердить его через Face ID. Подпись клиента можно добавить позже в карточке задачи.
             </p>
+            {!engineerSignature && (savedActSignature || hasWebAuthnForSign) && (
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                {savedActSignature && (
+                  <button
+                    type="button"
+                    onClick={applySavedTemplateSignature}
+                    className="flex-1 border border-green-600 text-green-800 py-2.5 rounded-lg text-sm font-medium hover:bg-green-50"
+                  >
+                    Подставить сохранённую подпись
+                  </button>
+                )}
+                {savedActSignature && hasWebAuthnForSign && (
+                  <button
+                    type="button"
+                    onClick={applySignatureWithFaceId}
+                    disabled={faceSignLoading}
+                    className="flex-1 border border-blue-600 text-blue-800 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50"
+                  >
+                    {faceSignLoading ? 'Сканирование…' : 'Подписать через Face ID'}
+                  </button>
+                )}
+              </div>
+            )}
+            {faceSignMsg && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">{faceSignMsg}</p>}
             <ActSignaturePad
               variant="engineer"
               title="Подпись инженера"

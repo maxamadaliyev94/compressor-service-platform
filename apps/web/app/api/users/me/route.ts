@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
+import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import bcrypt from 'bcryptjs'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,6 +16,7 @@ export async function PATCH(req: NextRequest) {
     lastName?: string
     currentPassword?: string
     newPassword?: string
+    dataUrl?: string | null
   } | null
   if (!body?.action) return NextResponse.json({ error: 'action обязателен' }, { status: 400 })
 
@@ -44,6 +46,26 @@ export async function PATCH(req: NextRequest) {
     await db.user.update({
       where: { id: session.user.id },
       data: { password: hash },
+    })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (body.action === 'savedActSignature') {
+    const raw = body.dataUrl
+    if (raw === null || raw === '') {
+      await db.user.update({
+        where: { id: session.user.id },
+        data: { savedActSignature: null },
+      })
+      return NextResponse.json({ ok: true, savedActSignature: null })
+    }
+    const png = parsePngDataUrlSignature(raw)
+    if (!png) {
+      return NextResponse.json({ error: 'Нужна подпись в формате PNG (data URL)' }, { status: 400 })
+    }
+    await db.user.update({
+      where: { id: session.user.id },
+      data: { savedActSignature: png },
     })
     return NextResponse.json({ ok: true })
   }

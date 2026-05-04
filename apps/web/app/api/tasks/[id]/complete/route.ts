@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createNotification } from '@/lib/notifications'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
+import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { Role, ServiceTask } from '@prisma/client'
 
 function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
@@ -16,15 +17,6 @@ function toOptionalNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
-}
-
-const MAX_SIGNATURE_BYTES = 2_000_000
-
-function parsePngDataUrlSignature(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  if (!value.startsWith('data:image/png;base64,')) return null
-  if (value.length > MAX_SIGNATURE_BYTES) return null
-  return value
 }
 
 function parseSignedAt(value: unknown): Date {

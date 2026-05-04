@@ -9,7 +9,7 @@ export default async function AccountPage() {
 
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, savedActSignature: true },
   })
   if (!user) redirect('/login')
 
@@ -19,7 +19,11 @@ export default async function AccountPage() {
         <h1 className="text-xl md:text-2xl font-bold">Настройка аккаунта</h1>
         <p className="text-sm text-gray-500 mt-1">Профиль, пароль и биометрический вход</p>
       </div>
-      <AccountSettingsClient userId={user.id} initialName={user.name} />
+      <AccountSettingsClient
+        userId={user.id}
+        initialName={user.name}
+        initialSavedActSignature={user.savedActSignature}
+      />
     </div>
   )
 }

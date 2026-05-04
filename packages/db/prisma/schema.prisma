@@ -99,6 +99,8 @@ model User {
   password   String
   name       String
   avatarUrl  String?
+  /// PNG data URL — шаблон подписи инженера на акты (подстановка / Face ID).
+  savedActSignature String? @db.Text
   role       Role     @default(ENGINEER)
   phone      String?
   telegramId String?

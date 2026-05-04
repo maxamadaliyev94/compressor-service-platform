@@ -1,8 +1,9 @@
 'use client'
 
+import ActSignaturePad from '../tasks/[id]/execute/ActSignaturePad'
 import RegisterFaceIdButton from '../users/RegisterFaceIdButton'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 function splitName(full: string): { firstName: string; lastName: string } {
   const p = full.trim().split(/\s+/)
@@ -14,9 +15,11 @@ function splitName(full: string): { firstName: string; lastName: string } {
 export default function AccountSettingsClient({
   userId,
   initialName,
+  initialSavedActSignature,
 }: {
   userId: string
   initialName: string
+  initialSavedActSignature: string | null
 }) {
   const router = useRouter()
   const [firstName, setFirstName] = useState(() => splitName(initialName).firstName)
@@ -29,6 +32,29 @@ export default function AccountSettingsClient({
   const [newPassword2, setNewPassword2] = useState('')
   const [pwdMsg, setPwdMsg] = useState('')
   const [pwdLoading, setPwdLoading] = useState(false)
+
+  const [templateSig, setTemplateSig] = useState<string | null>(initialSavedActSignature)
+  const [sigMsg, setSigMsg] = useState('')
+
+  useEffect(() => {
+    setTemplateSig(initialSavedActSignature)
+  }, [initialSavedActSignature])
+
+  async function persistTemplate(dataUrl: string | null) {
+    const res = await fetch('/api/users/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'savedActSignature', dataUrl }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setSigMsg((data as { error?: string }).error || 'Не удалось сохранить подпись')
+      return false
+    }
+    setSigMsg(dataUrl ? 'Шаблон подписи сохранён' : 'Шаблон удалён')
+    router.refresh()
+    return true
+  }
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
@@ -98,7 +124,9 @@ export default function AccountSettingsClient({
               />
             </div>
           </div>
-          {profileMsg && <p className={`text-sm ${profileMsg === 'Сохранено' ? 'text-green-600' : 'text-red-600'}`}>{profileMsg}</p>}
+          {profileMsg && (
+            <p className={`text-sm ${profileMsg.startsWith('Сохранено') ? 'text-green-600' : 'text-red-600'}`}>{profileMsg}</p>
+          )}
           <button
             type="submit"
             disabled={profileLoading}
@@ -152,6 +180,39 @@ export default function AccountSettingsClient({
             {pwdLoading ? 'Сохранение…' : 'Сменить пароль'}
           </button>
         </form>
+      </section>
+
+      <section className="bg-white border rounded-xl p-4 md:p-6 shadow-sm">
+        <h2 className="text-lg font-semibold mb-1">Подпись на акты</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Один раз нарисуйте подпись при чистых руках. При закрытии задачи её можно подставить одной кнопкой или подтвердить через Face ID — без рисования в масле.
+        </p>
+        <ActSignaturePad
+          variant="engineer"
+          title="Шаблон подписи инженера"
+          signedDataUrl={templateSig}
+          signedAt={null}
+          signerName={null}
+          onSigned={async (url) => {
+            setSigMsg('')
+            const ok = await persistTemplate(url)
+            if (ok) setTemplateSig(url)
+          }}
+          onReset={async () => {
+            setSigMsg('')
+            const ok = await persistTemplate(null)
+            if (ok) setTemplateSig(null)
+          }}
+        />
+        {sigMsg && (
+          <p
+            className={`text-sm mt-2 ${
+              sigMsg.includes('Не ') || sigMsg.includes('Нужна') || sigMsg.includes('Ошибка') ? 'text-red-600' : 'text-green-700'
+            }`}
+          >
+            {sigMsg}
+          </p>
+        )}
       </section>
 
       <section className="bg-white border rounded-xl p-4 md:p-6 shadow-sm">
