@@ -32,13 +32,20 @@ export async function getTaskClientId(taskId: string): Promise<string | null> {
   return t?.equipment.object.branch.clientId ?? null
 }
 
+/** Задачи, где инженер участвует: основной исполнитель или запись в LongTermTaskEngineer. */
+export function prismaWhereEngineerTaskAssignment(engineerId: string) {
+  return {
+    OR: [{ assignedToId: engineerId }, { longTermEngineers: { some: { engineerId } } }],
+  }
+}
+
 /** Инженер имеет доступ к компании, если у него есть хотя бы одна назначенная задача на её оборудовании. */
 export async function engineerHasTaskOnClient(engineerId: string, clientId: string): Promise<boolean> {
   const n = await db.serviceTask.count({
     where: {
-      assignedToId: engineerId,
       deletedAt: null,
       equipment: { object: { branch: { clientId } } },
+      ...prismaWhereEngineerTaskAssignment(engineerId),
     },
   })
   return n > 0
@@ -75,8 +82,8 @@ export async function canReadEquipment(session: AuthedSession, equipmentId: stri
     const n = await db.serviceTask.count({
       where: {
         equipmentId,
-        assignedToId: session.user.id,
         deletedAt: null,
+        ...prismaWhereEngineerTaskAssignment(session.user.id),
       },
     })
     return n > 0
@@ -112,6 +119,11 @@ export async function canReadTask(session: AuthedSession, taskId: string): Promi
       assignedToId: true,
       createdById: true,
       equipment: { select: { object: { select: { branch: { select: { clientId: true } } } } } },
+      longTermEngineers: {
+        where: { engineerId: session.user.id },
+        select: { id: true },
+        take: 1,
+      },
     },
   })
   if (!task || task.deletedAt) return false
@@ -124,7 +136,7 @@ export async function canReadTask(session: AuthedSession, taskId: string): Promi
     return c?.managerId === session.user.id
   }
   if (role === 'ENGINEER') {
-    return task.assignedToId === session.user.id
+    return task.assignedToId === session.user.id || task.longTermEngineers.length > 0
   }
   if (role === 'CLIENT') {
     return session.user.clientId === clientId

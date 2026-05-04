@@ -3,7 +3,7 @@ import { getSession } from '@/lib/roles'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role, TaskStatus } from '@prisma/client'
 import TasksTable from './TasksTable'
-import { prismaWhereClientTasks, prismaWhereManagerTasks } from '@/lib/api-access'
+import { prismaWhereClientTasks, prismaWhereEngineerTaskAssignment, prismaWhereManagerTasks } from '@/lib/api-access'
 
 export default async function TasksPage() {
   await requirePermission('section:tasks')
@@ -19,7 +19,7 @@ export default async function TasksPage() {
   const tasks = await db.serviceTask.findMany({
     where:
       role === 'ENGINEER'
-        ? { assignedToId: session.user.id, deletedAt: null, ...activeOnlyWhere }
+        ? { deletedAt: null, ...activeOnlyWhere, ...prismaWhereEngineerTaskAssignment(session.user.id) }
         : role === 'MANAGER'
           ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id), ...activeOnlyWhere }
           : role === 'CLIENT'

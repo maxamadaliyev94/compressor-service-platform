@@ -7,10 +7,18 @@ import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/enginee
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import type { Role, ServiceTask, TaskStatus } from '@prisma/client'
 
-function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
+function canExecuteServiceTask(
+  role: Role,
+  userId: string,
+  task: ServiceTask & { longTermEngineers?: { id: string }[] }
+): boolean {
   if (role === 'CLIENT') return false
   if (role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER') return true
-  if (role === 'ENGINEER') return task.assignedToId === userId
+  if (role === 'ENGINEER') {
+    if (task.assignedToId === userId) return true
+    if (task.taskType === 'LONG_TERM' && (task.longTermEngineers?.length ?? 0) > 0) return true
+    return false
+  }
   return false
 }
 
@@ -21,7 +29,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { status } = (await req.json()) as { status?: TaskStatus }
   if (!status) return NextResponse.json({ error: 'status обязателен' }, { status: 400 })
 
-  const task = await db.serviceTask.findUnique({ where: { id: params.id } })
+  const task = await db.serviceTask.findUnique({
+    where: { id: params.id },
+    include: {
+      longTermEngineers: {
+        where: { engineerId: session.user.id },
+        select: { id: true },
+      },
+    },
+  })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (task.deletedAt) {
     return NextResponse.json({ error: 'Задача находится в корзине' }, { status: 400 })
@@ -67,12 +83,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data: { status },
   })
 
-  if (updated.assignedToId) {
-    if (status === 'IN_PROGRESS') {
-      await markEngineerBusy(updated.assignedToId)
+  if (status === 'IN_PROGRESS' && updated.assignedToId) {
+    await markEngineerBusy(updated.assignedToId)
+  }
+  if (status === 'DONE' || status === 'CANCELLED') {
+    const idsToSync = new Set<string>()
+    if (updated.assignedToId) idsToSync.add(updated.assignedToId)
+    if (task.taskType === 'LONG_TERM') {
+      const ltRows = await db.longTermTaskEngineer.findMany({
+        where: { taskId: task.id },
+        select: { engineerId: true },
+      })
+      for (const r of ltRows) idsToSync.add(r.engineerId)
     }
-    if (status === 'DONE' || status === 'CANCELLED') {
-      await syncEngineerFreeIfNoActiveTasks(updated.assignedToId)
+    for (const uid of idsToSync) {
+      await syncEngineerFreeIfNoActiveTasks(uid)
     }
   }
 

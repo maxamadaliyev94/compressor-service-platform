@@ -2,7 +2,7 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { hasPermission } from '@/lib/permissions'
-import { canReadClientScope, type AuthedSession } from '@/lib/api-access'
+import { canReadClientScope, prismaWhereEngineerTaskAssignment, type AuthedSession } from '@/lib/api-access'
 import type { Role } from '@prisma/client'
 
 export async function GET(req: NextRequest) {
@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
     } else {
       const taskRows = await db.serviceTask.findMany({
         where: {
-          assignedToId: s.user.id,
           deletedAt: null,
+          ...prismaWhereEngineerTaskAssignment(s.user.id),
         },
         select: { equipmentId: true },
       })

@@ -84,6 +84,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   if (session.user.role === 'MANAGER' && client.managerId !== session.user.id) {
     notFound()
   }
+  if (session.user.role === 'ENGINEER') {
+    const onTask =
+      task.assignedToId === session.user.id ||
+      task.longTermEngineers.some((r) => r.engineerId === session.user.id)
+    if (!onTask) notFound()
+  }
 
   const isNotDone = !['DONE', 'CANCELLED'].includes(task.status)
   const showChiefDelegate =
@@ -98,7 +104,9 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     isNotDone &&
     !task.report &&
     (session.user.role === 'ADMIN' ||
-      (session.user.role === 'CHIEF_ENGINEER' && task.managedByChiefId === session.user.id))
+      (session.user.role === 'CHIEF_ENGINEER' &&
+        (task.managedByChiefId === session.user.id ||
+          (!task.managedByChiefId && task.assignedToId === session.user.id))))
 
   let chiefOwnsDelegatedSubtree = false
   if (session.user.role === 'CHIEF_ENGINEER') {
@@ -165,10 +173,11 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   const canChiefSetWorkType =
     isNotDone &&
     !task.report &&
-    !isDelegatedChild &&
-    role === 'CHIEF_ENGINEER' &&
-    (task.assignedToId === session.user.id ||
-      (task.managedByChiefId !== null && task.managedByChiefId === session.user.id))
+    (role === 'ADMIN' ||
+      (!isDelegatedChild &&
+        role === 'CHIEF_ENGINEER' &&
+        (task.assignedToId === session.user.id ||
+          (task.managedByChiefId !== null && task.managedByChiefId === session.user.id))))
   const sessionClientId = session?.user?.clientId ?? null
   const clientSignaturePending =
     task.status === 'DONE' && task.report && !task.report.clientSignature
@@ -324,6 +333,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               taskType={task.taskType === 'LONG_TERM' ? 'LONG_TERM' : 'QUICK'}
               canEdit={canChiefSetWorkType}
               hasDailyEntries={task.dailyWorks.length > 0}
+              startDateIso={task.startDate ? task.startDate.toISOString() : null}
+              endDateIso={task.endDate ? task.endDate.toISOString() : null}
+              scheduledAtIso={task.scheduledAt ? task.scheduledAt.toISOString() : null}
+              canEditLongTermPlanDates={canEditLongTermPlanDates}
+              canEditScheduledAt={canEditScheduledAt}
+              embedScheduleFields={canChiefSetWorkType}
             />
             <div className="flex gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[task.type]}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Приоритет:</span>
@@ -338,28 +353,29 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               </span>
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Создал:</span><span>{task.createdBy.name}</span></div>
-            {task.taskType === 'LONG_TERM' ? (
-              <div className="flex gap-2 items-start">
-                <span className="text-gray-500 w-28 shrink-0 pt-0.5">Период:</span>
-                <div className="flex-1 min-w-0">
-                  <TaskLongTermDatesEditor
+            {!canChiefSetWorkType &&
+              (task.taskType === 'LONG_TERM' ? (
+                <div className="flex gap-2 items-start">
+                  <span className="text-gray-500 w-28 shrink-0 pt-0.5">Период:</span>
+                  <div className="flex-1 min-w-0">
+                    <TaskLongTermDatesEditor
+                      taskId={task.id}
+                      startDateIso={task.startDate ? task.startDate.toISOString() : null}
+                      endDateIso={task.endDate ? task.endDate.toISOString() : null}
+                      canEdit={canEditLongTermPlanDates}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2 items-baseline">
+                  <span className="text-gray-500 w-28 shrink-0">Срок:</span>
+                  <TaskScheduledAtEditor
                     taskId={task.id}
-                    startDateIso={task.startDate ? task.startDate.toISOString() : null}
-                    endDateIso={task.endDate ? task.endDate.toISOString() : null}
-                    canEdit={canEditLongTermPlanDates}
+                    scheduledAtIso={task.scheduledAt ? task.scheduledAt.toISOString() : null}
+                    canEdit={canEditScheduledAt}
                   />
                 </div>
-              </div>
-            ) : (
-              <div className="flex gap-2 items-baseline">
-                <span className="text-gray-500 w-28 shrink-0">Срок:</span>
-                <TaskScheduledAtEditor
-                  taskId={task.id}
-                  scheduledAtIso={task.scheduledAt ? task.scheduledAt.toISOString() : null}
-                  canEdit={canEditScheduledAt}
-                />
-              </div>
-            )}
+              ))}
             {task.completedAt && (
               <div className="flex gap-2"><span className="text-gray-500 w-28">Выполнено:</span>
                 <span>{new Date(task.completedAt).toLocaleDateString('ru-RU')}</span>
@@ -378,6 +394,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
       {showLongTermChiefPanel && (
         <TaskLongTermChiefPanel
+          key={task.id}
           taskId={task.id}
           initialEngineerIds={
             task.longTermEngineers.length > 0
@@ -386,6 +403,17 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 ? [task.assignedToId]
                 : []
           }
+          initialAssignedEngineers={(() => {
+            const rows = task.longTermEngineers.map((r) => ({ id: r.engineerId, name: r.engineer.name }))
+            if (
+              task.assignedToId &&
+              task.assignedTo &&
+              !rows.some((r) => r.id === task.assignedToId)
+            ) {
+              rows.push({ id: task.assignedTo.id, name: task.assignedTo.name })
+            }
+            return rows
+          })()}
           equipmentCurrentHours={eq.currentHours}
           equipmentNextServiceHours={eq.nextServiceHours}
         />

@@ -7,10 +7,18 @@ import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { ChecklistItemAction, Role, ServiceTask } from '@prisma/client'
 import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
 
-function canExecuteServiceTask(role: Role, userId: string, task: ServiceTask): boolean {
+function canExecuteServiceTask(
+  role: Role,
+  userId: string,
+  task: ServiceTask & { longTermEngineers?: { id: string }[] }
+): boolean {
   if (role === 'CLIENT') return false
   if (role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER') return true
-  if (role === 'ENGINEER') return task.assignedToId === userId
+  if (role === 'ENGINEER') {
+    if (task.assignedToId === userId) return true
+    if (task.taskType === 'LONG_TERM' && (task.longTermEngineers?.length ?? 0) > 0) return true
+    return false
+  }
   return false
 }
 
@@ -131,7 +139,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    include: { report: true, equipment: true },
+    include: {
+      report: true,
+      equipment: true,
+      longTermEngineers: {
+        where: { engineerId: session.user.id },
+        select: { id: true },
+      },
+    },
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (task.deletedAt) return NextResponse.json({ error: 'Задача находится в корзине' }, { status: 400 })

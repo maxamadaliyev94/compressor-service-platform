@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { prismaWhereEngineerTaskAssignment } from '@/lib/api-access'
 
 const ACTIVE_TASK_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'] as const
 
@@ -15,9 +16,9 @@ export async function markEngineerBusy(userId: string) {
 export async function syncEngineerFreeIfNoActiveTasks(userId: string) {
   const activeCount = await db.serviceTask.count({
     where: {
-      assignedToId: userId,
       deletedAt: null,
       status: { in: [...ACTIVE_TASK_STATUSES] },
+      ...prismaWhereEngineerTaskAssignment(userId),
     },
   })
 

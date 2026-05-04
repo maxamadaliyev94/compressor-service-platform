@@ -9,17 +9,20 @@ type UserRow = { id: string; name: string; role: string; isActive?: boolean }
 export default function TaskLongTermChiefPanel({
   taskId,
   initialEngineerIds,
+  initialAssignedEngineers,
   equipmentCurrentHours,
   equipmentNextServiceHours,
 }: {
   taskId: string
   initialEngineerIds: string[]
+  initialAssignedEngineers: { id: string; name: string }[]
   equipmentCurrentHours: number
   equipmentNextServiceHours: number | null
 }) {
   const router = useRouter()
   const [users, setUsers] = useState<UserRow[]>([])
-  const [selectedIds, setSelectedIds] = useState<string[]>(initialEngineerIds)
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => [...initialEngineerIds])
+  const [assignEditOpen, setAssignEditOpen] = useState(() => initialEngineerIds.length === 0)
   const [assignBusy, setAssignBusy] = useState(false)
   const [showComplete, setShowComplete] = useState(false)
   const [completeBusy, setCompleteBusy] = useState(false)
@@ -33,22 +36,28 @@ export default function TaskLongTermChiefPanel({
   const [engineerSignedAt, setEngineerSignedAt] = useState<Date | null>(null)
 
   useEffect(() => {
+    setSelectedIds([...initialEngineerIds])
+  }, [initialEngineerIds])
+
+  useEffect(() => {
     fetch('/api/users')
       .then((r) => r.json())
-      .then((data: UserRow[]) => {
+      .then((data: UserRow[] | { error?: string }) => {
         const list = Array.isArray(data) ? data : []
         setUsers(list.filter((u) => u.role === 'ENGINEER' && u.isActive !== false))
       })
   }, [])
 
   useEffect(() => {
-    if (users.length === 0) {
-      setSelectedIds([...initialEngineerIds])
-      return
-    }
+    if (users.length === 0) return
     const allowed = new Set(users.map((u) => u.id))
     setSelectedIds(initialEngineerIds.filter((id) => allowed.has(id)))
-  }, [initialEngineerIds, users])
+  }, [users, initialEngineerIds])
+
+  const summaryNames =
+    initialAssignedEngineers.length > 0
+      ? initialAssignedEngineers.map((e) => e.name).join(', ')
+      : 'Никого не назначено'
 
   function toggle(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -111,43 +120,74 @@ export default function TaskLongTermChiefPanel({
 
   return (
     <div className="bg-violet-50 border border-violet-200 rounded-xl p-5 mb-6 space-y-4">
-      <h2 className="font-semibold text-violet-900">Долгосрочная задача — управление</h2>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <h2 className="font-semibold text-violet-900">Долгосрочная задача — управление</h2>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {!assignEditOpen ? (
+            <button
+              type="button"
+              onClick={() => setAssignEditOpen(true)}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-violet-400 text-violet-900 bg-white hover:bg-violet-100"
+            >
+              Редактировать назначение
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAssignEditOpen(false)}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Свернуть
+            </button>
+          )}
+        </div>
+      </div>
       <p className="text-sm text-violet-800">
         Назначьте одного или нескольких исполнителей. По завершении всех работ закройте задачу — будет сформирован
         сводный акт с журналом по дням.
       </p>
-      {users.length === 0 ? (
-        <p className="text-sm text-gray-500">Загрузка списка инженеров…</p>
-      ) : (
-        <>
-          <div>
-            <span className="text-gray-600 text-sm block mb-2">Инженеры</span>
-            <div className="border rounded-lg bg-white p-3 max-h-48 overflow-y-auto space-y-2">
-              {users.map((u) => (
-                <label key={u.id} className="flex items-start gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(u.id)}
-                    onChange={() => toggle(u.id)}
-                    className="w-4 h-4 mt-0.5 accent-violet-600 shrink-0"
-                  />
-                  <span className="text-gray-900">{u.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <button
-              type="button"
-              disabled={assignBusy}
-              onClick={() => void saveEngineers()}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
-            >
-              {assignBusy ? 'Сохранение…' : `Сохранить назначение (${selectedIds.length})`}
-            </button>
-          </div>
-        </>
+
+      {!assignEditOpen && (
+        <div className="rounded-lg border border-violet-200 bg-white/80 px-3 py-2 text-sm text-gray-800">
+          <span className="text-gray-500">Назначены: </span>
+          {summaryNames}
+        </div>
       )}
+
+      {assignEditOpen &&
+        (users.length === 0 ? (
+          <p className="text-sm text-gray-500">Загрузка списка инженеров…</p>
+        ) : (
+          <>
+            <div>
+              <span className="text-gray-600 text-sm block mb-2">Инженеры</span>
+              <div className="border rounded-lg bg-white p-3 max-h-48 overflow-y-auto space-y-2">
+                {users.map((u) => (
+                  <label key={u.id} className="flex items-start gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(u.id)}
+                      onChange={() => toggle(u.id)}
+                      className="w-4 h-4 mt-0.5 accent-violet-600 shrink-0"
+                    />
+                    <span className="text-gray-900">{u.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <button
+                type="button"
+                disabled={assignBusy}
+                onClick={() => void saveEngineers()}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+              >
+                {assignBusy ? 'Сохранение…' : `Сохранить назначение (${selectedIds.length})`}
+              </button>
+            </div>
+          </>
+        ))}
+
       <div className="pt-2 border-t border-violet-200">
         <button
           type="button"

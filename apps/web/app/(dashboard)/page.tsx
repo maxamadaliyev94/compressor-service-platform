@@ -4,7 +4,7 @@ import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import EngineerShiftToggle from './EngineerShiftToggle'
-import { prismaWhereManagerEquipment, prismaWhereManagerTasks } from '@/lib/api-access'
+import { prismaWhereEngineerTaskAssignment, prismaWhereManagerEquipment, prismaWhereManagerTasks } from '@/lib/api-access'
 import { formatTaskScheduleRangeRu, isTaskEndDateOverdue } from '@/lib/task-schedule-display'
 
 export default async function DashboardPage() {
@@ -19,9 +19,9 @@ export default async function DashboardPage() {
   if (role === 'ENGINEER') {
     const myTasks = await db.serviceTask.findMany({
       where: {
-        assignedToId: userId,
         deletedAt: null,
         status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] },
+        ...prismaWhereEngineerTaskAssignment(userId),
       },
       include: {
         equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },

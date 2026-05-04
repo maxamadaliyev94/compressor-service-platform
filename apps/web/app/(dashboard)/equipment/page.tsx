@@ -5,7 +5,11 @@ import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
 import SearchableEquipment from './SearchableEquipment'
 import ExportButton from './ExportButton'
-import { prismaWhereClientEquipment, prismaWhereManagerEquipment } from '@/lib/api-access'
+import {
+  prismaWhereClientEquipment,
+  prismaWhereEngineerTaskAssignment,
+  prismaWhereManagerEquipment,
+} from '@/lib/api-access'
 
 export default async function EquipmentPage() {
   await requirePermission('section:equipment')
@@ -23,9 +27,9 @@ export default async function EquipmentPage() {
   if (role === 'ENGINEER') {
     const taskRows = await db.serviceTask.findMany({
       where: {
-        assignedToId: userId,
         deletedAt: null,
         status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'] },
+        ...prismaWhereEngineerTaskAssignment(userId),
       },
       select: { equipmentId: true },
     })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
+import { prismaWhereEngineerTaskAssignment } from '@/lib/api-access'
 
 export async function GET() {
   const session = await auth()
@@ -32,9 +33,9 @@ export async function PATCH(req: NextRequest) {
   if (body.action === 'checkin') {
     const activeTasks = await db.serviceTask.count({
       where: {
-        assignedToId: session.user.id,
         deletedAt: null,
         status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'] },
+        ...prismaWhereEngineerTaskAssignment(session.user.id),
       },
     })
     const user = await db.user.update({
