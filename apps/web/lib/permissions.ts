@@ -18,6 +18,7 @@ const LEGACY_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'section:reports',
     'section:map',
     'section:references',
+    'section:account',
     'action:task.create',
     'action:task.assign',
     'action:equipment.create',
@@ -32,6 +33,7 @@ const LEGACY_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'section:tasks',
     'section:reports',
     'section:map',
+    'section:account',
     'action:task.create',
     'action:task.assign',
     'action:task.close',
@@ -43,10 +45,17 @@ const LEGACY_ROLE_PERMISSIONS: Record<Role, string[]> = {
     'section:dashboard',
     'section:equipment',
     'section:tasks',
+    'section:account',
     'action:task.close',
     'field:equipment.warranty',
   ],
-  CLIENT: [],
+  CLIENT: [
+    'section:client_portal',
+    'section:equipment',
+    'section:tasks',
+    'section:account',
+    'action:act.clientSign',
+  ],
 }
 
 async function loadRolePermissions(role: Role): Promise<Set<string>> {

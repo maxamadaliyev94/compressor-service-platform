@@ -1,11 +1,13 @@
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/permissions'
 import { redirect } from 'next/navigation'
 import AccountSettingsClient from './AccountSettingsClient'
 
 export default async function AccountPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
+  await requirePermission('section:account')
 
   const user = await db.user.findUnique({
     where: { id: session.user.id },

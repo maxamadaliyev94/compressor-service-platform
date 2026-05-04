@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { auth } from '@/auth'
+import { requirePermission } from '@/lib/permissions'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
@@ -19,6 +20,7 @@ export default async function MyCompanyPage() {
   const session = await auth()
   if (!session) redirect('/login')
   if (session.user.role !== 'CLIENT') redirect('/')
+  await requirePermission('section:client_portal')
 
   const clientId = session.user.clientId
   if (!clientId) {

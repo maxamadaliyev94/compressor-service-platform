@@ -3,7 +3,7 @@ import { getSession } from '@/lib/roles'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
 import TasksTable from './TasksTable'
-import { prismaWhereManagerTasks } from '@/lib/api-access'
+import { prismaWhereClientTasks, prismaWhereManagerTasks } from '@/lib/api-access'
 
 export default async function TasksPage() {
   await requirePermission('section:tasks')
@@ -18,7 +18,9 @@ export default async function TasksPage() {
         ? { assignedToId: session.user.id, deletedAt: null }
         : role === 'MANAGER'
           ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id) }
-          : { deletedAt: null },
+          : role === 'CLIENT'
+            ? { deletedAt: null, ...prismaWhereClientTasks(session.user.clientId) }
+            : { deletedAt: null },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,

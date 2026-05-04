@@ -1,5 +1,7 @@
 import { db } from '@/lib/db'
 import { auth } from '@/auth'
+import { hasPermission } from '@/lib/permissions'
+import type { Role } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
 const MAX_SIGNATURE_BYTES = 2_000_000
@@ -17,6 +19,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (session.user.role !== 'CLIENT') {
     return NextResponse.json({ error: 'Подпись клиента может поставить только пользователь с ролью «Клиент»' }, { status: 403 })
+  }
+
+  if (!(await hasPermission(session.user.role as Role, 'action:act.clientSign'))) {
+    return NextResponse.json({ error: 'Недостаточно прав для подписания акта' }, { status: 403 })
   }
 
   const body = await req.json().catch(() => null)

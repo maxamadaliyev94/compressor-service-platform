@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
 import KanbanBoard from './KanbanBoard'
-import { prismaWhereManagerTasks } from '@/lib/api-access'
+import { prismaWhereClientTasks, prismaWhereManagerTasks } from '@/lib/api-access'
 
 export default async function KanbanPage() {
   await requirePermission('section:tasks')
@@ -20,6 +20,7 @@ export default async function KanbanPage() {
       deletedAt: null,
       ...(role === 'ENGINEER' ? { assignedToId: session.user.id } : {}),
       ...(role === 'MANAGER' ? prismaWhereManagerTasks(session.user.id) : {}),
+      ...(role === 'CLIENT' ? prismaWhereClientTasks(session.user.clientId) : {}),
     },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },

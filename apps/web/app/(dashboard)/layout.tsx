@@ -23,12 +23,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   type NavDef = { href: string; label: string; icon: string; roles: string[]; key?: string }
 
   const navRaw: NavDef[] = [
-    { href: '/my-company', label: 'Моя компания', icon: '🏢', roles: ['CLIENT'] },
+    { href: '/my-company', label: 'Моя компания', icon: '🏢', roles: ['CLIENT'], key: 'section:client_portal' },
     {
       href: '/account',
       label: 'Настройка аккаунта',
       icon: '👤',
       roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'],
+      key: 'section:account',
     },
     { href: '/', label: 'Dashboard', icon: '▦', roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'], key: 'section:dashboard' },
     { href: '/clients', label: 'Клиенты', icon: '👥', roles: ['ADMIN', 'MANAGER'], key: 'section:clients' },
@@ -36,14 +37,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
       href: '/equipment',
       label: 'Оборудование',
       icon: '⚙️',
-      roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER'],
+      roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'],
       key: 'section:equipment',
     },
     {
       href: '/tasks',
       label: 'Задачи',
       icon: '✓',
-      roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER'],
+      roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'],
       key: 'section:tasks',
     },
     { href: '/engineers', label: 'Инженеры', icon: '🧑‍🔧', roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'], key: 'section:dashboard' },

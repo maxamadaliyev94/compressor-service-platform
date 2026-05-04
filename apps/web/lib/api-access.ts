@@ -25,7 +25,9 @@ export async function getBranchClientId(branchId: string): Promise<string | null
 export async function getTaskClientId(taskId: string): Promise<string | null> {
   const t = await db.serviceTask.findUnique({
     where: { id: taskId },
-    select: { equipment: { select: { object: { select: { branch: { select: { clientId: true } } } } } } } },
+    select: {
+      equipment: { select: { object: { select: { branch: { select: { clientId: true } } } } } },
+    },
   })
   return t?.equipment.object.branch.clientId ?? null
 }
@@ -155,6 +157,31 @@ export function prismaWhereManagerTasks(managerId: string) {
     equipment: {
       object: {
         branch: { client: { managerId } },
+      },
+    },
+  }
+}
+
+/** Задачи только своей организации (портал клиента). Без привязки к клиенту — пустой результат. */
+export function prismaWhereClientTasks(clientId: string | null | undefined) {
+  if (!clientId) return { id: { in: [] as string[] } }
+  return {
+    equipment: {
+      object: {
+        branch: { clientId },
+      },
+    },
+  }
+}
+
+/** Оборудование только своей организации (портал клиента). */
+export function prismaWhereClientEquipment(clientId: string | null | undefined) {
+  if (!clientId) return { id: { in: [] as string[] } }
+  return {
+    object: {
+      branch: {
+        clientId,
+        client: { status: { not: 'PASSIVE' as const } },
       },
     },
   }
