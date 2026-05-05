@@ -162,6 +162,18 @@ export default function HistoryClient() {
     [grouped]
   )
 
+  const completedTasks = useMemo(
+    () =>
+      grouped.flatMap((block) =>
+        block.tasks.map((task) => ({
+          ...task,
+          engineerName: block.engineerName,
+          engineerRole: block.engineerRole,
+        }))
+      ),
+    [grouped]
+  )
+
   function exportExcel() {
     const ws = XLSX.utils.json_to_sheet(allRows)
     const wb = XLSX.utils.book_new()
@@ -253,103 +265,98 @@ export default function HistoryClient() {
       ) : grouped.length === 0 ? (
         <div className="bg-white border rounded-xl p-8 text-sm text-gray-400 text-center">За выбранный период выполненных задач нет</div>
       ) : (
-        <div className="space-y-3">
-          {grouped.map((block) => (
-            <details key={block.engineerId} open className="bg-white border rounded-xl overflow-hidden">
-              <summary className="list-none cursor-pointer p-4 border-b bg-gray-50">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                    {block.engineerName.charAt(0).toUpperCase()}
+        <div className="bg-white border rounded-xl overflow-hidden">
+          <div className="md:hidden p-3 space-y-2">
+            {completedTasks.map((task) => (
+              <div key={task.id} className="border rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium">
+                    №{task.requestNumber} · {TYPE_LABELS[task.type] || task.type}
                   </div>
-                  <span className="font-semibold">{block.engineerName}</span>
-                  {block.engineerRole === 'CHIEF_ENGINEER' && (
-                    <span className="text-[10px] font-medium uppercase text-slate-500">гл. инженер</span>
-                  )}
-                  <span className="text-xs text-gray-500">· выполнено: {block.tasks.length}</span>
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">DONE</span>
                 </div>
-              </summary>
-              <div className="md:hidden p-3 space-y-2">
-                {block.tasks.map((task) => (
-                  <div key={task.id} className="border rounded-lg p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium">
-                        №{task.requestNumber} · {TYPE_LABELS[task.type] || task.type}
-                      </div>
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">DONE</span>
-                    </div>
-                    <div className="mt-2 space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-500">Дата</span>
-                        <span className="text-gray-700">
-                          {task.completedAt ? new Date(task.completedAt).toLocaleDateString('ru-RU') : '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-500">Оборудование</span>
-                        <span className="text-gray-700 text-right">
-                          {task.equipment.brand} {task.equipment.model}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-500">Клиент</span>
-                        <span className="text-gray-700 text-right">{task.equipment.object.branch.client.name}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-gray-500">Время</span>
-                        <span className="text-gray-700">{humanDuration(task.createdAt, task.completedAt)}</span>
-                      </div>
-                    </div>
-                    <a
-                      href={`/tasks/${task.id}`}
-                      className="mt-2 w-full min-h-11 inline-flex items-center justify-center border rounded-lg text-sm text-blue-600 hover:bg-blue-50"
-                    >
-                      Просмотр
-                    </a>
+                <div className="mt-2 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">Дата</span>
+                    <span className="text-gray-700">
+                      {task.completedAt ? new Date(task.completedAt).toLocaleDateString('ru-RU') : '—'}
+                    </span>
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">Инженер</span>
+                    <span className="text-gray-700 text-right">{task.engineerName}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">Оборудование</span>
+                    <span className="text-gray-700 text-right">
+                      {task.equipment.brand} {task.equipment.model}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">Клиент</span>
+                    <span className="text-gray-700 text-right">{task.equipment.object.branch.client.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">Время</span>
+                    <span className="text-gray-700">{humanDuration(task.createdAt, task.completedAt)}</span>
+                  </div>
+                </div>
+                <a
+                  href={`/tasks/${task.id}`}
+                  className="mt-2 w-full min-h-11 inline-flex items-center justify-center border rounded-lg text-sm text-blue-600 hover:bg-blue-50"
+                >
+                  Просмотр
+                </a>
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-[1020px] w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left p-3 font-medium">Дата выполнения</th>
+                  <th className="text-left p-3 font-medium">Инженер</th>
+                  <th className="text-left p-3 font-medium">Тип задачи</th>
+                  <th className="text-left p-3 font-medium">Оборудование</th>
+                  <th className="text-left p-3 font-medium">Клиент</th>
+                  <th className="text-left p-3 font-medium">Статус</th>
+                  <th className="text-left p-3 font-medium">Время выполнения</th>
+                  <th className="text-left p-3 font-medium">Действие</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedTasks.map((task) => (
+                  <tr key={task.id} className="border-b last:border-0">
+                    <td className="p-3">
+                      {task.completedAt ? new Date(task.completedAt).toLocaleDateString('ru-RU') : '—'}
+                    </td>
+                    <td className="p-3">
+                      {task.engineerName}
+                      {task.engineerRole === 'CHIEF_ENGINEER' && (
+                        <span className="ml-1 text-[10px] uppercase text-gray-400">гл. инженер</span>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      №{task.requestNumber} · {TYPE_LABELS[task.type] || task.type}
+                    </td>
+                    <td className="p-3">
+                      {task.equipment.brand} {task.equipment.model}
+                    </td>
+                    <td className="p-3">{task.equipment.object.branch.client.name}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">DONE</span>
+                    </td>
+                    <td className="p-3">{humanDuration(task.createdAt, task.completedAt)}</td>
+                    <td className="p-3">
+                      <a href={`/tasks/${task.id}`} className="text-blue-600 hover:underline">
+                        Просмотр
+                      </a>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-[900px] w-full text-sm">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="text-left p-3 font-medium">Дата выполнения</th>
-                      <th className="text-left p-3 font-medium">Тип задачи</th>
-                      <th className="text-left p-3 font-medium">Оборудование</th>
-                      <th className="text-left p-3 font-medium">Клиент</th>
-                      <th className="text-left p-3 font-medium">Статус</th>
-                      <th className="text-left p-3 font-medium">Время выполнения</th>
-                      <th className="text-left p-3 font-medium">Действие</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {block.tasks.map((task) => (
-                      <tr key={task.id} className="border-b last:border-0">
-                        <td className="p-3">
-                          {task.completedAt ? new Date(task.completedAt).toLocaleDateString('ru-RU') : '—'}
-                        </td>
-                        <td className="p-3">
-                          №{task.requestNumber} · {TYPE_LABELS[task.type] || task.type}
-                        </td>
-                        <td className="p-3">
-                          {task.equipment.brand} {task.equipment.model}
-                        </td>
-                        <td className="p-3">{task.equipment.object.branch.client.name}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">DONE</span>
-                        </td>
-                        <td className="p-3">{humanDuration(task.createdAt, task.completedAt)}</td>
-                        <td className="p-3">
-                          <a href={`/tasks/${task.id}`} className="text-blue-600 hover:underline">
-                            Просмотр
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
