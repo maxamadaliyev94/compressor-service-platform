@@ -119,7 +119,7 @@ export default function SearchableEquipment({
 
   return (
     <div>
-      <div className="flex flex-col md:flex-row gap-3 mb-4">
+      <div className="flex flex-col md:flex-row md:flex-wrap gap-3 mb-4">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -151,9 +151,9 @@ export default function SearchableEquipment({
         <select
           value={filterWarranty}
           onChange={(e) => setFilterWarranty(e.target.value)}
-          className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full md:w-auto min-w-[150px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="ALL">Все</option>
+          <option value="ALL">Гарантия: Все</option>
           <option value="ACTIVE">На гарантии</option>
           <option value="EXPIRED">Истекла</option>
         </select>
