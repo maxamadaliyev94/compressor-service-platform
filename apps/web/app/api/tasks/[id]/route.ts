@@ -314,6 +314,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       data.startDate = null
       data.endDate = null
     }
+    if (nextTaskType === 'QUICK' && task.taskType === 'LONG_TERM') {
+      if (role === 'CHIEF_ENGINEER') {
+        data.assignedToId = task.managedByChiefId ?? session.user.id
+      } else {
+        const nextAssignee = task.managedByChiefId ?? task.assignedToId
+        if (nextAssignee) data.assignedToId = nextAssignee
+      }
+    }
     if (nextTaskType === 'LONG_TERM' && task.taskType !== 'LONG_TERM') {
       if (!task.startDate) {
         data.startDate = utcDateOnlyFromDate(task.createdAt)
@@ -328,10 +336,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (nextEndDate !== undefined) data.endDate = nextEndDate
   }
 
+  if (hasTaskType && nextTaskType === 'QUICK' && task.taskType === 'LONG_TERM') {
+    await db.longTermTaskEngineer.deleteMany({ where: { taskId: params.id } })
+  }
+
   const updated = await db.serviceTask.update({
     where: { id: params.id },
     data,
   })
+
+  if (
+    hasTaskType &&
+    nextTaskType === 'QUICK' &&
+    task.taskType === 'LONG_TERM' &&
+    previousAssigneeId &&
+    updated.assignedToId &&
+    previousAssigneeId !== updated.assignedToId
+  ) {
+    await syncEngineerFreeIfNoActiveTasks(previousAssigneeId)
+    await markEngineerBusy(updated.assignedToId)
+  }
 
   if (hasAssignee && task.taskType === 'LONG_TERM' && newEngineerId) {
     await db.longTermTaskEngineer.deleteMany({ where: { taskId: params.id } })

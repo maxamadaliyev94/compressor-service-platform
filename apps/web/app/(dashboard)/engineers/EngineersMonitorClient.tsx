@@ -10,12 +10,12 @@ type Engineer = {
   engineerStatus: string
   isOnline: boolean
   checkedInAt: string | null
-  assignedTasks: Array<{
+  currentTask: {
     id: string
     type: string
     status: string
     equipment: { brand: string; model: string }
-  }>
+  } | null
 }
 
 const statusView: Record<string, string> = {
@@ -86,9 +86,9 @@ export default function EngineersMonitorClient() {
             </div>
             <div className="text-xs text-gray-600">
               Текущая задача:{' '}
-              {eng.assignedTasks[0]
-                ? `${eng.assignedTasks[0].equipment.brand} ${eng.assignedTasks[0].equipment.model}`
-                : 'нет'}
+              {eng.currentTask
+                ? `${eng.currentTask.equipment.brand} ${eng.currentTask.equipment.model}`
+                : '—'}
             </div>
           </div>
         </div>

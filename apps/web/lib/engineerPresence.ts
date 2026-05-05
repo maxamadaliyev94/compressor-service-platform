@@ -1,31 +1,37 @@
 import { db } from '@/lib/db'
 import { prismaWhereEngineerTaskAssignment } from '@/lib/api-access'
 
-const ACTIVE_TASK_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'] as const
-
-export async function markEngineerBusy(userId: string) {
-  await db.user.update({
+/**
+ * Синхронизирует engineerStatus с реальностью: «Занят» только если есть задача в статусе IN_PROGRESS.
+ * Статус OFFLINE не трогаем (инженер не на смене).
+ */
+export async function syncEngineerAvailabilityFromTasks(userId: string) {
+  const user = await db.user.findUnique({
     where: { id: userId },
-    data: {
-      engineerStatus: 'BUSY',
-      isOnline: true,
-    },
+    select: { engineerStatus: true },
   })
-}
+  if (!user || user.engineerStatus === 'OFFLINE') return
 
-export async function syncEngineerFreeIfNoActiveTasks(userId: string) {
-  const activeCount = await db.serviceTask.count({
+  const inProgress = await db.serviceTask.count({
     where: {
       deletedAt: null,
-      status: { in: [...ACTIVE_TASK_STATUSES] },
+      status: 'IN_PROGRESS',
       ...prismaWhereEngineerTaskAssignment(userId),
     },
   })
 
-  if (activeCount === 0) {
-    await db.user.update({
-      where: { id: userId },
-      data: { engineerStatus: 'FREE' },
-    })
-  }
+  await db.user.update({
+    where: { id: userId },
+    data: { engineerStatus: inProgress > 0 ? 'BUSY' : 'FREE' },
+  })
+}
+
+/** Устаревшее имя: после назначения пересчитать занятость по IN_PROGRESS. */
+export async function markEngineerBusy(userId: string) {
+  await syncEngineerAvailabilityFromTasks(userId)
+}
+
+/** Устаревшее имя: пересчитать занятость по IN_PROGRESS. */
+export async function syncEngineerFreeIfNoActiveTasks(userId: string) {
+  await syncEngineerAvailabilityFromTasks(userId)
 }

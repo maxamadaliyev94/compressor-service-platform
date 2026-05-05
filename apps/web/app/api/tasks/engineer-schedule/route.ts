@@ -21,18 +21,35 @@ function monthUtcRange(year: number, month1to12: number) {
   return { start, end }
 }
 
-function longTermRangeBounds(task: { startDate: Date | null; endDate: Date | null }): {
-  rangeStart: Date
-  rangeEnd: Date
-} | null {
-  if (!task.startDate && !task.endDate) return null
+/** День быстрой задачи на календаре: плановый срок или дата создания заявки. */
+function quickCalendarDay(scheduledAt: Date | null, createdAt: Date): string {
+  const anchor = scheduledAt ?? createdAt
+  return atUtcMidnight(anchor).toISOString().slice(0, 10)
+}
+
+function dateKeyInUtcMonth(dateKey: string, monthStart: Date, monthEndEx: Date): boolean {
+  const t = new Date(`${dateKey}T12:00:00.000Z`).getTime()
+  return t >= monthStart.getTime() && t < monthEndEx.getTime()
+}
+
+function longTermRangeBounds(task: {
+  startDate: Date | null
+  endDate: Date | null
+  scheduledAt: Date | null
+  createdAt: Date
+}): { rangeStart: Date; rangeEnd: Date } | null {
+  if (!task.startDate && !task.endDate) {
+    const anchor = task.scheduledAt ?? task.createdAt
+    const d = atUtcMidnight(anchor)
+    return { rangeStart: d, rangeEnd: d }
+  }
   const s = task.startDate ? atUtcMidnight(task.startDate) : atUtcMidnight(task.endDate!)
   const e = task.endDate ? atUtcMidnight(task.endDate) : atUtcMidnight(task.startDate!)
   return s.getTime() <= e.getTime() ? { rangeStart: s, rangeEnd: e } : { rangeStart: e, rangeEnd: s }
 }
 
 function daysOfLongTermInMonth(
-  task: { startDate: Date | null; endDate: Date | null },
+  task: { startDate: Date | null; endDate: Date | null; scheduledAt: Date | null; createdAt: Date },
   monthStart: Date,
   monthEndEx: Date
 ): string[] {
@@ -93,22 +110,28 @@ export async function GET(req: NextRequest) {
     startDate: true,
     endDate: true,
     assignedToId: true,
+    createdAt: true,
     equipment: { select: { brand: true, model: true, serialNumber: true } },
   } as const
 
-  const quickTasks = (await db.serviceTask.findMany({
+  const quickTasksRaw = (await db.serviceTask.findMany({
     where: {
       taskType: 'QUICK',
       assignedToId: { in: engineerIds },
       deletedAt: null,
       status: { notIn: ['CANCELLED', 'DONE'] },
-      scheduledAt: { gte: monthStart, lt: monthEndEx },
       ...managerScope,
     },
     select: taskSelect,
-  })) as Array<ScheduleTask & { assignedToId: string | null }>
+  })) as Array<ScheduleTask & { assignedToId: string | null; createdAt: Date }>
 
-  const ltTasks = (await db.serviceTask.findMany({
+  const ltStaffLinks = await db.longTermTaskEngineer.findMany({
+    where: { engineerId: { in: engineerIds } },
+    select: { taskId: true },
+  })
+  const taskIdsFromLtStaff = [...new Set(ltStaffLinks.map((r) => r.taskId))]
+
+  const ltTasksRaw = await db.serviceTask.findMany({
     where: {
       taskType: 'LONG_TERM',
       deletedAt: null,
@@ -116,16 +139,30 @@ export async function GET(req: NextRequest) {
       ...managerScope,
       OR: [
         { assignedToId: { in: engineerIds } },
-        { longTermEngineers: { some: { engineerId: { in: engineerIds } } } },
+        ...(taskIdsFromLtStaff.length > 0 ? [{ id: { in: taskIdsFromLtStaff } }] : []),
       ],
     },
-    select: {
-      ...taskSelect,
-      longTermEngineers: { select: { engineerId: true } },
-    },
-  })) as Array<
-    ScheduleTask & { assignedToId: string | null; longTermEngineers: { engineerId: string }[] }
-  >
+    select: taskSelect,
+  })
+
+  const ltTaskIds = ltTasksRaw.map((t) => t.id)
+  const allLtStaff =
+    ltTaskIds.length > 0
+      ? await db.longTermTaskEngineer.findMany({
+          where: { taskId: { in: ltTaskIds } },
+          select: { taskId: true, engineerId: true },
+        })
+      : []
+
+  const engineerIdsByLtTask = new Map<string, Set<string>>()
+  for (const row of allLtStaff) {
+    let s = engineerIdsByLtTask.get(row.taskId)
+    if (!s) {
+      s = new Set()
+      engineerIdsByLtTask.set(row.taskId, s)
+    }
+    s.add(row.engineerId)
+  }
 
   /** cellKey `${engineerId}|${yyyy-mm-dd}` → taskId → task */
   const grid = new Map<string, Map<string, ScheduleTask>>()
@@ -141,25 +178,24 @@ export async function GET(req: NextRequest) {
     m.set(task.id, task)
   }
 
-  for (const task of quickTasks) {
-    if (!task.assignedToId || !task.scheduledAt) continue
-    const dk = atUtcMidnight(task.scheduledAt).toISOString().slice(0, 10)
-    add(task.assignedToId, dk, task)
+  for (const task of quickTasksRaw) {
+    if (!task.assignedToId) continue
+    const dk = quickCalendarDay(task.scheduledAt, task.createdAt)
+    if (!dateKeyInUtcMonth(dk, monthStart, monthEndEx)) continue
+    const { createdAt: _c, ...payload } = task
+    add(task.assignedToId, dk, payload as ScheduleTask)
   }
 
-  for (const task of ltTasks) {
+  for (const task of ltTasksRaw) {
     const days = daysOfLongTermInMonth(task, monthStart, monthEndEx)
     if (days.length === 0) continue
 
     const assigneeIds = new Set<string>()
-    for (const row of task.longTermEngineers) {
-      assigneeIds.add(row.engineerId)
-    }
-    if (task.assignedToId) {
-      assigneeIds.add(task.assignedToId)
-    }
+    const fromLinks = engineerIdsByLtTask.get(task.id)
+    if (fromLinks) for (const id of fromLinks) assigneeIds.add(id)
+    if (task.assignedToId) assigneeIds.add(task.assignedToId)
 
-    const { longTermEngineers: _lt, ...taskPayload } = task
+    const { createdAt: _cr, ...taskPayload } = task
     for (const eng of assigneeIds) {
       for (const dateKey of days) {
         add(eng, dateKey, taskPayload as ScheduleTask)

@@ -31,10 +31,10 @@ export async function PATCH(req: NextRequest) {
   if (!body.action) return NextResponse.json({ error: 'action required' }, { status: 400 })
 
   if (body.action === 'checkin') {
-    const activeTasks = await db.serviceTask.count({
+    const inProgress = await db.serviceTask.count({
       where: {
         deletedAt: null,
-        status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'] },
+        status: 'IN_PROGRESS',
         ...prismaWhereEngineerTaskAssignment(session.user.id),
       },
     })
@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest) {
       data: {
         isOnline: true,
         checkedInAt: new Date(),
-        engineerStatus: activeTasks > 0 ? 'BUSY' : 'FREE',
+        engineerStatus: inProgress > 0 ? 'BUSY' : 'FREE',
       },
       select: {
         id: true,

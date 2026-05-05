@@ -83,8 +83,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data: { status },
   })
 
-  if (status === 'IN_PROGRESS' && updated.assignedToId) {
-    await markEngineerBusy(updated.assignedToId)
+  if (status === 'IN_PROGRESS') {
+    const busyIds = new Set<string>()
+    if (updated.assignedToId) busyIds.add(updated.assignedToId)
+    if (task.taskType === 'LONG_TERM') {
+      const ltRows = await db.longTermTaskEngineer.findMany({
+        where: { taskId: task.id },
+        select: { engineerId: true },
+      })
+      for (const r of ltRows) busyIds.add(r.engineerId)
+    }
+    for (const uid of busyIds) {
+      await markEngineerBusy(uid)
+    }
   }
   if (status === 'DONE' || status === 'CANCELLED') {
     const idsToSync = new Set<string>()
