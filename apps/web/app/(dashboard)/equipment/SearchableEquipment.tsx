@@ -148,17 +148,15 @@ export default function SearchableEquipment({
           <option value="RECEIVER">Ресивер</option>
           <option value="FILTER">Фильтр</option>
         </select>
-        {canViewWarranty && (
-          <select
-            value={filterWarranty}
-            onChange={(e) => setFilterWarranty(e.target.value)}
-            className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="ALL">Гарантия: Все</option>
-            <option value="ACTIVE">На гарантии</option>
-            <option value="EXPIRED">Истекла</option>
-          </select>
-        )}
+        <select
+          value={filterWarranty}
+          onChange={(e) => setFilterWarranty(e.target.value)}
+          className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="ALL">Все</option>
+          <option value="ACTIVE">На гарантии</option>
+          <option value="EXPIRED">Истекла</option>
+        </select>
       </div>
       <p className="text-xs text-gray-400 mb-3">
         Найдено: {filtered.length} из {equipment.length}
