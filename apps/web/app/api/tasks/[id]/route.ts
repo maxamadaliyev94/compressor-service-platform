@@ -348,6 +348,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   })
 
   if (
+    hasScheduled &&
+    task.taskType === 'QUICK' &&
+    !parseDelegationParentTaskId(task.comment)
+  ) {
+    const marker = `[Распределено ГИ из задачи ${task.id}]`
+    const possibleChildren = await db.serviceTask.findMany({
+      where: {
+        deletedAt: null,
+        comment: { contains: marker },
+        status: { notIn: ['DONE', 'CANCELLED'] },
+      },
+      select: { id: true, comment: true },
+    })
+    const childIds = possibleChildren
+      .filter((row) => parseDelegationParentTaskId(row.comment) === task.id)
+      .map((row) => row.id)
+    if (childIds.length > 0) {
+      await db.serviceTask.updateMany({
+        where: { id: { in: childIds } },
+        data: { scheduledAt: updated.scheduledAt ?? null },
+      })
+    }
+  }
+
+  if (
     hasTaskType &&
     nextTaskType === 'QUICK' &&
     task.taskType === 'LONG_TERM' &&
