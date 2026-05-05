@@ -22,6 +22,20 @@ export type EditableBranch = {
   longitude: number | null
 }
 
+function parsePhoneList(raw: string | null): string[] {
+  if (!raw) return ['']
+  const items = raw
+    .split(/[\n,;]+/g)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  return items.length > 0 ? items : ['']
+}
+
+function serializePhoneList(phones: string[]): string | null {
+  const items = phones.map((x) => x.trim()).filter(Boolean)
+  return items.length > 0 ? items.join(', ') : null
+}
+
 export default function EditBranchButton({ branch }: { branch: EditableBranch }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -33,7 +47,7 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
     name: branch.name,
     address: branch.address ?? '',
     contactPerson: branch.contactPerson ?? '',
-    phone: branch.phone ?? '',
+    phones: parsePhoneList(branch.phone),
     workingHours: branch.workingHours ?? '',
     latitude: branch.latitude != null ? String(branch.latitude) : '',
     longitude: branch.longitude != null ? String(branch.longitude) : '',
@@ -42,6 +56,25 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
   function set(field: keyof typeof form, value: string) {
     if (field === 'latitude' || field === 'longitude') setGpsJustAdded(false)
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function setPhoneAt(index: number, value: string) {
+    setForm((prev) => {
+      const next = [...prev.phones]
+      next[index] = value
+      return { ...prev, phones: next }
+    })
+  }
+
+  function addPhone() {
+    setForm((prev) => ({ ...prev, phones: [...prev.phones, ''] }))
+  }
+
+  function removePhoneAt(index: number) {
+    setForm((prev) => {
+      if (prev.phones.length <= 1) return { ...prev, phones: [''] }
+      return { ...prev, phones: prev.phones.filter((_, i) => i !== index) }
+    })
   }
 
   const routeHref = useMemo(
@@ -85,7 +118,7 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
       name: branch.name,
       address: branch.address ?? '',
       contactPerson: branch.contactPerson ?? '',
-      phone: branch.phone ?? '',
+      phones: parsePhoneList(branch.phone),
       workingHours: branch.workingHours ?? '',
       latitude: branch.latitude != null ? String(branch.latitude) : '',
       longitude: branch.longitude != null ? String(branch.longitude) : '',
@@ -111,7 +144,7 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
           name,
           address: form.address.trim() || null,
           contactPerson: form.contactPerson.trim() || null,
-          phone: form.phone.trim() || null,
+          phone: serializePhoneList(form.phones),
           workingHours: form.workingHours.trim() || null,
           latitude: form.latitude.trim() === '' ? null : form.latitude.trim(),
           longitude: form.longitude.trim() === '' ? null : form.longitude.trim(),
@@ -245,13 +278,36 @@ export default function EditBranchButton({ branch }: { branch: EditableBranch })
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Телефон</label>
-                  <input
-                    value={form.phone}
-                    onChange={(e) => set('phone', e.target.value)}
-                    placeholder="+998901234567"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium">Телефоны</label>
+                    <button
+                      type="button"
+                      onClick={addPhone}
+                      className="text-xs px-2 py-1 rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50"
+                    >
+                      + Добавить
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {form.phones.map((phone, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          value={phone}
+                          onChange={(e) => setPhoneAt(idx, e.target.value)}
+                          placeholder="+998901234567"
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePhoneAt(idx)}
+                          className="shrink-0 text-xs px-2 py-2 rounded-md border border-gray-200 hover:bg-gray-50"
+                          title="Удалить номер"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div>
