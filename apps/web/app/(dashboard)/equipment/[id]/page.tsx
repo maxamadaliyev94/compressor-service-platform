@@ -213,7 +213,13 @@ export default async function EquipmentPage({ params }: { params: { id: string }
           </div>
 
           {!isClientPortal && (
-            <UpdateHours equipmentId={eq.id} currentHours={eq.currentHours} nextServiceHours={eq.nextServiceHours} />
+            <UpdateHours
+              equipmentId={eq.id}
+              currentHours={eq.currentHours}
+              nextServiceHours={eq.nextServiceHours}
+              initialHoursPerDay={eq.hoursPerDay}
+              initialDaysPerWeek={eq.daysPerWeek}
+            />
           )}
 
           <div className="bg-white border rounded-xl p-5">

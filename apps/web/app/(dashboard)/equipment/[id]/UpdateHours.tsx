@@ -6,9 +6,17 @@ interface Props {
   equipmentId: string
   currentHours: number
   nextServiceHours: number | null
+  initialHoursPerDay: number | null
+  initialDaysPerWeek: number | null
 }
 
-export default function UpdateHours({ equipmentId, currentHours, nextServiceHours }: Props) {
+export default function UpdateHours({
+  equipmentId,
+  currentHours,
+  nextServiceHours,
+  initialHoursPerDay,
+  initialDaysPerWeek,
+}: Props) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [hours, setHours] = useState(String(currentHours))
@@ -17,8 +25,8 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
   const [error, setError] = useState('')
 
   // Калькулятор режима работы
-  const [hoursPerDay, setHoursPerDay] = useState('')
-  const [daysPerWeek, setDaysPerWeek] = useState('5')
+  const [hoursPerDay, setHoursPerDay] = useState(initialHoursPerDay !== null ? String(initialHoursPerDay) : '')
+  const [daysPerWeek, setDaysPerWeek] = useState(initialDaysPerWeek !== null ? String(initialDaysPerWeek) : '5')
   const [showCalc, setShowCalc] = useState(false)
 
   const calcStorageKey = `equipment:${equipmentId}:workModeCalc`
@@ -47,7 +55,7 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
     }
   }, [calcStorageKey, hoursPerDay, daysPerWeek, showCalc])
 
-  const parsedHours = Number.parseInt(hours, 10)
+  const parsedHours = Number.parseFloat(hours)
   const newHours = Number.isFinite(parsedHours) ? parsedHours : 0
   const remaining = nextServiceHours !== null ? nextServiceHours - newHours : null
   // Расчёт даты следующего ТО
@@ -77,14 +85,19 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
   }
 
   async function save() {
-    const h = parseInt(hours)
+    const h = parseFloat(hours)
     if (!h && h !== 0) { setError('Введите корректное значение'); return }
     setError('')
     setLoading(true)
     const res = await fetch(`/api/equipment/${equipmentId}/hours`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ currentHours: h, reason })
+      body: JSON.stringify({
+        currentHours: h,
+        reason,
+        hoursPerDay: hoursPerDay === '' ? null : parseFloat(hoursPerDay),
+        daysPerWeek: daysPerWeek === '' ? null : parseFloat(daysPerWeek),
+      })
     })
     setLoading(false)
     if (res.ok) { setEditing(false); router.refresh() }

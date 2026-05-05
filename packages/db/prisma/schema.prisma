@@ -274,11 +274,14 @@ model Equipment {
   warrantyUntil      DateTime?
   warrantyVoided     Boolean             @default(false)
   warrantyVoidReason WarrantyVoidReason?
-  currentHours       Int                 @default(0)
+  currentHours       Float               @default(0)
   lastServiceHours   Int?
   lastServiceDate    DateTime?
   nextServiceHours   Int?
   nextServiceDate    DateTime?
+  /// Настроенный режим работы для автоматического прироста моточасов.
+  hoursPerDay        Float?              @map("hours_per_day")
+  daysPerWeek        Float?              @map("days_per_week")
   status             EquipmentStatus     @default(WORKING)
   qrCode             String?             @unique
   notes              String?

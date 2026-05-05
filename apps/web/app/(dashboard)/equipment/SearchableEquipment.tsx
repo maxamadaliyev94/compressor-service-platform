@@ -15,6 +15,7 @@ export default function SearchableEquipment({
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [filterType, setFilterType] = useState('ALL')
+  const [filterWarranty, setFilterWarranty] = useState('ALL')
   const [showStopped, setShowStopped] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -70,6 +71,7 @@ export default function SearchableEquipment({
 
   const filtered = equipment.filter((eq) => {
     const ms = getMS(eq)
+    const ws = getWS(eq)
     const q = search.toLowerCase()
     const matchSearch =
       !search ||
@@ -79,8 +81,12 @@ export default function SearchableEquipment({
       eq.object?.branch?.client?.name?.toLowerCase().includes(q)
     const matchStatus = filterStatus === 'ALL' || ms === filterStatus
     const matchType = filterType === 'ALL' || eq.type === filterType
+    const matchWarranty =
+      filterWarranty === 'ALL' ||
+      (filterWarranty === 'ACTIVE' && (ws === 'ACTIVE' || ws === 'EXPIRING')) ||
+      (filterWarranty === 'EXPIRED' && (ws === 'EXPIRED' || ws === 'VOIDED'))
     const matchStopped = showStopped || eq.status !== 'STOPPED'
-    return matchSearch && matchStatus && matchType && matchStopped
+    return matchSearch && matchStatus && matchType && matchWarranty && matchStopped
   })
 
   const sorted = [...filtered].sort((a, b) => {
@@ -142,6 +148,17 @@ export default function SearchableEquipment({
           <option value="RECEIVER">Ресивер</option>
           <option value="FILTER">Фильтр</option>
         </select>
+        {canViewWarranty && (
+          <select
+            value={filterWarranty}
+            onChange={(e) => setFilterWarranty(e.target.value)}
+            className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="ALL">Гарантия: Все</option>
+            <option value="ACTIVE">На гарантии</option>
+            <option value="EXPIRED">Истекла</option>
+          </select>
+        )}
       </div>
       <p className="text-xs text-gray-400 mb-3">
         Найдено: {filtered.length} из {equipment.length}
