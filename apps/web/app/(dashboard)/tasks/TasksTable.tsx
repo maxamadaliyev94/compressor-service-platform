@@ -15,6 +15,7 @@ type TaskRow = {
   taskType?: string
   priority: string
   status: string
+  createdAt: Date | string
   scheduledAt: Date | null
   startDate?: Date | null
   endDate?: Date | null
@@ -45,6 +46,27 @@ type TaskBundle = {
 }
 
 const STATUS_ORDER = ['ASSIGNED', 'NEW', 'IN_PROGRESS', 'REVIEW', 'DRAFT', 'REVISION', 'DONE', 'CANCELLED'] as const
+
+/** Календарные дни между датой создания задачи и сегодня (локальный календарь). */
+function calendarDaysSinceTaskCreated(createdAt: Date | string | undefined | null): number | null {
+  if (createdAt == null) return null
+  const c = typeof createdAt === 'string' ? new Date(createdAt) : createdAt
+  if (Number.isNaN(c.getTime())) return null
+  const createdDay = new Date(c.getFullYear(), c.getMonth(), c.getDate())
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.round((today.getTime() - createdDay.getTime()) / 86400000)
+}
+
+/** Левая граница по возрасту задачи (только ASSIGNED / IN_PROGRESS). */
+function taskAgeBorderClass(status: string, createdAt: Date | string | undefined | null): string {
+  if (!['ASSIGNED', 'IN_PROGRESS'].includes(status)) return ''
+  const days = calendarDaysSinceTaskCreated(createdAt)
+  if (days === null) return ''
+  if (days <= 0) return 'border-l-4 border-green-500'
+  if (days === 1) return 'border-l-4 border-amber-400'
+  return 'border-l-4 border-red-500'
+}
 
 const MONTHS_RU = [
   'Январь',
@@ -406,11 +428,13 @@ export default function TasksTable({
     const multi = bundle.tasks.length > 1
     const hrefId = bundle.sourceTaskId || rep.id
     const busy = bundle.tasks.some((t) => busyId === t.id)
+    const ageBorder = taskAgeBorderClass(rep.status, rep.createdAt)
+    const multiShell = multi ? 'border-indigo-200 bg-indigo-50/25 ring-1 ring-indigo-100/80' : ''
 
     return (
       <div
         key={bundle.key}
-        className={`border rounded-lg p-3 bg-white ${multi ? 'border-indigo-200 bg-indigo-50/25' : ''}`}
+        className={`border rounded-lg p-3 bg-white ${multiShell} ${ageBorder}`}
       >
         <a href={`/tasks/${hrefId}`} className="block">
           <div className="flex items-center justify-between gap-2">
@@ -495,12 +519,14 @@ export default function TasksTable({
     const multi = bundle.tasks.length > 1
     const hrefId = bundle.sourceTaskId || rep.id
     const busy = bundle.tasks.some((t) => busyId === t.id)
-    const rowFrame = multi ? 'border-l-4 border-indigo-300 bg-indigo-50/20' : ''
+    const ageBorder = taskAgeBorderClass(rep.status, rep.createdAt)
+    const delegateFrame =
+      multi && !ageBorder ? 'border-l-4 border-indigo-300 bg-indigo-50/20' : multi ? 'bg-indigo-50/20' : ''
 
     return (
       <tr
         key={bundle.key}
-        className={`border-b last:border-0 hover:bg-gray-50 cursor-pointer ${rowFrame}`}
+        className={`border-b last:border-0 hover:bg-gray-50 cursor-pointer ${ageBorder} ${delegateFrame}`}
         onClick={() => {
           window.location.href = `/tasks/${hrefId}`
         }}
@@ -677,6 +703,12 @@ export default function TasksTable({
             )}
           </div>
           <ExportTasksButton tasks={exportTasks} typeLabels={typeLabels} statusLabels={statusLabels} />
+          <span
+            className="text-xs text-slate-600 max-w-full leading-snug sm:border-l sm:border-slate-200 sm:pl-3"
+            title="Для статусов «Назначена» и «В работе» по дате создания задачи"
+          >
+            🟢 Сегодня · 🟡 Вчера · 🔴 2+ дней
+          </span>
           <span className="text-xs text-slate-400 sm:ml-auto">
             Всего: {filteredBundles.length}
             {filteredBundles.length !== allBundles.length && (
