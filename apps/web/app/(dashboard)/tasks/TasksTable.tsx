@@ -15,7 +15,7 @@ type TaskRow = {
   taskType?: string
   priority: string
   status: string
-  createdAt: Date | string
+  createdAt?: Date | string
   scheduledAt: Date | null
   startDate?: Date | null
   endDate?: Date | null
@@ -58,7 +58,7 @@ function calendarDaysSinceTaskCreated(createdAt: Date | string | undefined | nul
   return Math.round((today.getTime() - createdDay.getTime()) / 86400000)
 }
 
-/** Левая граница по возрасту задачи (только ASSIGNED / IN_PROGRESS). */
+/** Левая граница строки по возрасту (дублирует точку у номера). */
 function taskAgeBorderClass(status: string, createdAt: Date | string | undefined | null): string {
   if (!['ASSIGNED', 'IN_PROGRESS'].includes(status)) return ''
   const days = calendarDaysSinceTaskCreated(createdAt)
@@ -66,6 +66,29 @@ function taskAgeBorderClass(status: string, createdAt: Date | string | undefined
   if (days <= 0) return 'border-l-4 border-green-500'
   if (days === 1) return 'border-l-4 border-amber-400'
   return 'border-l-4 border-red-500'
+}
+
+/** Яркая метка у номера: зелёный/жёлтый/красный = сколько дней с даты создания (только «Назначена» / «В работе»). */
+function TaskAgeDot({
+  status,
+  createdAt,
+}: {
+  status: string
+  createdAt: Date | string | undefined | null
+}) {
+  if (!['ASSIGNED', 'IN_PROGRESS'].includes(status)) return null
+  const days = calendarDaysSinceTaskCreated(createdAt ?? null)
+  if (days === null) return null
+  const bg = days <= 0 ? 'bg-green-500' : days === 1 ? 'bg-amber-400' : 'bg-red-500'
+  const title =
+    days <= 0 ? 'Дата создания: сегодня' : days === 1 ? 'Дата создания: вчера' : `Создана ${days} дн. назад`
+  return (
+    <span
+      title={title}
+      aria-label={title}
+      className={`inline-block w-2.5 h-2.5 shrink-0 rounded-full ring-1 ring-white/90 shadow-sm ${bg}`}
+    />
+  )
 }
 
 const MONTHS_RU = [
@@ -438,9 +461,18 @@ export default function TasksTable({
       >
         <a href={`/tasks/${hrefId}`} className="block">
           <div className="flex items-center justify-between gap-2">
-            <div className="font-medium text-sm">
-              <span className={`mr-1 ${priorityColors[rep.priority]}`}>●</span>
-              №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+            <div className="font-medium text-sm flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <TaskAgeDot status={rep.status} createdAt={rep.createdAt} />
+              <span
+                className={`${priorityColors[rep.priority]}`}
+                title="Приоритет заявки"
+                aria-label={`Приоритет: ${rep.priority}`}
+              >
+                ●
+              </span>
+              <span>
+                №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+              </span>
               {rep.taskType === 'LONG_TERM' && (
                 <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-200" title="Долгосрочная">
                   📅 Долгоср.
@@ -533,7 +565,14 @@ export default function TasksTable({
       >
         <td className="p-3">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className={`font-medium ${priorityColors[rep.priority]}`}>●</span>
+            <TaskAgeDot status={rep.status} createdAt={rep.createdAt} />
+            <span
+              className={`font-medium ${priorityColors[rep.priority]}`}
+              title="Приоритет заявки"
+              aria-label={`Приоритет: ${rep.priority}`}
+            >
+              ●
+            </span>
             <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <span>
                 №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
@@ -702,20 +741,39 @@ export default function TasksTable({
               </button>
             )}
           </div>
-          <ExportTasksButton tasks={exportTasks} typeLabels={typeLabels} statusLabels={statusLabels} />
-          <span
-            className="text-xs text-slate-600 max-w-full leading-snug sm:border-l sm:border-slate-200 sm:pl-3"
-            title="Для статусов «Назначена» и «В работе» по дате создания задачи"
-          >
-            🟢 Сегодня · 🟡 Вчера · 🔴 2+ дней
-          </span>
-          <span className="text-xs text-slate-400 sm:ml-auto">
-            Всего: {filteredBundles.length}
-            {filteredBundles.length !== allBundles.length && (
-              <span className="text-slate-300"> · из {allBundles.length}</span>
-            )}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <ExportTasksButton tasks={exportTasks} typeLabels={typeLabels} statusLabels={statusLabels} />
+            <span className="text-xs text-slate-400">
+              Всего: {filteredBundles.length}
+              {filteredBundles.length !== allBundles.length && (
+                <span className="text-slate-300"> · из {allBundles.length}</span>
+              )}
+            </span>
+          </div>
         </div>
+        <p className="text-[11px] text-slate-500 leading-relaxed m-0 pb-0.5 border-t border-slate-100/90 pt-2 sm:border-t sm:pt-2">
+          <span className="font-medium text-slate-600">Дата создания</span> — для статусов «Назначена» и «В работе»
+          цветная точка у номера показывает давность:{' '}
+          <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500 shrink-0" aria-hidden />
+            сегодня
+          </span>
+          ,{' '}
+          <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0" aria-hidden />
+            вчера
+          </span>
+          ,{' '}
+          <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+            <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" aria-hidden />
+            2+ дней
+          </span>
+          . Рядом{' '}
+          <span className="text-blue-500" aria-hidden>
+            ●
+          </span>{' '}
+          — приоритет заявки (не возраст).
+        </p>
       </div>
 
       {tasks.length === 0 ? (
