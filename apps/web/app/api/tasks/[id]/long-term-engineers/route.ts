@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       db.longTermTaskEngineer.deleteMany({ where: { taskId: task.id } }),
       db.serviceTask.update({
         where: { id: task.id },
-        data: { assignedToId: null },
+        data: { assignedToId: null, assignedAt: null },
       }),
     ])
 
@@ -113,7 +113,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     })
     await tx.serviceTask.update({
       where: { id: task.id },
-      data: { assignedToId: engineerIdsNorm[0] ?? null },
+      data: {
+        assignedToId: engineerIdsNorm[0] ?? null,
+        assignedAt: engineerIdsNorm.length > 0 ? new Date() : null,
+      },
     })
   })
 

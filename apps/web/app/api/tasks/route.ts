@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
   const createdTasks = []
   const maxRequest = await db.serviceTask.aggregate({ _max: { requestNumber: true } })
   const nextRequestNumber = (maxRequest._max.requestNumber ?? 0) + 1
+  const assignedAtNow = new Date()
 
   if (targetIds.length === 0) {
     const task = await db.serviceTask.create({
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
         managedByChiefId,
         priority: body.priority || 'MEDIUM',
         status: 'NEW',
+        assignedAt: null,
         scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
         comment: body.comment || null,
       },
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
           managedByChiefId,
           priority: body.priority || 'MEDIUM',
           status: 'ASSIGNED',
+          assignedAt: assignedAtNow,
           scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
           comment: body.comment || null,
         },
