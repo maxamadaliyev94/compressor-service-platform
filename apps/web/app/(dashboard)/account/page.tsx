@@ -7,7 +7,11 @@ import AccountSettingsClient from './AccountSettingsClient'
 export default async function AccountPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
-  await requirePermission('section:account')
+  const role = session.user.role
+  const rolesWithAccountAccess = new Set(['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'])
+  if (!rolesWithAccountAccess.has(role)) {
+    await requirePermission('section:account')
+  }
 
   const user = await db.user.findUnique({
     where: { id: session.user.id },
