@@ -305,7 +305,11 @@ export default async function ReportsPage() {
               <p className="text-sm text-gray-400 text-center py-4">Нет данных</p>
             )}
             {engineerStats.map((eng, i) => (
-              <div key={eng.id} className="flex items-center gap-3">
+              <a
+                key={eng.id}
+                href={`/reports/engineers/${eng.id}`}
+                className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-blue-50 transition-colors"
+              >
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                     i === 0
@@ -334,7 +338,7 @@ export default async function ReportsPage() {
                   </div>
                 </div>
                 <div className="text-sm font-bold text-gray-700">{eng.total}</div>
-              </div>
+              </a>
             ))}
           </div>
         </div>
