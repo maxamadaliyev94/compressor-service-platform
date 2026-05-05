@@ -12,8 +12,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const role = session.user.role as Role
-  if (role !== 'CHIEF_ENGINEER') {
-    return NextResponse.json({ error: 'Только главный инженер может распределять задачи' }, { status: 403 })
+  if (!['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'].includes(role)) {
+    return NextResponse.json({ error: 'Нет прав на распределение' }, { status: 403 })
   }
 
   const canAssign = await hasPermission(role, 'action:task.assign')
@@ -32,7 +32,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    include: { report: { select: { id: true } } },
+    select: {
+      id: true,
+      requestNumber: true,
+      equipmentId: true,
+      assignedToId: true,
+      type: true,
+      taskType: true,
+      priority: true,
+      status: true,
+      scheduledAt: true,
+      comment: true,
+      deletedAt: true,
+      report: { select: { id: true } },
+      equipment: { select: { object: { select: { branch: { select: { client: { select: { managerId: true } } } } } } } },
+    },
   })
 
   if (!task || task.deletedAt) {
@@ -44,21 +58,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (['DONE', 'CANCELLED'].includes(task.status)) {
     return NextResponse.json({ error: 'Задача уже завершена или отменена' }, { status: 400 })
   }
-  if (task.assignedToId !== session.user.id) {
-    return NextResponse.json({ error: 'Эта задача назначена не вам' }, { status: 403 })
+  const canUseTask =
+    role === 'ADMIN' ||
+    (role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||
+    (role === 'MANAGER' && task.equipment.object.branch.client.managerId === session.user.id)
+  if (!canUseTask) {
+    return NextResponse.json({ error: 'Нет прав на распределение этой задачи' }, { status: 403 })
   }
 
   const marker = `[Распределено ГИ из задачи ${task.id}]`
   const existingChildren = await db.serviceTask.findMany({
     where: { deletedAt: null, comment: { contains: marker } },
-    select: { assignedToId: true, comment: true },
+    select: { id: true, status: true, assignedToId: true, comment: true },
   })
-  const alreadyAssigned = new Set(
-    existingChildren
-      .filter((c) => parseDelegationParentTaskId(c.comment) === task.id)
-      .map((c) => c.assignedToId)
-      .filter((id): id is string => Boolean(id))
-  )
+  const mappedChildren = existingChildren.filter((c) => parseDelegationParentTaskId(c.comment) === task.id)
+  const activeByEngineer = new Map<string, { id: string; status: string }>()
+  const cancelledByEngineer = new Map<string, { id: string; status: string }>()
+  for (const c of mappedChildren) {
+    if (!c.assignedToId) continue
+    if (c.status === 'CANCELLED' || c.status === 'DONE') {
+      if (!cancelledByEngineer.has(c.assignedToId)) {
+        cancelledByEngineer.set(c.assignedToId, { id: c.id, status: c.status })
+      }
+      continue
+    }
+    if (!activeByEngineer.has(c.assignedToId)) {
+      activeByEngineer.set(c.assignedToId, { id: c.id, status: c.status })
+    }
+  }
 
   const engineers = await db.user.findMany({
     where: { id: { in: engineerIds }, role: 'ENGINEER', isActive: true },
@@ -68,8 +95,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Некорректный список инженеров' }, { status: 400 })
   }
 
-  const engineersToCreate = engineers.filter((e) => !alreadyAssigned.has(e.id))
-  if (engineersToCreate.length === 0) {
+  const toReactivate = engineers
+    .filter((e) => !activeByEngineer.has(e.id))
+    .map((e) => ({ engineerId: e.id, cancelledTaskId: cancelledByEngineer.get(e.id)?.id ?? null }))
+  const engineersToCreate = toReactivate.filter((e) => !e.cancelledTaskId).map((e) => e.engineerId)
+  const reactivateTaskIds = toReactivate.filter((e) => !!e.cancelledTaskId).map((e) => e.cancelledTaskId as string)
+
+  if (engineersToCreate.length === 0 && reactivateTaskIds.length === 0) {
     return NextResponse.json(
       { error: 'Все выбранные инженеры уже назначены на эту заявку' },
       { status: 400 }
@@ -89,7 +121,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const createdIds = await db.$transaction(async (tx) => {
     const ids: string[] = []
-    for (const engineerId of engineersToCreate.map((e) => e.id)) {
+    for (const engineerId of engineersToCreate) {
+      const alreadyExists = await tx.serviceTask.findFirst({
+        where: {
+          deletedAt: null,
+          assignedToId: engineerId,
+          comment: { contains: marker },
+          status: { notIn: ['DONE', 'CANCELLED'] },
+        },
+        select: { id: true, comment: true },
+      })
+      if (alreadyExists && parseDelegationParentTaskId(alreadyExists.comment) === task.id) {
+        ids.push(alreadyExists.id)
+        continue
+      }
       const created = await tx.serviceTask.create({
         data: {
           requestNumber: task.requestNumber,
@@ -107,13 +152,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       })
       ids.push(created.id)
     }
+    for (const reactivateId of reactivateTaskIds) {
+      await tx.serviceTask.update({
+        where: { id: reactivateId },
+        data: { status: 'ASSIGNED', cancelReason: null },
+      })
+      ids.push(reactivateId)
+    }
 
     await tx.serviceTask.update({
       where: { id: task.id },
       data: {
         status: 'ASSIGNED',
         cancelReason: null,
-        assignedToId: chief.id,
+        assignedToId: role === 'CHIEF_ENGINEER' ? chief.id : task.assignedToId,
       },
     })
 
@@ -136,7 +188,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const n = createdIds.length
-  const newEngineerIds = engineersToCreate.map((e) => e.id)
+  const newEngineerIds = [...new Set([...engineersToCreate, ...toReactivate.map((e) => e.engineerId)])]
   await notifyClientSubscriberForEquipmentWork(
     task.equipmentId,
     {

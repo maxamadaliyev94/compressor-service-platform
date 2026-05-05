@@ -46,6 +46,7 @@ export default function EngineersScheduleClient() {
   const [year, setYear] = useState(now.getFullYear())
   const [engineerFilter, setEngineerFilter] = useState('ALL')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
   const [selectedCell, setSelectedCell] = useState<{ engineerName: string; day: number; tasks: ScheduleTask[] } | null>(null)
@@ -53,13 +54,28 @@ export default function EngineersScheduleClient() {
   useEffect(() => {
     async function load() {
       setLoading(true)
+      setError(null)
       const params = new URLSearchParams({ month: String(month), year: String(year) })
       if (engineerFilter !== 'ALL') params.set('engineerId', engineerFilter)
-      const res = await fetch(`/api/tasks/engineer-schedule?${params.toString()}`)
-      const data = await res.json()
-      setEngineers(data.engineers || [])
-      setEntries(data.schedule || [])
-      setLoading(false)
+      try {
+        const res = await fetch(`/api/tasks/engineer-schedule?${params.toString()}`)
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}))
+          setError((payload as { error?: string }).error || 'Не удалось загрузить график')
+          setEngineers([])
+          setEntries([])
+          return
+        }
+        const data = await res.json()
+        setEngineers(Array.isArray(data.engineers) ? data.engineers : [])
+        setEntries(Array.isArray(data.schedule) ? data.schedule : [])
+      } catch {
+        setError('Ошибка сети при загрузке графика')
+        setEngineers([])
+        setEntries([])
+      } finally {
+        setLoading(false)
+      }
     }
     void load()
   }, [month, year, engineerFilter])
@@ -124,6 +140,10 @@ export default function EngineersScheduleClient() {
       <div className="bg-white border rounded-xl overflow-x-auto">
         {loading ? (
           <div className="p-6 text-sm text-gray-500">Загрузка графика...</div>
+        ) : error ? (
+          <div className="p-6 text-sm text-red-600">{error}</div>
+        ) : visibleEngineers.length === 0 ? (
+          <div className="p-6 text-sm text-gray-500">Нет данных за выбранный период</div>
         ) : (
           <table className="min-w-[1000px] w-full text-sm">
             <thead className="bg-gray-50 border-b">

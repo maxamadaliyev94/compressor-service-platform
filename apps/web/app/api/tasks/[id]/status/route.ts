@@ -1,11 +1,23 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
+import { createNotification, notifyClientSubscriberForEquipmentWork, notifyEngineerRemovedFromTask } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import type { Role, ServiceTask, TaskStatus } from '@prisma/client'
+
+const MUTABLE_STATUSES = new Set<TaskStatus>(['ASSIGNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'])
+const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  NEW: ['ASSIGNED', 'IN_PROGRESS', 'CANCELLED'],
+  ASSIGNED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['DONE', 'CANCELLED'],
+  DRAFT: ['IN_PROGRESS', 'CANCELLED'],
+  REVIEW: ['IN_PROGRESS', 'CANCELLED'],
+  REVISION: ['IN_PROGRESS', 'CANCELLED'],
+  DONE: [],
+  CANCELLED: [],
+}
 
 function canExecuteServiceTask(
   role: Role,
@@ -28,6 +40,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const { status } = (await req.json()) as { status?: TaskStatus }
   if (!status) return NextResponse.json({ error: 'status обязателен' }, { status: 400 })
+  if (!MUTABLE_STATUSES.has(status)) {
+    return NextResponse.json({ error: 'Можно менять только статусы ASSIGNED/IN_PROGRESS/DONE/CANCELLED' }, { status: 400 })
+  }
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
@@ -74,6 +89,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
     return NextResponse.json({ error: 'Задача уже закрыта' }, { status: 400 })
+  }
+  const canMoveTo = ALLOWED_TRANSITIONS[task.status]?.includes(status) ?? false
+  if (!canMoveTo) {
+    return NextResponse.json(
+      { error: `Недопустимый переход статуса: ${task.status} → ${status}` },
+      { status: 400 }
+    )
   }
 
   const previousStatus = task.status
@@ -165,6 +187,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (status === 'CANCELLED') {
+    if (task.assignedToId) {
+      await notifyEngineerRemovedFromTask(task.id, task.requestNumber, task.assignedToId)
+    }
     await notifyClientSubscriberForEquipmentWork(task.equipmentId, {
       title: 'Задача отменена',
       message: 'Задача по оборудованию клиента отменена.',

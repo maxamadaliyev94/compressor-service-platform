@@ -142,7 +142,7 @@ export default function TaskDelegationEditModal({
     const s = new Set<string>()
     for (const c of children) {
       if (c.id === exceptChildId) continue
-      if (c.status === 'CANCELLED' || !c.assignedToId) continue
+      if (['CANCELLED', 'DONE'].includes(c.status) || !c.assignedToId) continue
       s.add(c.assignedToId)
     }
     return s

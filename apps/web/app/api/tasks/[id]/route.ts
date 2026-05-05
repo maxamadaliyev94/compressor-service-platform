@@ -278,11 +278,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           deletedAt: null,
           comment: { contains: marker },
         },
-        select: { id: true, assignedToId: true, comment: true },
+        select: { id: true, status: true, assignedToId: true, comment: true },
       })
       const siblingSameEngineer = siblings.some(
         (s) =>
-          parseDelegationParentTaskId(s.comment) === parentId && s.assignedToId === engineer.id
+          parseDelegationParentTaskId(s.comment) === parentId &&
+          !['DONE', 'CANCELLED'].includes(s.status) &&
+          s.assignedToId === engineer.id
       )
       if (siblingSameEngineer) {
         return NextResponse.json(
@@ -366,14 +368,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (hasAssignee && previousAssigneeId && previousAssigneeId !== newEngineerId) {
     await syncEngineerFreeIfNoActiveTasks(previousAssigneeId)
+    await notifyEngineerRemovedFromTask(updated.id, task.requestNumber, previousAssigneeId)
   }
   if (hasAssignee && newEngineerId && previousAssigneeId !== newEngineerId) {
     await markEngineerBusy(newEngineerId)
     if (task.taskType === 'LONG_TERM') {
       const period = formatLongTermNotifyPeriod(updated.startDate, updated.endDate).trim()
-      if (previousAssigneeId) {
-        await notifyEngineerRemovedFromTask(updated.id, task.requestNumber, previousAssigneeId)
-      }
       await notifyLongTermEngineerAssigned(updated.id, task.requestNumber, newEngineerId, period)
     } else {
       const chiefId = parentForNotify?.assignedToId

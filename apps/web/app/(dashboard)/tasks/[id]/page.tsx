@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
+import { hasPermission } from '@/lib/permissions'
 import TaskAdminActions from './TaskAdminActions'
 import TaskDelegatePanel from './TaskDelegatePanel'
 import TaskChiefWorkTypePanel from './TaskChiefWorkTypePanel'
@@ -10,6 +11,7 @@ import TaskLongTermChiefPanel from './TaskLongTermChiefPanel'
 import TaskScheduledAtEditor from './TaskScheduledAtEditor'
 import TaskLongTermDatesEditor from './TaskLongTermDatesEditor'
 import ClientSignaturePanel from './ClientSignaturePanel'
+import type { Role } from '@prisma/client'
 
 const typeLabels: Record<string, string> = {
   PLANNED_MAINTENANCE: 'Плановое ТО', DIAGNOSTICS: 'Диагностика',
@@ -92,10 +94,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   }
 
   const isNotDone = !['DONE', 'CANCELLED'].includes(task.status)
+  const canAssignTasks = await hasPermission(session.user.role as Role, 'action:task.assign')
   const showChiefDelegate =
     task.taskType !== 'LONG_TERM' &&
-    session?.user?.role === 'CHIEF_ENGINEER' &&
-    task.assignedToId === session.user.id &&
+    canAssignTasks &&
+    (session?.user?.role === 'ADMIN' ||
+      (session?.user?.role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||
+      (session?.user?.role === 'MANAGER' && task.equipment.object.branch.client.managerId === session.user.id)) &&
     isNotDone &&
     !task.report
 

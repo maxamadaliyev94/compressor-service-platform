@@ -37,14 +37,14 @@ function longTermRangeBounds(task: {
   endDate: Date | null
   scheduledAt: Date | null
   createdAt: Date
-}): { rangeStart: Date; rangeEnd: Date } | null {
+}, monthStart: Date, monthEndEx: Date): { rangeStart: Date; rangeEnd: Date } | null {
   if (!task.startDate && !task.endDate) {
     const anchor = task.scheduledAt ?? task.createdAt
     const d = atUtcMidnight(anchor)
     return { rangeStart: d, rangeEnd: d }
   }
-  const s = task.startDate ? atUtcMidnight(task.startDate) : atUtcMidnight(task.endDate!)
-  const e = task.endDate ? atUtcMidnight(task.endDate) : atUtcMidnight(task.startDate!)
+  const s = task.startDate ? atUtcMidnight(task.startDate) : monthStart
+  const e = task.endDate ? atUtcMidnight(task.endDate) : new Date(monthEndEx.getTime() - 86400000)
   return s.getTime() <= e.getTime() ? { rangeStart: s, rangeEnd: e } : { rangeStart: e, rangeEnd: s }
 }
 
@@ -53,7 +53,7 @@ function daysOfLongTermInMonth(
   monthStart: Date,
   monthEndEx: Date
 ): string[] {
-  const rb = longTermRangeBounds(task)
+  const rb = longTermRangeBounds(task, monthStart, monthEndEx)
   if (!rb) return []
   const monthLast = new Date(monthEndEx.getTime() - 86400000)
   const clipStart = rb.rangeStart.getTime() < monthStart.getTime() ? monthStart : rb.rangeStart
@@ -216,15 +216,5 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  const engineerIdsInSchedule = new Set<string>()
-  for (const k of grid.keys()) {
-    engineerIdsInSchedule.add(k.split('|')[0])
-  }
-
-  const engineersResponse =
-    session.user.role === 'MANAGER'
-      ? engineers.filter((e) => engineerIdsInSchedule.has(e.id))
-      : engineers
-
-  return NextResponse.json({ month, year, engineers: engineersResponse, schedule })
+  return NextResponse.json({ month, year, engineers, schedule })
 }

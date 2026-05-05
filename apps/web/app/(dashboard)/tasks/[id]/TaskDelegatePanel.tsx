@@ -65,7 +65,7 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
   useEffect(() => {
     const ids = new Set(
       delegated
-        .filter((c) => c.status !== 'CANCELLED' && c.assignedToId)
+        .filter((c) => !['CANCELLED', 'DONE'].includes(c.status) && c.assignedToId)
         .map((c) => c.assignedToId as string)
     )
     setSelected((prev) => prev.filter((id) => !ids.has(id)))
@@ -73,7 +73,7 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
 
   const alreadyIds = new Set(
     delegated
-      .filter((c) => c.status !== 'CANCELLED' && c.assignedToId)
+      .filter((c) => !['CANCELLED', 'DONE'].includes(c.status) && c.assignedToId)
       .map((c) => c.assignedToId as string)
   )
 
@@ -98,7 +98,6 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
     }
     setSelected([])
     await loadDelegated()
-    router.push('/tasks')
     router.refresh()
   }
 
@@ -108,7 +107,7 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
   }
 
   const engineersForModal = users.map((u) => ({ id: u.id, name: u.name }))
-  const hasActiveDelegated = delegated.some((c) => c.status !== 'CANCELLED')
+  const hasActiveDelegated = delegated.some((c) => !['CANCELLED', 'DONE'].includes(c.status))
 
   return (
     <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 mb-6">
