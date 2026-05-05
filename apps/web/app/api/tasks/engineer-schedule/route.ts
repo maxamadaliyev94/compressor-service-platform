@@ -3,6 +3,8 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { atUtcMidnight, eachUtcDateInclusive } from '@/lib/task-schedule-display'
 
+const BUSINESS_TIMEZONE = 'Asia/Tashkent'
+
 type ScheduleTask = {
   id: string
   type: string
@@ -21,6 +23,10 @@ function monthUtcRange(year: number, month1to12: number) {
   return { start, end }
 }
 
+function dateKeyInBusinessTimezone(d: Date): string {
+  return d.toLocaleDateString('sv-SE', { timeZone: BUSINESS_TIMEZONE })
+}
+
 /** День быстрой задачи: срок, иначе момент последнего изменения/создания. */
 function quickCalendarDay(task: {
   scheduledAt: Date | null
@@ -28,7 +34,7 @@ function quickCalendarDay(task: {
   createdAt: Date
 }): string {
   const anchor = task.scheduledAt ?? task.updatedAt ?? task.createdAt
-  return atUtcMidnight(anchor).toISOString().slice(0, 10)
+  return dateKeyInBusinessTimezone(anchor)
 }
 
 function dateKeyInUtcMonth(dateKey: string, monthStart: Date, monthEndEx: Date): boolean {
@@ -44,7 +50,7 @@ function longTermRangeBounds(task: {
 }, monthStart: Date, monthEndEx: Date): { rangeStart: Date; rangeEnd: Date } | null {
   if (!task.startDate && !task.endDate) {
     const anchor = task.scheduledAt ?? task.createdAt
-    const d = atUtcMidnight(anchor)
+    const d = new Date(`${dateKeyInBusinessTimezone(anchor)}T12:00:00.000Z`)
     return { rangeStart: d, rangeEnd: d }
   }
   const s = task.startDate ? atUtcMidnight(task.startDate) : monthStart
