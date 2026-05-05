@@ -7,8 +7,11 @@
 
 ## Automatic Moto-hour Updates
 
-- Endpoint: `POST /api/cron/update-hours`
-- Protection: send `Authorization: Bearer <CRON_SECRET>` or header `x-cron-secret: <CRON_SECRET>`
+- Endpoint: `GET /api/cron/update-hours`
+- Protection: pass one of:
+  - query param `?secret=<CRON_SECRET>`
+  - header `Authorization: Bearer <CRON_SECRET>`
+  - header `x-cron-secret: <CRON_SECRET>`
 - Formula used each hour for every equipment with configured mode:
   - `(hoursPerDay * daysPerWeek) / 7 / 24`
 - Only equipment with both `hoursPerDay` and `daysPerWeek` set are updated.
@@ -16,5 +19,11 @@
 
 ### Scheduler options
 
-- **Vercel Cron**: call `POST /api/cron/update-hours` hourly and pass `CRON_SECRET`.
-- **Railway**: `node-cron` is started inside app runtime (`apps/web/instrumentation.ts`) and runs every hour (`0 * * * *`).
+- **Vercel Cron**: call `GET /api/cron/update-hours?secret=<CRON_SECRET>` hourly.
+- **Railway**: configure an hourly cron call in `railway.toml`:
+
+```toml
+[cron.update-hours]
+schedule = "0 * * * *"
+command = "curl -fsS \"$RAILWAY_PUBLIC_DOMAIN/api/cron/update-hours?secret=$CRON_SECRET\""
+```

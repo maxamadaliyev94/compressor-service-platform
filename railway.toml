@@ -1,2 +1,6 @@
 [deploy]
 startCommand = "/bin/sh -c 'cd /app/packages/db && npx prisma migrate deploy --schema=prisma/schema.prisma && cd /app && pnpm --filter @csp/web start'"
+
+[cron.update-hours]
+schedule = "0 * * * *"
+command = "curl -fsS \"$RAILWAY_PUBLIC_DOMAIN/api/cron/update-hours?secret=$CRON_SECRET\""
