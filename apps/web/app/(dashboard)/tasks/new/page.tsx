@@ -92,6 +92,11 @@ export default function NewTaskPage() {
       alert('Выберите оборудование')
       return
     }
+    const chiefAssignsEngineers = currentUser?.role === 'CHIEF_ENGINEER' && selectedEngineerIds.length > 0
+    if (chiefAssignsEngineers && !form.scheduledAt) {
+      alert('Сначала укажите срок выполнения, затем назначайте инженеров')
+      return
+    }
     setLoading(true)
     try {
       const payload =
@@ -311,6 +316,9 @@ export default function NewTaskPage() {
                 </option>
               ))}
             </select>
+          )}
+          {currentUser?.role === 'CHIEF_ENGINEER' && selectedEngineerIds.length > 0 && !form.scheduledAt && (
+            <p className="text-xs text-amber-700 mt-1">Для назначения инженеров укажите срок выполнения</p>
           )}
           {(form.assignedToId || selectedEngineerIds.length > 0) && (
             <p className="text-xs text-green-600 mt-1">✓ Уведомление будет отправлено автоматически</p>

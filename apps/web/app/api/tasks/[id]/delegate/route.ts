@@ -58,6 +58,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (['DONE', 'CANCELLED'].includes(task.status)) {
     return NextResponse.json({ error: 'Задача уже завершена или отменена' }, { status: 400 })
   }
+  if (!task.scheduledAt) {
+    return NextResponse.json(
+      { error: 'Сначала укажите срок выполнения, затем распределяйте инженеров' },
+      { status: 400 }
+    )
+  }
   const canUseTask =
     role === 'ADMIN' ||
     (role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||

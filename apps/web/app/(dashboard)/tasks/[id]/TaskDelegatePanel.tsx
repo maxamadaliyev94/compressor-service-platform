@@ -13,7 +13,13 @@ type DelegatedChild = {
   assignedTo: { id: string; name: string } | null
 }
 
-export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
+export default function TaskDelegatePanel({
+  taskId,
+  hasScheduledAt,
+}: {
+  taskId: string
+  hasScheduledAt: boolean
+}) {
   const router = useRouter()
   const [users, setUsers] = useState<UserRow[]>([])
   const [delegated, setDelegated] = useState<DelegatedChild[]>([])
@@ -78,6 +84,10 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
   )
 
   async function submit() {
+    if (!hasScheduledAt) {
+      alert('Сначала укажите срок выполнения задачи, затем распределяйте инженеров')
+      return
+    }
     const toAssign = selected.filter((id) => !alreadyIds.has(id))
     if (toAssign.length === 0) {
       alert('Выберите инженеров, которые ещё не назначены на эту заявку')
@@ -116,6 +126,11 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
         Выберите одного или нескольких инженеров. Для каждого будет создана отдельная задача, эта заявка будет закрыта
         как «распределённая».
       </p>
+      {!hasScheduledAt && (
+        <p className="text-sm text-amber-700 mb-3">
+          Сначала укажите срок выполнения в карточке задачи. Без срока распределение инженеров недоступно.
+        </p>
+      )}
       {loadingUsers || loadingDelegated ? (
         <p className="text-sm text-gray-500">Загрузка списка…</p>
       ) : users.length === 0 ? (
@@ -132,7 +147,7 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
                 <input
                   type="checkbox"
                   checked={assigned || selected.includes(u.id)}
-                  disabled={assigned}
+                  disabled={assigned || !hasScheduledAt}
                   onChange={() => toggle(u.id)}
                   className="w-4 h-4 mt-0.5 accent-indigo-600 shrink-0 disabled:opacity-50"
                 />
@@ -156,7 +171,7 @@ export default function TaskDelegatePanel({ taskId }: { taskId: string }) {
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={loading || loadingUsers || loadingDelegated || selected.length === 0}
+          disabled={loading || loadingUsers || loadingDelegated || selected.length === 0 || !hasScheduledAt}
           className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50"
         >
           {loading ? 'Отправка…' : `Назначить выбранным (${selected.length})`}

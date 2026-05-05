@@ -46,6 +46,16 @@ export async function POST(req: NextRequest) {
       ? [body.assignedToId]
       : []
 
+  if (role === 'CHIEF_ENGINEER' && targetIds.length > 0) {
+    const hasScheduledAt = typeof body.scheduledAt === 'string' && body.scheduledAt.trim().length > 0
+    if (!hasScheduledAt) {
+      return NextResponse.json(
+        { error: 'Главный инженер может назначать инженеров только после указания срока выполнения' },
+        { status: 400 }
+      )
+    }
+  }
+
   const [creator, selectedEquipment, assignees] = await Promise.all([
     db.user.findUnique({
       where: { id: session.user.id },

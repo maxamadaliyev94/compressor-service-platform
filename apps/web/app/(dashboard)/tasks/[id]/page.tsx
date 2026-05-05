@@ -466,7 +466,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
-      {showChiefDelegate && <TaskDelegatePanel taskId={task.id} />}
+      {showChiefDelegate && (
+        <TaskDelegatePanel
+          taskId={task.id}
+          hasScheduledAt={Boolean(task.scheduledAt)}
+        />
+      )}
 
       {task.report ? (
         <div className="space-y-4">
