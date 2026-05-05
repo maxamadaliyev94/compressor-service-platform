@@ -302,7 +302,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const data: {
     scheduledAt?: Date | null
     assignedToId?: string
-    assignedAt?: Date | null
     taskType?: TaskWorkType
     managedByChiefId?: string | null
     startDate?: Date | null
@@ -310,7 +309,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } = {}
   if (hasScheduled) data.scheduledAt = nextScheduledAt!
   if (hasAssignee) data.assignedToId = newEngineerId!
-  if (hasAssignee) data.assignedAt = new Date()
   if (hasTaskType) {
     data.taskType = nextTaskType!
     data.managedByChiefId = nextManagedByChiefId ?? null

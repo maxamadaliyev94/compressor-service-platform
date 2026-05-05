@@ -316,8 +316,6 @@ model ServiceTask {
   managedByChiefId String?
   priority     TaskPriority @default(MEDIUM)
   status       TaskStatus   @default(NEW)
-  /// Момент последнего назначения/переназначения исполнителя.
-  assignedAt   DateTime?    @map("assigned_at")
   scheduledAt  DateTime?
   /// Дата начала работ (долгосрочная задача), календарный день.
   startDate    DateTime?    @map("start_date") @db.Date

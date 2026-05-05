@@ -21,14 +21,13 @@ function monthUtcRange(year: number, month1to12: number) {
   return { start, end }
 }
 
-/** День быстрой задачи: срок, иначе момент назначения, иначе fallback. */
+/** День быстрой задачи: срок, иначе момент последнего изменения/создания. */
 function quickCalendarDay(task: {
   scheduledAt: Date | null
-  assignedAt: Date | null
   updatedAt: Date
   createdAt: Date
 }): string {
-  const anchor = task.scheduledAt ?? task.assignedAt ?? task.updatedAt ?? task.createdAt
+  const anchor = task.scheduledAt ?? task.updatedAt ?? task.createdAt
   return atUtcMidnight(anchor).toISOString().slice(0, 10)
 }
 
@@ -115,7 +114,6 @@ export async function GET(req: NextRequest) {
     startDate: true,
     endDate: true,
     assignedToId: true,
-    assignedAt: true,
     updatedAt: true,
     createdAt: true,
     equipment: { select: { brand: true, model: true, serialNumber: true } },
@@ -130,7 +128,7 @@ export async function GET(req: NextRequest) {
       ...managerScope,
     },
     select: taskSelect,
-  })) as Array<ScheduleTask & { assignedToId: string | null; assignedAt: Date | null; createdAt: Date }>
+  })) as Array<ScheduleTask & { assignedToId: string | null; createdAt: Date }>
 
   const ltStaffLinks = await db.longTermTaskEngineer.findMany({
     where: { engineerId: { in: engineerIds } },

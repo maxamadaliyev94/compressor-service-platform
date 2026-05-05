@@ -102,10 +102,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const updated = await db.serviceTask.update({
     where: { id: params.id },
-    data: {
-      status,
-      assignedAt: status === 'ASSIGNED' && task.assignedToId ? new Date() : undefined,
-    },
+    data: { status },
   })
 
   if (status === 'IN_PROGRESS') {

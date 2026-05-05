@@ -118,7 +118,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const baseComment = task.comment?.trim() || ''
   const prefix = `${marker}\n`
-  const assignedAtNow = new Date()
 
   const createdIds = await db.$transaction(async (tx) => {
     const ids: string[] = []
@@ -147,7 +146,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           managedByChiefId: null,
           priority: task.priority,
           status: 'ASSIGNED',
-          assignedAt: assignedAtNow,
           scheduledAt: task.scheduledAt,
           comment: `${prefix}${baseComment}`.trim(),
         },
@@ -157,7 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     for (const reactivateId of reactivateTaskIds) {
       await tx.serviceTask.update({
         where: { id: reactivateId },
-        data: { status: 'ASSIGNED', cancelReason: null, assignedAt: assignedAtNow },
+        data: { status: 'ASSIGNED', cancelReason: null },
       })
       ids.push(reactivateId)
     }
