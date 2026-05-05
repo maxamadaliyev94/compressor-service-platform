@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -21,11 +21,38 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
   const [daysPerWeek, setDaysPerWeek] = useState('5')
   const [showCalc, setShowCalc] = useState(false)
 
-  const newHours = parseInt(hours) || 0
-  const remaining = nextServiceHours ? nextServiceHours - newHours : null
+  const calcStorageKey = `equipment:${equipmentId}:workModeCalc`
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(calcStorageKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { hoursPerDay?: string; daysPerWeek?: string; showCalc?: boolean }
+      if (typeof parsed.hoursPerDay === 'string') setHoursPerDay(parsed.hoursPerDay)
+      if (typeof parsed.daysPerWeek === 'string') setDaysPerWeek(parsed.daysPerWeek)
+      if (typeof parsed.showCalc === 'boolean') setShowCalc(parsed.showCalc)
+    } catch {
+      // ignore broken localStorage payload
+    }
+  }, [calcStorageKey])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        calcStorageKey,
+        JSON.stringify({ hoursPerDay, daysPerWeek, showCalc })
+      )
+    } catch {
+      // ignore localStorage write errors
+    }
+  }, [calcStorageKey, hoursPerDay, daysPerWeek, showCalc])
+
+  const parsedHours = Number.parseInt(hours, 10)
+  const newHours = Number.isFinite(parsedHours) ? parsedHours : 0
+  const remaining = nextServiceHours !== null ? nextServiceHours - newHours : null
   // Расчёт даты следующего ТО
-  const calcResult = (() => {
-    if (!hoursPerDay || !daysPerWeek || !remaining || remaining <= 0) return null
+  const calcResult = useMemo(() => {
+    if (!hoursPerDay || !daysPerWeek || remaining === null || remaining <= 0) return null
     const hpd = parseFloat(hoursPerDay)
     const dpw = parseFloat(daysPerWeek)
     if (!hpd || !dpw) return null
@@ -40,7 +67,7 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
       date: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
       hoursPerWeek: hoursPerWeek.toFixed(1),
     }
-  })()
+  }, [hoursPerDay, daysPerWeek, remaining])
   const getStatus = () => {
     if (!remaining && remaining !== 0) return null
     if (remaining < 0) return { label: `Просрочено на ${Math.abs(remaining)} м/ч`, color: 'text-red-600 bg-red-50 border-red-200' }
@@ -96,7 +123,7 @@ export default function UpdateHours({ equipmentId, currentHours, nextServiceHour
             </p>
           </div>
 
-          {nextServiceHours && hours && (
+          {nextServiceHours !== null && (
             <div className={`border rounded-xl p-3 text-center text-sm font-medium ${status?.color}`}>
               {status?.label}
               <div className="text-xs mt-1 opacity-75">
