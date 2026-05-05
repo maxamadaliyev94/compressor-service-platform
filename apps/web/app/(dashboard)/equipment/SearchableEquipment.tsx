@@ -158,6 +158,42 @@ export default function SearchableEquipment({
           <option value="EXPIRED">Истекла</option>
         </select>
       </div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="text-xs text-gray-500">Фильтр по гарантии:</span>
+        <button
+          type="button"
+          onClick={() => setFilterWarranty('ALL')}
+          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            filterWarranty === 'ALL'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Все
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterWarranty('ACTIVE')}
+          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            filterWarranty === 'ACTIVE'
+              ? 'bg-green-600 text-white border-green-600'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          На гарантии
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterWarranty('EXPIRED')}
+          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            filterWarranty === 'EXPIRED'
+              ? 'bg-gray-700 text-white border-gray-700'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Гарантия истекла
+        </button>
+      </div>
       <p className="text-xs text-gray-400 mb-3">
         Найдено: {filtered.length} из {equipment.length}
       </p>
