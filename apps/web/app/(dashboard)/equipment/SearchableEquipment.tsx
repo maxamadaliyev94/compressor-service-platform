@@ -71,8 +71,17 @@ export default function SearchableEquipment({
   }
 
   function getCity(eq: any) {
-    const city = eq.object?.branch?.client?.city
-    return typeof city === 'string' && city.trim().length > 0 ? city.trim() : 'Без города'
+    const branchCity = eq.object?.branch?.city
+    if (typeof branchCity === 'string' && branchCity.trim().length > 0) return branchCity.trim()
+
+    const objectName = eq.object?.name
+    if (typeof objectName === 'string' && objectName.trim().length > 0) return objectName.trim()
+
+    const branchName = eq.object?.branch?.name
+    if (typeof branchName === 'string' && branchName.trim().length > 0) return branchName.trim()
+
+    const clientCity = eq.object?.branch?.client?.city
+    return typeof clientCity === 'string' && clientCity.trim().length > 0 ? clientCity.trim() : 'Без города'
   }
 
   const cityOptions = Array.from(new Set(equipment.map((eq) => getCity(eq)))).sort((a, b) =>
