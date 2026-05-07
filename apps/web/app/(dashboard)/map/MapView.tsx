@@ -25,14 +25,24 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function MapView({ cityData, clients, branchPoints }: { cityData: any[], clients: any[], branchPoints: any[] }) {
   const [selected, setSelected] = useState<any>(null)
+  const [selectedCity, setSelectedCity] = useState<string>('ALL')
   const maxClients = Math.max(...cityData.map((c: any) => c.total), 1)
   void clients
+  const filteredBranchPoints =
+    selectedCity === 'ALL' ? branchPoints : branchPoints.filter((point: any) => point.city === selectedCity)
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
       <div className="xl:col-span-2">
         <div className="bg-white border rounded-xl overflow-hidden h-[360px] sm:h-[420px] md:h-[560px]">
-          <LeafletMap cityData={cityData} branchPoints={branchPoints} onCityClick={setSelected} />
+          <LeafletMap
+            cityData={cityData}
+            branchPoints={filteredBranchPoints}
+            onCityClick={(data) => {
+              setSelected(data)
+              setSelectedCity(data?.city || 'ALL')
+            }}
+          />
         </div>
         <p className="text-xs text-gray-400 mt-2 text-center">
           Карта интерактивна — можно зумировать и перемещать. Нажмите на маркер для деталей.
@@ -49,6 +59,24 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
             карточке клиента. Синие круги — справочные центры городов, метки — точные филиалы.
           </p>
           <div className="space-y-2">
+            <select
+              value={selectedCity}
+              onChange={(e) => {
+                const value = e.target.value
+                setSelectedCity(value)
+                setSelected(value === 'ALL' ? null : cityData.find((c: any) => c.city === value) || null)
+              }}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">Все города</option>
+              {[...cityData]
+                .sort((a: any, b: any) => a.city.localeCompare(b.city, 'ru'))
+                .map((data: any) => (
+                  <option key={data.city} value={data.city}>
+                    {data.city}
+                  </option>
+                ))}
+            </select>
             {cityData
               .sort((a: any, b: any) => b.total - a.total)
               .map((data: any) => {
@@ -70,7 +98,11 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
                   >
                     <button
                       type="button"
-                      onClick={() => setSelected(selected?.city === data.city ? null : data)}
+                      onClick={() => {
+                        const isSame = selected?.city === data.city
+                        setSelected(isSame ? null : data)
+                        setSelectedCity(isSame ? 'ALL' : data.city)
+                      }}
                       className="w-full flex items-center justify-between p-2.5 text-left"
                     >
                       <div>
@@ -115,7 +147,7 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
         <div className="bg-white border rounded-xl p-4">
           <h3 className="font-semibold text-sm mb-1">Точные локации площадок</h3>
           <p className="text-xs text-gray-500">
-            На карте отображаются маркеры площадок с координатами: {branchPoints.length}
+            На карте отображаются маркеры площадок с координатами: {filteredBranchPoints.length}
           </p>
         </div>
 
