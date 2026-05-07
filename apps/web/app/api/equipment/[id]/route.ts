@@ -68,6 +68,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     )
   }
 
-  await db.equipment.delete({ where: { id: params.id } })
+  await db.$transaction(async (tx) => {
+    // Удаляем отчёты перед задачами: у WorkReport -> ServiceTask связь без каскадного удаления.
+    await tx.workReport.deleteMany({
+      where: { task: { equipmentId: params.id } },
+    })
+
+    await tx.serviceTask.deleteMany({
+      where: { equipmentId: params.id },
+    })
+
+    await tx.equipment.delete({ where: { id: params.id } })
+  })
+
   return NextResponse.json({ ok: true })
 }
