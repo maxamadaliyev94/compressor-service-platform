@@ -7,7 +7,6 @@ import UpdateHours from './UpdateHours'
 import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
 import EquipmentPhotoGallery from './EquipmentPhotoGallery'
-import ClearHistoryButton from './ClearHistoryButton'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
@@ -236,10 +235,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
             <div className="flex justify-between items-center p-4 border-b">
               <h2 className="font-semibold">История обслуживания ({eq.tasks.length})</h2>
               {!isClientPortal && (
-                <div className="flex items-center gap-2">
-                  {role === 'ADMIN' && <ClearHistoryButton equipmentId={eq.id} />}
-                  <QuickTaskButton equipmentId={eq.id} createdById={session.user.id} role={role} />
-                </div>
+                <QuickTaskButton equipmentId={eq.id} createdById={session.user.id} role={role} />
               )}
             </div>
             {eq.tasks.length === 0 ? (
