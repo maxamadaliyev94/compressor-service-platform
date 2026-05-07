@@ -50,7 +50,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
   const eq = await db.equipment.findUnique({
     where: { id: params.id },
-    include: { tasks: { where: { deletedAt: null }, select: { id: true } } },
+    include: {
+      tasks: {
+        where: {
+          deletedAt: null,
+          status: { notIn: ['DONE', 'CANCELLED'] },
+        },
+        select: { id: true },
+      },
+    },
   })
   if (!eq) return NextResponse.json({ error: 'Оборудование не найдено' }, { status: 404 })
   if (eq.tasks.length > 0) {

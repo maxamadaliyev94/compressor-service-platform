@@ -16,6 +16,7 @@ export default function SearchableEquipment({
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [filterType, setFilterType] = useState('ALL')
   const [filterWarranty, setFilterWarranty] = useState('ALL')
+  const [filterCity, setFilterCity] = useState('ALL')
   const [showStopped, setShowStopped] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -69,6 +70,15 @@ export default function SearchableEquipment({
     return 'ACTIVE'
   }
 
+  function getCity(eq: any) {
+    const city = eq.object?.branch?.client?.city
+    return typeof city === 'string' && city.trim().length > 0 ? city.trim() : 'Без города'
+  }
+
+  const cityOptions = Array.from(new Set(equipment.map((eq) => getCity(eq)))).sort((a, b) =>
+    a.localeCompare(b, 'ru')
+  )
+
   const filtered = equipment.filter((eq) => {
     const ms = getMS(eq)
     const ws = getWS(eq)
@@ -85,8 +95,10 @@ export default function SearchableEquipment({
       filterWarranty === 'ALL' ||
       (filterWarranty === 'ACTIVE' && (ws === 'ACTIVE' || ws === 'EXPIRING')) ||
       (filterWarranty === 'EXPIRED' && (ws === 'EXPIRED' || ws === 'VOIDED'))
+    const city = getCity(eq)
+    const matchCity = filterCity === 'ALL' || city === filterCity
     const matchStopped = showStopped || eq.status !== 'STOPPED'
-    return matchSearch && matchStatus && matchType && matchWarranty && matchStopped
+    return matchSearch && matchStatus && matchType && matchWarranty && matchCity && matchStopped
   })
 
   const sorted = [...filtered].sort((a, b) => {
@@ -156,6 +168,18 @@ export default function SearchableEquipment({
           <option value="ALL">Гарантия: Все</option>
           <option value="ACTIVE">На гарантии</option>
           <option value="EXPIRED">Истекла</option>
+        </select>
+        <select
+          value={filterCity}
+          onChange={(e) => setFilterCity(e.target.value)}
+          className="w-full md:w-auto min-w-[170px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="ALL">Все города</option>
+          {cityOptions.map((city) => (
+            <option key={city} value={city}>
+              {city}
+            </option>
+          ))}
         </select>
       </div>
       <div className="flex flex-wrap items-center gap-2 mb-3">
