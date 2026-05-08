@@ -17,6 +17,7 @@ export default function SearchableEquipment({
   const [filterType, setFilterType] = useState('ALL')
   const [filterWarranty, setFilterWarranty] = useState('ALL')
   const [filterCity, setFilterCity] = useState('ALL')
+  const [sortBy, setSortBy] = useState<'NONE' | 'HOURS_ASC' | 'HOURS_DESC' | 'WARRANTY_ASC' | 'WARRANTY_DESC'>('NONE')
   const [showStopped, setShowStopped] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -111,6 +112,24 @@ export default function SearchableEquipment({
   })
 
   const sorted = [...filtered].sort((a, b) => {
+    const getHoursLeft = (eq: (typeof equipment)[number]) =>
+      eq.nextServiceHours != null ? eq.nextServiceHours - eq.currentHours : Number.POSITIVE_INFINITY
+    const getWarrantyTs = (eq: (typeof equipment)[number]) =>
+      eq.warrantyUntil ? new Date(eq.warrantyUntil).getTime() : 0
+
+    if (sortBy === 'HOURS_ASC') {
+      return getHoursLeft(a) - getHoursLeft(b)
+    }
+    if (sortBy === 'HOURS_DESC') {
+      return getHoursLeft(b) - getHoursLeft(a)
+    }
+    if (sortBy === 'WARRANTY_ASC') {
+      return getWarrantyTs(a) - getWarrantyTs(b)
+    }
+    if (sortBy === 'WARRANTY_DESC') {
+      return getWarrantyTs(b) - getWarrantyTs(a)
+    }
+
     const getPriority = (eq: (typeof equipment)[0]) => {
       const diff = eq.nextServiceHours != null ? eq.nextServiceHours - eq.currentHours : 9999
       if (diff < 0) return 0
@@ -120,6 +139,22 @@ export default function SearchableEquipment({
     }
     return getPriority(a) - getPriority(b)
   })
+
+  function toggleHoursSort() {
+    setSortBy((prev) => {
+      if (prev === 'HOURS_ASC') return 'HOURS_DESC'
+      if (prev === 'HOURS_DESC') return 'NONE'
+      return 'HOURS_ASC'
+    })
+  }
+
+  function toggleWarrantySort() {
+    setSortBy((prev) => {
+      if (prev === 'WARRANTY_ASC') return 'WARRANTY_DESC'
+      if (prev === 'WARRANTY_DESC') return 'NONE'
+      return 'WARRANTY_ASC'
+    })
+  }
 
   async function removeEquipment(id: string) {
     const ok = window.confirm('Удалить оборудование? Это действие нельзя отменить.')
@@ -296,11 +331,35 @@ export default function SearchableEquipment({
               <th className="text-left p-3 font-medium">Оборудование</th>
               <th className="text-left p-3 font-medium">Тип</th>
               <th className="text-left p-3 font-medium">Клиент / Объект</th>
-              <th className="text-left p-3 font-medium">Моточасы</th>
+              <th className="text-left p-3 font-medium">
+                <button
+                  type="button"
+                  onClick={toggleHoursSort}
+                  className="inline-flex items-center gap-1 hover:text-blue-700"
+                  title="Сортировать по оставшимся моточасам"
+                >
+                  Моточасы
+                  <span className={sortBy === 'HOURS_ASC' ? 'text-blue-700' : 'text-gray-400'}>↑</span>
+                  <span className={sortBy === 'HOURS_DESC' ? 'text-blue-700' : 'text-gray-400'}>↓</span>
+                </button>
+              </th>
               <th className="text-left p-3 font-medium">Последнее ТО</th>
               <th className="text-left p-3 font-medium">Статус ТО</th>
               <th className="text-left p-3 font-medium">Задача</th>
-              {canViewWarranty && <th className="text-left p-3 font-medium">Гарантия</th>}
+              {canViewWarranty && (
+                <th className="text-left p-3 font-medium">
+                  <button
+                    type="button"
+                    onClick={toggleWarrantySort}
+                    className="inline-flex items-center gap-1 hover:text-blue-700"
+                    title="Сортировать по дате окончания гарантии"
+                  >
+                    Гарантия
+                    <span className={sortBy === 'WARRANTY_ASC' ? 'text-blue-700' : 'text-gray-400'}>↑</span>
+                    <span className={sortBy === 'WARRANTY_DESC' ? 'text-blue-700' : 'text-gray-400'}>↓</span>
+                  </button>
+                </th>
+              )}
               {canManageEquipment && <th className="text-left p-3 font-medium">Действия</th>}
             </tr>
           </thead>
