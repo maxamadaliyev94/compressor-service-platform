@@ -7,6 +7,7 @@ import UpdateHours from './UpdateHours'
 import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
 import EquipmentPhotoGallery from './EquipmentPhotoGallery'
+import EquipmentTechnicalData from './EquipmentTechnicalData'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
@@ -184,33 +185,25 @@ export default async function EquipmentPage({ params }: { params: { id: string }
             </div>
           </div>
 
-          <div className="bg-white border rounded-xl p-5">
-            <h2 className="font-semibold mb-3 flex items-center gap-2">⚙️ Технические данные</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[eq.type]}</span></div>
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Бренд:</span><span className="font-medium">{eq.brand}</span></div>
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Модель:</span><span className="font-medium">{eq.model}</span></div>
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Серийный №:</span>
-                <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{eq.serialNumber}</span>
-              </div>
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Год выпуска:</span><span>{eq.yearOfManufacture || '—'}</span></div>
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Установлен:</span>
-                <span>{eq.installDate ? new Date(eq.installDate).toLocaleDateString('ru-RU') : '—'}</span>
-              </div>
-              {canViewWarranty && (
-                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Гарантия до:</span>
-                  <span className={ws === 'EXPIRED' ? 'text-red-600' : ws === 'EXPIRING' ? 'text-orange-600' : 'text-green-600'}>
-                    {eq.warrantyUntil ? new Date(eq.warrantyUntil).toLocaleDateString('ru-RU') : '—'}
-                  </span>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-28">Статус:</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[eq.status]}`}>
-                  {statusLabels[eq.status]}
-                </span>
-              </div>
-            </div>
-          </div>
+          <EquipmentTechnicalData
+            equipmentId={eq.id}
+            canEdit={!isClientPortal && (role === 'ADMIN' || role === 'MANAGER')}
+            canViewWarranty={canViewWarranty}
+            initial={{
+              type: eq.type,
+              brand: eq.brand,
+              model: eq.model,
+              serialNumber: eq.serialNumber,
+              yearOfManufacture: eq.yearOfManufacture,
+              installDate: eq.installDate ? eq.installDate.toISOString() : null,
+              warrantyUntil: eq.warrantyUntil ? eq.warrantyUntil.toISOString() : null,
+              warrantyVoided: eq.warrantyVoided,
+              status: eq.status,
+              currentHours: eq.currentHours,
+              nextServiceHours: eq.nextServiceHours,
+              notes: eq.notes,
+            }}
+          />
 
           {!isClientPortal && (
             <UpdateHours

@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getEquipmentClientId } from '@/lib/api-access'
+import { Prisma } from '@prisma/client'
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -18,20 +19,44 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 
   const body = await req.json()
-  const equipment = await db.equipment.update({
-    where: { id: params.id },
-    data: {
-      brand: body.brand,
-      model: body.model,
-      type: body.type,
-      currentHours: parseInt(body.currentHours) || 0,
-      nextServiceHours: body.nextServiceHours ? parseInt(body.nextServiceHours) : undefined,
-      warrantyUntil: body.warrantyUntil ? new Date(body.warrantyUntil) : null,
-      status: body.status,
-      notes: body.notes || null,
-    },
-  })
-  return NextResponse.json(equipment)
+  const yearRaw = body.yearOfManufacture
+  const yearParsed =
+    yearRaw === '' || yearRaw === null || yearRaw === undefined
+      ? null
+      : Number.parseInt(String(yearRaw), 10)
+  const yearOfManufacture =
+    yearParsed !== null && Number.isFinite(yearParsed) ? yearParsed : null
+
+  try {
+    const equipment = await db.equipment.update({
+      where: { id: params.id },
+      data: {
+        brand: String(body.brand ?? ''),
+        model: String(body.model ?? ''),
+        type: body.type,
+        serialNumber: String(body.serialNumber ?? ''),
+        yearOfManufacture,
+        installDate: body.installDate ? new Date(body.installDate) : null,
+        currentHours: Number(body.currentHours) || 0,
+        nextServiceHours:
+          body.nextServiceHours === '' || body.nextServiceHours === null || body.nextServiceHours === undefined
+            ? null
+            : Number.parseInt(String(body.nextServiceHours), 10),
+        warrantyUntil: body.warrantyUntil ? new Date(body.warrantyUntil) : null,
+        status: body.status,
+        notes: body.notes ?? null,
+      },
+    })
+    return NextResponse.json(equipment)
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Этот серийный номер уже используется другим оборудованием' },
+        { status: 409 }
+      )
+    }
+    throw e
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
