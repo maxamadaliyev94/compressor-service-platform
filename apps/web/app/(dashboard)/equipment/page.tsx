@@ -8,7 +8,6 @@ import ExportButton from './ExportButton'
 import {
   prismaWhereClientEquipment,
   prismaWhereEngineerTaskAssignment,
-  prismaWhereManagerEquipment,
 } from '@/lib/api-access'
 
 export default async function EquipmentPage() {
@@ -51,7 +50,13 @@ export default async function EquipmentPage() {
           })
   } else if (role === 'MANAGER') {
     equipment = await db.equipment.findMany({
-      where: prismaWhereManagerEquipment(userId),
+      where: {
+        object: {
+          branch: {
+            client: { status: { not: 'PASSIVE' } },
+          },
+        },
+      },
       include: {
         object: { include: { branch: { include: { client: true } } } },
         tasks: {
@@ -98,6 +103,18 @@ export default async function EquipmentPage() {
 
   const serialized = JSON.parse(JSON.stringify(equipment)) as any[]
 
+  const managerFilterUI =
+    role === 'ADMIN' ? 'admin-dropdown' : role === 'MANAGER' ? 'manager-buttons' : null
+
+  const managerOptions =
+    role === 'ADMIN'
+      ? await db.user.findMany({
+          where: { role: 'MANAGER' },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : []
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
@@ -107,7 +124,7 @@ export default async function EquipmentPage() {
             {role === 'ENGINEER'
               ? `Моё оборудование — ${equipment.length} единиц по активным задачам`
               : role === 'MANAGER'
-                ? `Оборудование ваших клиентов — ${equipment.length} ед.`
+                ? `Оборудование — ${equipment.length} ед. (непассивные клиенты)`
                 : role === 'CLIENT'
                   ? `Оборудование вашей организации — ${equipment.length} ед.`
                   : `Всё оборудование — ${equipment.length} единиц`}
@@ -129,6 +146,9 @@ export default async function EquipmentPage() {
         equipment={serialized}
         canViewWarranty={canViewWarranty}
         canManageEquipment={canManageEquipment}
+        managerFilterUI={managerFilterUI}
+        currentUserId={userId}
+        managerOptions={managerOptions}
       />
     </div>
   )

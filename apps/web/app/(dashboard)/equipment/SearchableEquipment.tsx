@@ -6,10 +6,16 @@ export default function SearchableEquipment({
   equipment,
   canViewWarranty,
   canManageEquipment,
+  managerFilterUI = null,
+  currentUserId = '',
+  managerOptions = [],
 }: {
   equipment: any[]
   canViewWarranty: boolean
   canManageEquipment: boolean
+  managerFilterUI?: 'manager-buttons' | 'admin-dropdown' | null
+  currentUserId?: string
+  managerOptions?: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -20,6 +26,8 @@ export default function SearchableEquipment({
   const [sortBy, setSortBy] = useState<'NONE' | 'HOURS_ASC' | 'HOURS_DESC' | 'WARRANTY_ASC' | 'WARRANTY_DESC'>('NONE')
   const [showStopped, setShowStopped] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [managerScope, setManagerScope] = useState<'all' | 'mine'>('mine')
+  const [adminManagerId, setAdminManagerId] = useState('')
 
   const msColors: Record<string, string> = {
     NORMAL: 'bg-green-100 text-green-800',
@@ -71,6 +79,11 @@ export default function SearchableEquipment({
     return 'ACTIVE'
   }
 
+  function clientManagerId(eq: any): string | null {
+    const id = eq.object?.branch?.client?.managerId
+    return typeof id === 'string' ? id : null
+  }
+
   function getCity(eq: any) {
     const branchCity = eq.object?.branch?.city
     if (typeof branchCity === 'string' && branchCity.trim().length > 0) return branchCity.trim()
@@ -108,7 +121,23 @@ export default function SearchableEquipment({
     const city = getCity(eq)
     const matchCity = filterCity === 'ALL' || city === filterCity
     const matchStopped = showStopped || eq.status !== 'STOPPED'
-    return matchSearch && matchStatus && matchType && matchWarranty && matchCity && matchStopped
+    let matchManager = true
+    if (managerFilterUI === 'manager-buttons') {
+      matchManager =
+        managerScope === 'all' || clientManagerId(eq) === currentUserId
+    } else if (managerFilterUI === 'admin-dropdown') {
+      matchManager =
+        adminManagerId === '' || clientManagerId(eq) === adminManagerId
+    }
+    return (
+      matchSearch &&
+      matchStatus &&
+      matchType &&
+      matchWarranty &&
+      matchCity &&
+      matchStopped &&
+      matchManager
+    )
   })
 
   const sorted = [...filtered].sort((a, b) => {
@@ -175,6 +204,57 @@ export default function SearchableEquipment({
 
   return (
     <div>
+      {managerFilterUI === 'manager-buttons' && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs text-gray-500 shrink-0">Менеджер:</span>
+          <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+            <button
+              type="button"
+              onClick={() => setManagerScope('all')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                managerScope === 'all'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Всё оборудование
+            </button>
+            <button
+              type="button"
+              onClick={() => setManagerScope('mine')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                managerScope === 'mine'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Моё оборудование
+            </button>
+          </div>
+        </div>
+      )}
+
+      {managerFilterUI === 'admin-dropdown' && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <label htmlFor="equipment-filter-manager" className="text-xs text-gray-500 shrink-0">
+            Менеджер:
+          </label>
+          <select
+            id="equipment-filter-manager"
+            value={adminManagerId}
+            onChange={(e) => setAdminManagerId(e.target.value)}
+            className="w-full md:w-auto min-w-[200px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="">Всё оборудование</option>
+            {managerOptions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:flex-wrap gap-3 mb-4">
         <input
           value={search}

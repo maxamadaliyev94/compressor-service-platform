@@ -116,9 +116,6 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
     })
     setLoading(false)
     router.refresh()
-    if (status === 'PASSIVE') {
-      // уже видно по обновлению таблицы
-    }
   }
 
   if (!isAdmin) {
@@ -134,7 +131,11 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
       <button
         onClick={() => changeStatus(isPassive ? 'STANDART' : 'PASSIVE')}
         disabled={loading}
-        title={isPassive ? 'Включить клиента' : 'Отключить клиента'}
+        title={
+          isPassive
+            ? 'Убрать метку «Пассивный» (статус только для учёта)'
+            : 'Поставить метку «Пассивный» (статус только для учёта)'
+        }
         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
           !isPassive ? 'bg-green-500' : 'bg-gray-300'
         } ${loading ? 'opacity-50' : 'cursor-pointer'}`}>
@@ -197,7 +198,6 @@ export default function ClientsTable({
   const [search, setSearch] = useState('')
   const [filterCity, setFilterCity] = useState('ALL')
   const [filterStatus, setFilterStatus] = useState('ALL')
-  const [showArchived, setShowArchived] = useState(false)
   const [managerScope, setManagerScope] = useState<'all' | 'mine'>('mine')
   const [adminManagerId, setAdminManagerId] = useState('')
   const [managers, setManagers] = useState<Manager[]>([])
@@ -224,17 +224,14 @@ export default function ClientsTable({
       c.inn?.includes(q)
     const matchCity = filterCity === 'ALL' || c.city === filterCity
     const matchStatus = filterStatus === 'ALL' || c.status === filterStatus
-    const matchArchived = showArchived || c.status !== 'PASSIVE'
     let matchManager = true
     if (managerFilterUI === 'manager-buttons') {
       matchManager = managerScope === 'all' || c.managerId === currentUserId
     } else if (managerFilterUI === 'admin-dropdown') {
       matchManager = adminManagerId === '' || c.managerId === adminManagerId
     }
-    return matchSearch && matchCity && matchStatus && matchArchived && matchManager
+    return matchSearch && matchCity && matchStatus && matchManager
   })
-
-  const archivedCount = clients.filter(c => c.status === 'PASSIVE').length
 
   async function openAssignModal(client: ClientRow) {
     setSelectedClient(client)
@@ -362,13 +359,6 @@ export default function ClientsTable({
 
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs text-gray-400">Найдено: {filtered.length} из {clients.length}</p>
-        {isAdmin && archivedCount > 0 && (
-          <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer hover:text-gray-700">
-            <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)}
-              className="rounded w-3.5 h-3.5"/>
-            Показать отключённых ({archivedCount})
-          </label>
-        )}
       </div>
 
       <div className="md:hidden space-y-3">
@@ -378,11 +368,10 @@ export default function ClientsTable({
         {filtered.map((client) => {
           const equipCount =
             client.branches?.flatMap((b) => b.objects).flatMap((o) => o.equipment).length || 0
-          const isArchived = client.status === 'PASSIVE'
           return (
-            <div key={client.id} className={`bg-white border rounded-xl p-3 ${isArchived ? 'opacity-60' : ''}`}>
+            <div key={client.id} className="bg-white border rounded-xl p-3">
               <div className="flex items-start justify-between gap-2">
-                <a href={`/clients/${client.id}`} className={`font-medium text-sm hover:text-blue-600 ${isArchived ? 'line-through' : ''}`}>
+                <a href={`/clients/${client.id}`} className="font-medium text-sm hover:text-blue-600">
                   {client.name}
                 </a>
                 <StatusToggle client={client} isAdmin={isAdmin} />
@@ -458,22 +447,14 @@ export default function ClientsTable({
             )}
             {filtered.map((client) => {
               const equipCount = client.branches?.flatMap((b) => b.objects).flatMap((o) => o.equipment).length || 0
-              const isArchived = client.status === 'PASSIVE'
               return (
                 <tr key={client.id}
-                  className={`border-b last:border-0 hover:bg-gray-50 transition-colors 
-  ${client.status === 'PASSIVE' ? 'opacity-40' : ''}
-  ${client.status === 'VIP' ? 'bg-purple-50/30' : ''}
-`}>
+                  className={`border-b last:border-0 hover:bg-gray-50 transition-colors ${client.status === 'VIP' ? 'bg-purple-50/30' : ''}`}>
                   <td className="p-3">
-                    <a href={`/clients/${client.id}`}
-                      className={`font-medium hover:text-blue-600 ${isArchived ? 'line-through text-gray-400' : ''}`}>
+                    <a href={`/clients/${client.id}`} className="font-medium hover:text-blue-600">
                       {client.name}
                     </a>
                     {client.inn && <div className="text-xs text-gray-400">ИНН: {client.inn}</div>}
-                    {isArchived && (
-                      <div className="text-xs text-red-400 font-medium">Пассивный</div>
-                    )}
                   </td>
                   <td className="p-3">
                     {client.city ? (

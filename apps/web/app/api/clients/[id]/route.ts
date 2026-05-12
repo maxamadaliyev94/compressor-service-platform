@@ -45,47 +45,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const client = await db.client.update({
     where: { id: params.id },
-    data: { status }
+    data: { status },
   })
-
-  if (status === 'PASSIVE') {
-    const branches = await db.branch.findMany({
-      where: { clientId: params.id },
-      include: { objects: true }
-    })
-    const objectIds = branches.flatMap(b => b.objects.map(o => o.id))
-
-    await db.equipment.updateMany({
-      where: { objectId: { in: objectIds } },
-      data: { status: 'STOPPED' }
-    })
-
-    const equipmentIds = await db.equipment.findMany({
-      where: { objectId: { in: objectIds } },
-      select: { id: true }
-    })
-    await db.serviceTask.updateMany({
-      where: {
-        equipmentId: { in: equipmentIds.map(e => e.id) },
-        status: { in: ['NEW', 'ASSIGNED', 'IN_PROGRESS'] }
-      },
-      data: { status: 'CANCELLED', cancelReason: 'Клиент отключён администратором' }
-    })
-  } else if (status === 'VIP' || status === 'STANDART') {
-    const branches = await db.branch.findMany({
-      where: { clientId: params.id },
-      include: { objects: true }
-    })
-    const objectIds = branches.flatMap(b => b.objects.map(o => o.id))
-
-    await db.equipment.updateMany({
-      where: {
-        objectId: { in: objectIds },
-        status: 'STOPPED'
-      },
-      data: { status: 'WORKING' }
-    })
-  }
 
   return NextResponse.json(client)
 }
