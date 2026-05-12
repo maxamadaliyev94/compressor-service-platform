@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getMaintenanceStatus, getWarrantyStatus } from '@csp/shared'
 import AddBranchButton from './AddBranchButton'
 import EditBranchButton from './EditBranchButton'
+import TransferBranchButton from './TransferBranchButton'
 import ClientActions from './ClientActions'
 import { auth } from '@/auth'
 import ClientManagerCard from './ClientManagerCard'
@@ -200,6 +201,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
                         longitude: branch.longitude ?? null,
                       }}
                     />
+                    {(role === 'ADMIN' || role === 'MANAGER') && (
+                      <TransferBranchButton
+                        branchId={branch.id}
+                        branchName={branch.name}
+                        currentClientId={client.id}
+                      />
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1">
