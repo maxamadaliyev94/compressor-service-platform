@@ -56,8 +56,7 @@ export async function canReadClientScope(session: AuthedSession, clientId: strin
   const role = session.user.role
   if (role === 'ADMIN' || role === 'CHIEF_ENGINEER') return true
   if (role === 'MANAGER') {
-    const c = await db.client.findUnique({ where: { id: clientId }, select: { managerId: true } })
-    return c?.managerId === session.user.id
+    return true
   }
   if (role === 'ENGINEER') {
     return engineerHasTaskOnClient(session.user.id, clientId)
@@ -75,8 +74,7 @@ export async function canReadEquipment(session: AuthedSession, equipmentId: stri
   const role = session.user.role
   if (role === 'ADMIN' || role === 'CHIEF_ENGINEER') return true
   if (role === 'MANAGER') {
-    const c = await db.client.findUnique({ where: { id: clientId }, select: { managerId: true } })
-    return c?.managerId === session.user.id
+    return true
   }
   if (role === 'ENGINEER') {
     const n = await db.serviceTask.count({
@@ -100,9 +98,7 @@ export async function canMutateEquipment(session: AuthedSession, equipmentId: st
   if (role === 'ADMIN' || role === 'CHIEF_ENGINEER') return true
   if (role === 'MANAGER') {
     const clientId = await getEquipmentClientId(equipmentId)
-    if (!clientId) return false
-    const c = await db.client.findUnique({ where: { id: clientId }, select: { managerId: true } })
-    return c?.managerId === session.user.id
+    return Boolean(clientId)
   }
   if (role === 'ENGINEER') {
     return canReadEquipment(session, equipmentId)
@@ -132,8 +128,7 @@ export async function canReadTask(session: AuthedSession, taskId: string): Promi
 
   if (role === 'ADMIN' || role === 'CHIEF_ENGINEER') return true
   if (role === 'MANAGER') {
-    const c = await db.client.findUnique({ where: { id: clientId }, select: { managerId: true } })
-    return c?.managerId === session.user.id
+    return true
   }
   if (role === 'ENGINEER') {
     return task.assignedToId === session.user.id || task.longTermEngineers.length > 0

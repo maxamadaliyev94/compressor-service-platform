@@ -67,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const canUseTask =
     role === 'ADMIN' ||
     (role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||
-    (role === 'MANAGER' && task.equipment.object.branch.client.managerId === session.user.id)
+    role === 'MANAGER'
   if (!canUseTask) {
     return NextResponse.json({ error: 'Нет прав на распределение этой задачи' }, { status: 403 })
   }

@@ -40,11 +40,6 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
   if (session.user.role === 'CLIENT') {
     redirect(`/tasks/${params.id}`)
   }
-  if (session.user.role === 'MANAGER') {
-    const c = task.equipment.object.branch.client
-    if (c.managerId !== session.user.id) notFound()
-  }
-
   const isLongTermMember =
     task.assignedToId === session.user.id || task.longTermEngineers.length > 0
   if (session.user.role === 'ENGINEER' && !isLongTermMember) {

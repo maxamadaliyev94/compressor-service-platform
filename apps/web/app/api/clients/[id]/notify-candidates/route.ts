@@ -7,11 +7,7 @@ async function assertCanEditClientNotify(session: { user: { id: string; role: st
   const role = session.user.role as Role
   if (role === 'ADMIN') return true
   if (role === 'MANAGER') {
-    const c = await db.client.findUnique({
-      where: { id: clientId },
-      select: { managerId: true },
-    })
-    return c?.managerId === session.user.id
+    return true
   }
   return false
 }

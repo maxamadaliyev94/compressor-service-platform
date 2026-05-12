@@ -20,15 +20,10 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const parentWithClient = await db.serviceTask.findUnique({
-    where: { id: parentId },
-    select: { equipment: { select: { object: { select: { branch: { select: { client: { select: { managerId: true } } } } } } } } },
-  })
-  const managerOwnsClient = parentWithClient?.equipment.object.branch.client.managerId === session.user.id
   const allowed =
     role === 'ADMIN' ||
     (role === 'CHIEF_ENGINEER' && parent.assignedToId === session.user.id) ||
-    (role === 'MANAGER' && managerOwnsClient)
+    role === 'MANAGER'
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

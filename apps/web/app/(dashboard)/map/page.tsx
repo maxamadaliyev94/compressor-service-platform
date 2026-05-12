@@ -9,7 +9,7 @@ export default async function MapPage() {
   if (!session) redirect('/login')
 
   const clients = await db.client.findMany({
-    where: session.user.role === 'MANAGER' ? { managerId: session.user.id } : {},
+    where: {},
     include: {
       branches: {
         include: { objects: { include: { equipment: true } } },

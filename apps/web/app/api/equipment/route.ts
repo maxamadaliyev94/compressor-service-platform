@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
       if (!ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       where = { object: { branch: { clientId: clientIdParam } } }
     } else {
-      where = { object: { branch: { client: { managerId: s.user.id } } } }
+      where = {
+        object: {
+          branch: {
+            client: { status: { not: 'PASSIVE' } },
+          },
+        },
+      }
     }
   } else if (role === 'ADMIN' || role === 'CHIEF_ENGINEER') {
     if (clientIdParam) {
@@ -82,14 +88,11 @@ export async function POST(req: NextRequest) {
 
   const branchClient = await db.object.findUnique({
     where: { id: objectId },
-    select: { branchId: true, branch: { select: { clientId: true, client: { select: { managerId: true } } } } },
+    select: { branchId: true, branch: { select: { clientId: true } } },
   })
   if (!branchClient) return NextResponse.json({ error: 'Объект не найден' }, { status: 404 })
 
   const clientId = branchClient.branch.clientId
-  if (role === 'MANAGER' && branchClient.branch.client.managerId !== session.user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
   if (role === 'ENGINEER' || role === 'CLIENT') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

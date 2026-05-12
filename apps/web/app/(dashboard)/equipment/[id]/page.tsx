@@ -56,9 +56,6 @@ export default async function EquipmentPage({ params }: { params: { id: string }
   if (isClientPortal && session.user.clientId !== client.id) {
     notFound()
   }
-  if (role === 'MANAGER' && client.managerId !== session.user.id) {
-    notFound()
-  }
   const ws = getWarrantyStatus(eq.warrantyUntil, eq.warrantyVoided)
 
   const maintenanceTasks = eq.tasks.map((task) => ({

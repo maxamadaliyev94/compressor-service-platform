@@ -19,13 +19,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const existing = await db.branch.findUnique({
     where: { id: params.id },
-    include: { client: { select: { managerId: true } } },
   })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role === 'MANAGER' && existing.client.managerId !== session.user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
   const body = await req.json()
   const name =
     typeof body.name === 'string' ? body.name.trim() : existing.name

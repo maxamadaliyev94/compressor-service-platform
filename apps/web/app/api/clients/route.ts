@@ -37,7 +37,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const where = role === 'MANAGER' ? { managerId: session.user.id } : {}
+  const where = {}
 
   const clients = await db.client.findMany({
     where,

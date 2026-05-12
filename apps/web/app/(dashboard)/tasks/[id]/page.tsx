@@ -87,9 +87,6 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       notFound()
     }
   }
-  if (session.user.role === 'MANAGER' && client.managerId !== session.user.id) {
-    notFound()
-  }
   if (session.user.role === 'ENGINEER') {
     const onTask =
       task.assignedToId === session.user.id ||
@@ -104,7 +101,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     canAssignTasks &&
     (session?.user?.role === 'ADMIN' ||
       (session?.user?.role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||
-      (session?.user?.role === 'MANAGER' && task.equipment.object.branch.client.managerId === session.user.id)) &&
+      session?.user?.role === 'MANAGER') &&
     isNotDone &&
     !task.report
 

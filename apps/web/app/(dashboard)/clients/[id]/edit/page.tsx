@@ -11,7 +11,6 @@ export default async function EditClientPage({ params }: { params: { id: string 
 
   const client = await db.client.findUnique({ where: { id: params.id } })
   if (!client) notFound()
-  if (role === 'MANAGER' && client.managerId !== session.user.id) notFound()
 
   return (
     <EditClientForm

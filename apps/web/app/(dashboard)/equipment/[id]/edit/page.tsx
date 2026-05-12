@@ -10,15 +10,9 @@ export default async function EditEquipmentPage({ params }: { params: { id: stri
 
   const equipment = await db.equipment.findUnique({
     where: { id: params.id },
-    include: { object: { include: { branch: { include: { client: { select: { managerId: true } } } } } } },
+    include: { object: { include: { branch: { include: { client: true } } } } },
   })
   if (!equipment) notFound()
-  if (
-    session.user.role === 'MANAGER' &&
-    equipment.object.branch.client.managerId !== session.user.id
-  ) {
-    notFound()
-  }
 
   return (
     <div className="p-4 md:p-8 max-w-3xl">

@@ -60,11 +60,10 @@ export default async function ClientPage({ params }: { params: { id: string } })
     },
   })
   if (!client) notFound()
-  if (role === 'MANAGER' && client.managerId !== session.user.id) notFound()
 
   const canMutateClient = role === 'ADMIN' || role === 'MANAGER'
 
-  const canManageNotify = isAdmin || (role === 'MANAGER' && client.managerId === session.user.id)
+  const canManageNotify = isAdmin || role === 'MANAGER'
 
   const allEquipment = client.branches.flatMap((b: Branch) => b.objects.flatMap((o) => o.equipment))
   const allTasks = allEquipment.flatMap((e) => e.tasks)
