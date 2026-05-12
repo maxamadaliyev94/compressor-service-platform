@@ -57,9 +57,16 @@ async function fetchAppIsActive(req: NextRequest): Promise<boolean> {
   const base =
     process.env.INTERNAL_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
   try {
-    const res = await fetch(`${base}/api/internal/app-status`, {
+    // Каждый запрос — новый URL и заголовки против кэша (Data Cache / CDN / прокси).
+    const url = `${base}/api/internal/app-status?_=${Date.now()}`
+    const res = await fetch(url, {
+      method: 'GET',
       cache: 'no-store',
-      next: { revalidate: 0 },
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+      },
     })
     if (!res.ok) return true
     const data = (await res.json()) as { active?: boolean }
