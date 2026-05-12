@@ -1,13 +1,14 @@
 import { auth } from '@/auth'
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { getSuperadminCredentials, logSuperadminEnvOnce } from '@/lib/superadmin-env'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/register', '/api/webauthn/login/', '/api/cron/']
 
 function superadminBasicAuthDenied(req: NextRequest): NextResponse | null {
-  const username = process.env.SUPERADMIN_USERNAME
-  const password = process.env.SUPERADMIN_PASSWORD
-  if (!username || !password) {
+  logSuperadminEnvOnce('middleware')
+  const creds = getSuperadminCredentials()
+  if (!creds) {
     return NextResponse.json({ error: 'Superadmin credentials not configured' }, { status: 503 })
   }
   const authHeader = req.headers.get('authorization')
@@ -27,9 +28,23 @@ function superadminBasicAuthDenied(req: NextRequest): NextResponse | null {
     })
   }
   const i = decoded.indexOf(':')
-  const user = i === -1 ? decoded : decoded.slice(0, i)
-  const pass = i === -1 ? '' : decoded.slice(i + 1)
-  if (user !== username || pass !== password) {
+  const user = (i === -1 ? decoded : decoded.slice(0, i)).trim()
+  const pass = (i === -1 ? '' : decoded.slice(i + 1)).trim()
+  if (user !== creds.username || pass !== creds.password) {
+    if (process.env.NODE_ENV === 'development') {
+      const g = globalThis as { __cspLoggedSuperadminReject?: boolean }
+      if (!g.__cspLoggedSuperadminReject) {
+        g.__cspLoggedSuperadminReject = true
+        console.warn('[middleware/superadmin] Basic auth rejected (once)', {
+          headerUserLen: user.length,
+          headerPassLen: pass.length,
+          envUserLen: creds.username.length,
+          envPassLen: creds.password.length,
+          userMatch: user === creds.username,
+          passMatch: pass === creds.password,
+        })
+      }
+    }
     return new NextResponse(null, {
       status: 401,
       headers: { 'WWW-Authenticate': 'Basic realm="Superadmin"' },

@@ -1,5 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "SUPERADMIN_USERNAME",
+    "SUPERADMIN_PASSWORD",
+    "INTERNAL_APP_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
