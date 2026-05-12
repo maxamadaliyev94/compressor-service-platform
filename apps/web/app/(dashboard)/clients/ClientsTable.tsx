@@ -183,15 +183,23 @@ export default function ClientsTable({
   clients,
   isAdmin,
   canEditClient,
+  currentUserId,
+  managerFilterUI = null,
+  managerOptions = [],
 }: {
   clients: ClientRow[]
   isAdmin: boolean
   canEditClient: boolean
+  currentUserId: string
+  managerFilterUI?: 'manager-buttons' | 'admin-dropdown' | null
+  managerOptions?: { id: string; name: string }[]
 }) {
   const [search, setSearch] = useState('')
   const [filterCity, setFilterCity] = useState('ALL')
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [showArchived, setShowArchived] = useState(false)
+  const [managerScope, setManagerScope] = useState<'all' | 'mine'>('mine')
+  const [adminManagerId, setAdminManagerId] = useState('')
   const [managers, setManagers] = useState<Manager[]>([])
   const [loadingManagers, setLoadingManagers] = useState(false)
   const [managerSaving, setManagerSaving] = useState(false)
@@ -217,7 +225,13 @@ export default function ClientsTable({
     const matchCity = filterCity === 'ALL' || c.city === filterCity
     const matchStatus = filterStatus === 'ALL' || c.status === filterStatus
     const matchArchived = showArchived || c.status !== 'PASSIVE'
-    return matchSearch && matchCity && matchStatus && matchArchived
+    let matchManager = true
+    if (managerFilterUI === 'manager-buttons') {
+      matchManager = managerScope === 'all' || c.managerId === currentUserId
+    } else if (managerFilterUI === 'admin-dropdown') {
+      matchManager = adminManagerId === '' || c.managerId === adminManagerId
+    }
+    return matchSearch && matchCity && matchStatus && matchArchived && matchManager
   })
 
   const archivedCount = clients.filter(c => c.status === 'PASSIVE').length
@@ -275,6 +289,57 @@ export default function ClientsTable({
 
   return (
     <div>
+      {managerFilterUI === 'manager-buttons' && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-xs text-gray-500 shrink-0">Менеджер:</span>
+          <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+            <button
+              type="button"
+              onClick={() => setManagerScope('all')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                managerScope === 'all'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Все клиенты
+            </button>
+            <button
+              type="button"
+              onClick={() => setManagerScope('mine')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                managerScope === 'mine'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Мои клиенты
+            </button>
+          </div>
+        </div>
+      )}
+
+      {managerFilterUI === 'admin-dropdown' && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <label htmlFor="clients-filter-manager" className="text-xs text-gray-500 shrink-0">
+            Менеджер:
+          </label>
+          <select
+            id="clients-filter-manager"
+            value={adminManagerId}
+            onChange={(e) => setAdminManagerId(e.target.value)}
+            className="w-full md:w-auto min-w-[200px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="">Все клиенты</option>
+            {managerOptions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row gap-2 md:gap-3 mb-3">
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="🔍 Поиск по названию, контакту, телефону, ИНН..."

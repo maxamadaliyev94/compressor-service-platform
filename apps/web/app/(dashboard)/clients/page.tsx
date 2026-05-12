@@ -12,13 +12,24 @@ export default async function ClientsPage() {
   const canEditClient = ['ADMIN', 'MANAGER'].includes(role)
 
   const clients = await db.client.findMany({
-    where: role === 'MANAGER' ? { managerId: session.user.id } : {},
     include: {
       manager: { select: { id: true, name: true, email: true, phone: true } },
       branches: { include: { objects: { include: { equipment: true } } } },
     },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: 'desc' },
   })
+
+  const managerFilterUI =
+    role === 'ADMIN' ? 'admin-dropdown' : role === 'MANAGER' ? 'manager-buttons' : null
+
+  const managerOptions =
+    role === 'ADMIN'
+      ? await db.user.findMany({
+          where: { role: 'MANAGER' },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : undefined
 
   return (
     <div className="p-4 md:p-8">
@@ -39,7 +50,14 @@ export default async function ClientsPage() {
           )}
         </div>
       </div>
-      <ClientsTable clients={clients} isAdmin={isAdmin} canEditClient={canEditClient} />
+      <ClientsTable
+        clients={clients}
+        isAdmin={isAdmin}
+        canEditClient={canEditClient}
+        currentUserId={session.user.id}
+        managerFilterUI={managerFilterUI}
+        managerOptions={managerOptions}
+      />
     </div>
   )
 }
