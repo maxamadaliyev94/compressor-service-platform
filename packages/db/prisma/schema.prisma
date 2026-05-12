@@ -239,10 +239,14 @@ model City {
   @@map("cities")
 }
 
-/// Единственная строка настроек приложения (глобальное вкл/выкл).
+/// Единственная строка настроек приложения (глобальное вкл/выкл, подписка).
 model AppSettings {
   id       String  @id @default("default")
   isActive Boolean @default(true)
+  /// Начало периода подписки (календарная дата UTC).
+  subscriptionStart DateTime? @db.Date
+  /// Конец периода подписки включительно (UTC); после этой даты доступ блокируется.
+  subscriptionEnd   DateTime? @db.Date
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")

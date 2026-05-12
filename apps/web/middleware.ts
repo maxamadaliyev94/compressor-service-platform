@@ -53,12 +53,11 @@ function superadminBasicAuthDenied(req: NextRequest): NextResponse | null {
   return null
 }
 
-async function fetchAppIsActive(req: NextRequest): Promise<boolean> {
+async function fetchGloballyAccessible(req: NextRequest): Promise<boolean> {
   const base =
     process.env.INTERNAL_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
   try {
-    // POST + cache: 'no-store' — Next.js и прокси реже кэшируют, чем GET.
-    const url = `${base}/api/internal/app-status`
+    const url = `${base}/api/internal/app-status?t=${Date.now()}`
     const res = await fetch(url, {
       method: 'POST',
       cache: 'no-store',
@@ -71,7 +70,8 @@ async function fetchAppIsActive(req: NextRequest): Promise<boolean> {
       body: '{}',
     })
     if (!res.ok) return true
-    const data = (await res.json()) as { active?: boolean }
+    const data = (await res.json()) as { accessible?: boolean; active?: boolean }
+    if (typeof data.accessible === 'boolean') return data.accessible
     return data.active !== false
   } catch {
     return true
@@ -93,14 +93,14 @@ export default auth(async (req: NextRequest) => {
     return NextResponse.next()
   }
 
-  let active = true
+  let accessible = true
   try {
-    active = await fetchAppIsActive(req)
+    accessible = await fetchGloballyAccessible(req)
   } catch {
-    active = true
+    accessible = true
   }
 
-  if (!active) {
+  if (!accessible) {
     if (pathname.startsWith('/api/cron/')) {
       return NextResponse.next()
     }
