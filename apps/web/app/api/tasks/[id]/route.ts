@@ -461,17 +461,11 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    select: { id: true, status: true, assignedToId: true, deletedAt: true, report: { select: { id: true } } },
+    select: { id: true, status: true, assignedToId: true, deletedAt: true },
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (task.deletedAt) {
     return NextResponse.json({ error: 'Задача уже находится в корзине' }, { status: 400 })
-  }
-  if (task.report) {
-    return NextResponse.json(
-      { error: 'Нельзя удалить задачу с уже созданным отчётом' },
-      { status: 400 }
-    )
   }
 
   await db.serviceTask.update({
