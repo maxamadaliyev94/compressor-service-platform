@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { getTaskClientId } from '@/lib/api-access'
 import type { ChecklistItemAction } from '@prisma/client'
 import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
+import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -134,7 +135,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const reportPhotos = Array.isArray(body.report?.reportPhotos)
     ? body.report!.reportPhotos
         .filter((url) => typeof url === 'string' && (url.startsWith('data:image/') || url.startsWith('http')))
-        .slice(0, 10)
+        .slice(0, MAX_REPORT_PHOTOS)
     : null
 
   await db.$transaction(async (tx) => {

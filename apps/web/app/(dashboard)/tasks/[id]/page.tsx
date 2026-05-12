@@ -62,7 +62,11 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
       assignedTo: true,
       createdBy: true,
       report: {
-        include: { checklistItems: true, partsUsed: true, attachments: true },
+        include: {
+          checklistItems: true,
+          partsUsed: true,
+          attachments: { orderBy: { createdAt: 'asc' } },
+        },
       },
       dailyWorks: {
         include: { engineer: { select: { id: true, name: true } } },
@@ -512,6 +516,34 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               <div>
                 <div className="text-xs text-gray-500 mb-1">Рекомендации клиенту</div>
                 <p className="text-sm text-gray-700">{task.report.recommendations}</p>
+              </div>
+            )}
+
+            {task.report.attachments && task.report.attachments.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="text-xs text-gray-500 mb-3 font-medium">Фотографии к отчёту</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {task.report.attachments.map((att) => (
+                    <a
+                      key={att.id}
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-lg border border-gray-200 overflow-hidden bg-gray-50 hover:ring-2 hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+                      title={att.caption || 'Открыть фото'}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={att.url}
+                        alt={att.caption || 'Фото отчёта'}
+                        className="w-full h-40 object-cover"
+                      />
+                      {att.caption && (
+                        <div className="text-[10px] text-gray-500 px-2 py-1 truncate">{att.caption}</div>
+                      )}
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
 

@@ -10,6 +10,7 @@ import {
   needsDiagnosticsPerformedAction,
   validDiagnosticsActionsForLabel,
 } from '@/lib/checklist-diagnostics'
+import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
 
 type ChecklistRow = {
   id: string
@@ -86,10 +87,10 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
   async function onPickReportPhotos(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    const allowed = Math.max(0, 10 - reportPhotos.length)
+    const allowed = Math.max(0, MAX_REPORT_PHOTOS - reportPhotos.length)
     const selected = files.slice(0, allowed)
     const loaded = await Promise.all(selected.map(readFileAsDataUrl))
-    setReportPhotos((prev) => [...prev, ...loaded].slice(0, 10))
+    setReportPhotos((prev) => [...prev, ...loaded].slice(0, MAX_REPORT_PHOTOS))
     e.target.value = ''
   }
 
@@ -377,7 +378,7 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Фото отчета (до 10 шт.)</label>
+        <label className="block text-sm font-medium mb-1">Фото отчета (до {MAX_REPORT_PHOTOS} шт.)</label>
         <input
           type="file"
           accept="image/*"
@@ -385,7 +386,7 @@ export default function EditCompletedTaskClient({ task }: { task: any }) {
           onChange={onPickReportPhotos}
           className="w-full border rounded-lg px-3 py-2 text-sm"
         />
-        <p className="text-xs text-gray-400 mt-1">Загружено: {reportPhotos.length} / 10</p>
+        <p className="text-xs text-gray-400 mt-1">Загружено: {reportPhotos.length} / {MAX_REPORT_PHOTOS}</p>
         {reportPhotos.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
             {reportPhotos.map((src, idx) => (

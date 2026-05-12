@@ -64,6 +64,7 @@ const ROLE_ALLOWED: Record<string, Set<string>> = {
   ]),
   CHIEF_ENGINEER: new Set([
     'section:dashboard',
+    'section:clients',
     'section:equipment',
     'section:tasks',
     'section:reports',

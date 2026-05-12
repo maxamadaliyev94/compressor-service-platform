@@ -43,7 +43,7 @@ export default async function ClientsPage() {
         </div>
         <div className="flex flex-col w-full md:w-auto md:flex-row gap-2 md:gap-3">
           <ExportClientsButton clients={clients} />
-          {!isEngineer && (
+          {(role === 'ADMIN' || role === 'MANAGER') && (
             <a href="/clients/new" className="w-full md:w-auto min-h-11 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 inline-flex items-center justify-center">
               + Добавить клиента
             </a>

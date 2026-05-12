@@ -282,6 +282,8 @@ model Equipment {
   /// Настроенный режим работы для автоматического прироста моточасов.
   hoursPerDay        Float?              @map("hours_per_day")
   daysPerWeek        Float?              @map("days_per_week")
+  /// Давление (бар), необязательно.
+  pressureBar        Float?              @map("pressure_bar")
   status             EquipmentStatus     @default(WORKING)
   qrCode             String?             @unique
   notes              String?

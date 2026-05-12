@@ -6,7 +6,7 @@ import PrintQR from './PrintQR'
 import UpdateHours from './UpdateHours'
 import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
-import EquipmentPhotoGallery from './EquipmentPhotoGallery'
+import EquipmentPhotosEditor from './EquipmentPhotosEditor'
 import EquipmentTechnicalData from './EquipmentTechnicalData'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
@@ -199,6 +199,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
               warrantyUntil: eq.warrantyUntil ? eq.warrantyUntil.toISOString() : null,
               warrantyVoided: eq.warrantyVoided,
               status: eq.status,
+              pressureBar: eq.pressureBar,
               currentHours: eq.currentHours,
               nextServiceHours: eq.nextServiceHours,
               notes: eq.notes,
@@ -215,14 +216,11 @@ export default async function EquipmentPage({ params }: { params: { id: string }
             />
           )}
 
-          <div className="bg-white border rounded-xl p-5">
-            <h2 className="font-semibold mb-3 flex items-center gap-2">🖼️ Фото оборудования</h2>
-            {eq.photos.length === 0 ? (
-              <p className="text-sm text-gray-400">Фото пока не добавлены</p>
-            ) : (
-              <EquipmentPhotoGallery photos={eq.photos.map((photo) => ({ id: photo.id, url: photo.url }))} />
-            )}
-          </div>
+          <EquipmentPhotosEditor
+            equipmentId={eq.id}
+            photos={eq.photos.map((photo) => ({ id: photo.id, url: photo.url }))}
+            canEdit={!isClientPortal && (role === 'ADMIN' || role === 'MANAGER')}
+          />
 
           <div className="bg-white border rounded-xl overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b">

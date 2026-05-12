@@ -14,6 +14,10 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
     currentHours: String(equipment.currentHours ?? 0),
     nextServiceHours: equipment.nextServiceHours != null ? String(equipment.nextServiceHours) : '',
     warrantyUntil: equipment.warrantyUntil ? new Date(equipment.warrantyUntil).toISOString().slice(0, 10) : '',
+    pressureBar:
+      equipment.pressureBar != null && Number.isFinite(Number(equipment.pressureBar))
+        ? String(equipment.pressureBar)
+        : '',
     status: equipment.status ?? 'WORKING',
     notes: equipment.notes ?? '',
   })
@@ -34,6 +38,7 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
           currentHours: Number(form.currentHours) || 0,
           nextServiceHours: form.nextServiceHours === '' ? null : Number(form.nextServiceHours),
           warrantyUntil: form.warrantyUntil || null,
+          pressureBar: form.pressureBar.trim() === '' ? null : Number(form.pressureBar.replace(',', '.')),
         }),
       })
       if (!res.ok) {
@@ -90,7 +95,7 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
         <input value={form.serialNumber} onChange={(e) => set('serialNumber', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">Текущие моточасы</label>
           <input type="number" value={form.currentHours} onChange={(e) => set('currentHours', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
@@ -102,6 +107,19 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
         <div>
           <label className="block text-sm font-medium mb-1">Гарантия до</label>
           <input type="date" value={form.warrantyUntil} onChange={(e) => set('warrantyUntil', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Давление (bar)</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="any"
+            min={0}
+            value={form.pressureBar}
+            onChange={(e) => set('pressureBar', e.target.value)}
+            placeholder="Необязательно"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
         </div>
       </div>
 

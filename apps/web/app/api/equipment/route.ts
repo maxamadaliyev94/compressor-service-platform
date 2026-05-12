@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { MAX_EQUIPMENT_PHOTOS } from '@/lib/photo-limits'
 import { hasPermission } from '@/lib/permissions'
 import { canReadClientScope, prismaWhereEngineerTaskAssignment, type AuthedSession } from '@/lib/api-access'
 import type { Role } from '@prisma/client'
@@ -94,9 +95,20 @@ export async function POST(req: NextRequest) {
   }
 
   const photos = Array.isArray(body.photos)
-    ? body.photos.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0).slice(0, 10)
+    ? body.photos
+        .filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)
+        .slice(0, MAX_EQUIPMENT_PHOTOS)
     : []
   const nextServiceHours = (body.currentHours || 0) + 2000
+  const pressureRaw = (body as { pressureBar?: unknown }).pressureBar
+  const pressureBar =
+    pressureRaw === '' || pressureRaw === null || pressureRaw === undefined
+      ? null
+      : (() => {
+          const n = Number(pressureRaw)
+          return Number.isFinite(n) ? n : null
+        })()
+
   const equipment = await db.equipment.create({
     data: {
       objectId,
@@ -107,6 +119,7 @@ export async function POST(req: NextRequest) {
       yearOfManufacture: body.yearOfManufacture || null,
       installDate: body.installDate ? new Date(body.installDate) : null,
       warrantyUntil: body.warrantyUntil ? new Date(body.warrantyUntil) : null,
+      pressureBar,
       currentHours: body.currentHours || 0,
       nextServiceHours,
       photos: photos.length > 0 ? { create: photos.map((url) => ({ url })) } : undefined,

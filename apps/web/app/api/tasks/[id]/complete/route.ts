@@ -6,6 +6,7 @@ import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { ChecklistItemAction, Role, ServiceTask } from '@prisma/client'
 import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
+import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
 
 function canExecuteServiceTask(
   role: Role,
@@ -96,7 +97,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       : null
   const reportPhotosRaw = (body as { reportPhotos?: unknown }).reportPhotos
   const reportPhotos = Array.isArray(reportPhotosRaw)
-    ? reportPhotosRaw.filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/')).slice(0, 10)
+    ? reportPhotosRaw
+        .filter((v): v is string => typeof v === 'string' && v.startsWith('data:image/'))
+        .slice(0, MAX_REPORT_PHOTOS)
     : []
 
   const engineerSignature = parsePngDataUrlSignature((body as { engineerSignature?: unknown }).engineerSignature)

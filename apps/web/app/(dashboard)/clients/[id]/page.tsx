@@ -62,6 +62,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   if (!client) notFound()
   if (role === 'MANAGER' && client.managerId !== session.user.id) notFound()
 
+  const canMutateClient = role === 'ADMIN' || role === 'MANAGER'
+
   const canManageNotify = isAdmin || (role === 'MANAGER' && client.managerId === session.user.id)
 
   const allEquipment = client.branches.flatMap((b: Branch) => b.objects.flatMap((o) => o.equipment))
@@ -176,7 +178,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
         <div className="bg-white border rounded-xl p-5">
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold">Филиалы и объекты</h2>
-            <AddBranchButton clientId={client.id} />
+            {canMutateClient && <AddBranchButton clientId={client.id} />}
           </div>
           <div className="space-y-3">
             {client.branches.map((branch: Branch) => (
@@ -189,18 +191,20 @@ export default async function ClientPage({ params }: { params: { id: string } })
                         🕐 {branch.workingHours}
                       </span>
                     )}
-                    <EditBranchButton
-                      branch={{
-                        id: branch.id,
-                        name: branch.name,
-                        address: branch.address ?? null,
-                        contactPerson: branch.contactPerson ?? null,
-                        phone: branch.phone ?? null,
-                        workingHours: branch.workingHours ?? null,
-                        latitude: branch.latitude ?? null,
-                        longitude: branch.longitude ?? null,
-                      }}
-                    />
+                    {canMutateClient && (
+                      <EditBranchButton
+                        branch={{
+                          id: branch.id,
+                          name: branch.name,
+                          address: branch.address ?? null,
+                          contactPerson: branch.contactPerson ?? null,
+                          phone: branch.phone ?? null,
+                          workingHours: branch.workingHours ?? null,
+                          latitude: branch.latitude ?? null,
+                          longitude: branch.longitude ?? null,
+                        }}
+                      />
+                    )}
                     {(role === 'ADMIN' || role === 'MANAGER') && (
                       <TransferBranchButton
                         branchId={branch.id}
@@ -282,9 +286,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
       <div className="hidden md:block bg-white border rounded-xl overflow-hidden">
         <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center p-4 border-b">
           <h2 className="font-semibold">Оборудование</h2>
-          <a href={`/equipment/new`} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">
-            + Добавить
-          </a>
+          {canMutateClient && (
+            <a href={`/equipment/new`} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">
+              + Добавить
+            </a>
+          )}
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] text-sm">

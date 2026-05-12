@@ -14,6 +14,7 @@ type Initial = {
   warrantyUntil: string | null
   warrantyVoided: boolean
   status: string
+  pressureBar: number | null
   currentHours: number
   nextServiceHours: number | null
   notes: string | null
@@ -75,6 +76,7 @@ export default function EquipmentTechnicalData({
     yearOfManufacture: initial.yearOfManufacture != null ? String(initial.yearOfManufacture) : '',
     installDate: toDateInput(initial.installDate),
     warrantyUntil: toDateInput(initial.warrantyUntil),
+    pressureBar: initial.pressureBar != null ? String(initial.pressureBar) : '',
     status: initial.status,
   }))
 
@@ -87,6 +89,7 @@ export default function EquipmentTechnicalData({
       yearOfManufacture: from.yearOfManufacture != null ? String(from.yearOfManufacture) : '',
       installDate: toDateInput(from.installDate),
       warrantyUntil: toDateInput(from.warrantyUntil),
+      pressureBar: from.pressureBar != null ? String(from.pressureBar) : '',
       status: from.status,
     })
   }
@@ -94,6 +97,12 @@ export default function EquipmentTechnicalData({
   async function save() {
     setLoading(true)
     try {
+      const pressureParsed =
+        form.pressureBar.trim() === ''
+          ? null
+          : Number.parseFloat(form.pressureBar.replace(',', '.'))
+      const pressureBar = pressureParsed !== null && Number.isFinite(pressureParsed) ? pressureParsed : null
+
       const res = await fetch(`/api/equipment/${equipmentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -105,6 +114,7 @@ export default function EquipmentTechnicalData({
           yearOfManufacture: form.yearOfManufacture === '' ? null : form.yearOfManufacture,
           installDate: form.installDate || null,
           warrantyUntil: canViewWarranty ? form.warrantyUntil || null : snap.warrantyUntil,
+          pressureBar,
           status: form.status,
           currentHours: snap.currentHours,
           nextServiceHours: snap.nextServiceHours,
@@ -144,6 +154,7 @@ export default function EquipmentTechnicalData({
     initial.warrantyUntil,
     initial.warrantyVoided,
     initial.status,
+    initial.pressureBar,
   ])
 
   const warrantyUntilDate = snap.warrantyUntil ? new Date(snap.warrantyUntil) : null
@@ -277,6 +288,24 @@ export default function EquipmentTechnicalData({
             />
           ) : (
             <span>{snap.installDate ? new Date(snap.installDate).toLocaleDateString('ru-RU') : '—'}</span>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-2">
+          <span className="text-gray-500 w-28 shrink-0">Давление (bar):</span>
+          {editing ? (
+            <input
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min={0}
+              value={form.pressureBar}
+              onChange={(e) => setForm((f) => ({ ...f, pressureBar: e.target.value }))}
+              placeholder="—"
+              className="flex-1 min-w-0 border rounded-lg px-2 py-1.5 text-sm max-w-[12rem]"
+            />
+          ) : (
+            <span>{snap.pressureBar != null ? `${snap.pressureBar} bar` : '—'}</span>
           )}
         </div>
 

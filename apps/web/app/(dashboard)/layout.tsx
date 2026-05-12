@@ -31,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER', 'CLIENT'],
     },
     { href: '/', label: 'Dashboard', icon: '▦', roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'], key: 'section:dashboard' },
-    { href: '/clients', label: 'Клиенты', icon: '👥', roles: ['ADMIN', 'MANAGER'], key: 'section:clients' },
+    { href: '/clients', label: 'Клиенты', icon: '👥', roles: ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER'], key: 'section:clients' },
     {
       href: '/equipment',
       label: 'Оборудование',

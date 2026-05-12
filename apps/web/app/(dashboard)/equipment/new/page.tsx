@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import BrandSelect from './BrandSelect'
 import ClientSelect from './ClientSelect'
 import EquipmentTypeSelect from './EquipmentTypeSelect'
+import { MAX_EQUIPMENT_PHOTOS } from '@/lib/photo-limits'
 
 export default function NewEquipmentPage() {
   const router = useRouter()
@@ -24,7 +25,7 @@ export default function NewEquipmentPage() {
   const [form, setForm] = useState({
     type: '', brand: '', model: '',
     serialNumber: '', yearOfManufacture: '',
-    installDate: '', warrantyUntil: '', currentHours: '0',
+    installDate: '', warrantyUntil: '', pressureBar: '', currentHours: '0',
   })
 
   useEffect(() => {
@@ -127,6 +128,13 @@ export default function NewEquipmentPage() {
         currentHours: parseInt(form.currentHours) || 0,
         installDate: form.installDate || null,
         warrantyUntil: form.warrantyUntil || null,
+        pressureBar:
+          form.pressureBar.trim() === ''
+            ? null
+            : (() => {
+                const n = Number.parseFloat(form.pressureBar.replace(',', '.'))
+                return Number.isFinite(n) ? n : null
+              })(),
         photos,
       })
     })
@@ -148,10 +156,10 @@ export default function NewEquipmentPage() {
   async function onPhotoPick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    const allowed = Math.max(0, 10 - photos.length)
+    const allowed = Math.max(0, MAX_EQUIPMENT_PHOTOS - photos.length)
     const selected = files.slice(0, allowed)
     const loaded = await Promise.all(selected.map(readFileAsDataUrl))
-    setPhotos(prev => [...prev, ...loaded].slice(0, 10))
+    setPhotos(prev => [...prev, ...loaded].slice(0, MAX_EQUIPMENT_PHOTOS))
     e.target.value = ''
   }
 
@@ -292,7 +300,7 @@ export default function NewEquipmentPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Год выпуска</label>
                 <input type="number" value={form.yearOfManufacture} onChange={e => set('yearOfManufacture', e.target.value)}
@@ -309,6 +317,19 @@ export default function NewEquipmentPage() {
                 <input type="date" value={form.warrantyUntil} onChange={e => set('warrantyUntil', e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Давление (bar)</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={0}
+                  value={form.pressureBar}
+                  onChange={(e) => set('pressureBar', e.target.value)}
+                  placeholder="Необязательно"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
 
             <div>
@@ -322,7 +343,7 @@ export default function NewEquipmentPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Фото оборудования (до 10 шт.)</label>
+              <label className="block text-sm font-medium mb-1">Фото оборудования (до {MAX_EQUIPMENT_PHOTOS} шт.)</label>
               <input
                 type="file"
                 accept="image/*"
@@ -330,7 +351,7 @@ export default function NewEquipmentPage() {
                 onChange={onPhotoPick}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
               />
-              <p className="text-xs text-gray-400 mt-1">Загружено: {photos.length} / 10</p>
+              <p className="text-xs text-gray-400 mt-1">Загружено: {photos.length} / {MAX_EQUIPMENT_PHOTOS}</p>
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                   {photos.map((src, idx) => (
