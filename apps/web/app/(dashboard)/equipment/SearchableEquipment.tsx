@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 export default function SearchableEquipment({
@@ -28,6 +28,8 @@ export default function SearchableEquipment({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [managerScope, setManagerScope] = useState<'all' | 'mine'>('mine')
   const [adminManagerId, setAdminManagerId] = useState('')
+  const [filterClientId, setFilterClientId] = useState('')
+  const [filterBranchId, setFilterBranchId] = useState('')
 
   const msColors: Record<string, string> = {
     NORMAL: 'bg-green-100 text-green-800',
@@ -102,6 +104,34 @@ export default function SearchableEquipment({
     a.localeCompare(b, 'ru')
   )
 
+  const clientOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const eq of equipment) {
+      const c = eq.object?.branch?.client
+      if (c?.id && typeof c.name === 'string') {
+        map.set(c.id, c.name)
+      }
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], 'ru'))
+      .map(([id, name]) => ({ id, name }))
+  }, [equipment])
+
+  const branchOptions = useMemo(() => {
+    if (!filterClientId) return []
+    const map = new Map<string, string>()
+    for (const eq of equipment) {
+      const br = eq.object?.branch
+      const cl = eq.object?.branch?.client
+      if (cl?.id === filterClientId && br?.id && typeof br.name === 'string') {
+        map.set(br.id, br.name)
+      }
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], 'ru'))
+      .map(([id, name]) => ({ id, name }))
+  }, [equipment, filterClientId])
+
   const filtered = equipment.filter((eq) => {
     const ms = getMS(eq)
     const ws = getWS(eq)
@@ -129,6 +159,10 @@ export default function SearchableEquipment({
       matchManager =
         adminManagerId === '' || clientManagerId(eq) === adminManagerId
     }
+    const cid = eq.object?.branch?.client?.id
+    const bid = eq.object?.branch?.id
+    const matchClient = !filterClientId || cid === filterClientId
+    const matchBranch = !filterBranchId || bid === filterBranchId
     return (
       matchSearch &&
       matchStatus &&
@@ -136,7 +170,9 @@ export default function SearchableEquipment({
       matchWarranty &&
       matchCity &&
       matchStopped &&
-      matchManager
+      matchManager &&
+      matchClient &&
+      matchBranch
     )
   })
 
@@ -302,6 +338,34 @@ export default function SearchableEquipment({
           {cityOptions.map((city) => (
             <option key={city} value={city}>
               {city}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterClientId}
+          onChange={(e) => {
+            setFilterClientId(e.target.value)
+            setFilterBranchId('')
+          }}
+          className="w-full md:w-auto min-w-[200px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        >
+          <option value="">Все клиенты</option>
+          {clientOptions.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterBranchId}
+          onChange={(e) => setFilterBranchId(e.target.value)}
+          disabled={!filterClientId}
+          className="w-full md:w-auto min-w-[200px] border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+        >
+          <option value="">{filterClientId ? 'Все филиалы' : 'Сначала выберите клиента'}</option>
+          {branchOptions.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
             </option>
           ))}
         </select>
