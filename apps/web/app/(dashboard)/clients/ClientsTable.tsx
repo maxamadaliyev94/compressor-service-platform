@@ -129,6 +129,7 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
   return (
     <div className="relative flex items-center gap-2">
       <button
+        type="button"
         onClick={() => changeStatus(isPassive ? 'STANDART' : 'PASSIVE')}
         disabled={loading}
         title={
@@ -136,12 +137,11 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
             ? 'Убрать метку «Пассивный» (статус только для учёта)'
             : 'Поставить метку «Пассивный» (статус только для учёта)'
         }
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${
-          !isPassive ? 'bg-green-500' : 'bg-gray-300'
-        } ${loading ? 'opacity-50' : 'cursor-pointer'}`}>
-        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-          !isPassive ? 'translate-x-4' : 'translate-x-0.5'
-        }`}/>
+        className={`relative inline-flex h-5 w-9 items-center rounded-full shrink-0 bg-green-500 ${
+          loading ? 'opacity-50' : 'cursor-pointer'
+        }`}
+      >
+        <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow translate-x-4" />
       </button>
 
       <div className="relative">
