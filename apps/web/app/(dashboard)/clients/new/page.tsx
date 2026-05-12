@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { UZBEKISTAN_CITIES } from '@/lib/uzbekistan'
+import { CitySelect } from '@/components/CitySelect'
 
 export default function NewClientPage() {
   const router = useRouter()
@@ -70,13 +70,12 @@ export default function NewClientPage() {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Город *</label>
-            <select required value={form.city} onChange={e => set('city', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Выберите город</option>
-              {UZBEKISTAN_CITIES.map(city => (
-                <option key={city} value={city}>{city}</option>
-              ))}
-            </select>
+            <CitySelect
+              required
+              value={form.city}
+              onChange={(v) => set('city', v)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
 

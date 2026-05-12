@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { db } from '@/lib/db'
+import { isGloballyActive } from '@/lib/app-settings'
 import bcrypt from 'bcryptjs'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -35,6 +36,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.login || !credentials?.password) return null
+        if (!(await isGloballyActive())) return null
         const user = await db.user.findUnique({
           where: { login: credentials.login as string },
         })
@@ -62,6 +64,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         const token = credentials?.token as string | undefined
         if (!token) return null
+        if (!(await isGloballyActive())) return null
         const { verifyWebAuthnSessionToken } = await import('@/lib/webauthn-challenge')
         const payload = verifyWebAuthnSessionToken(token)
         if (!payload) return null

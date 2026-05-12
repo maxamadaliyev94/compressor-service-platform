@@ -4,6 +4,48 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+/** Совпадает с apps/web/lib/uzbekistan.ts — начальный справочник городов */
+const UZBEKISTAN_CITIES_SEED = [
+  'Ташкент',
+  'Самарканд',
+  'Наманган',
+  'Андижан',
+  'Фергана',
+  'Нукус',
+  'Карши',
+  'Бухара',
+  'Балтакент',
+  'Термез',
+  'Коканд',
+  'Маргилан',
+  'Чирчик',
+  'Ангрен',
+  'Алмалык',
+  'Зарафшан',
+  'Навои',
+  'Гулистан',
+  'Джизак',
+  'Ургенч',
+  'Хива',
+  'Нурафшон',
+  'Бекабад',
+  'Газалкент',
+  'Янгиюль',
+  'Другой',
+] as const
+
+async function seedCities() {
+  for (let i = 0; i < UZBEKISTAN_CITIES_SEED.length; i++) {
+    const name = UZBEKISTAN_CITIES_SEED[i]
+    await prisma.city.upsert({
+      where: { name },
+      update: { sortOrder: i },
+      create: { name, sortOrder: i },
+    })
+  }
+  console.log('✅ Cities seeded')
+}
+
 type PermissionDef = {
   key: string
   category: 'section' | 'action' | 'field'
@@ -131,6 +173,8 @@ async function seedRolePermissions() {
 
 async function main() {
   console.log('Seeding database...')
+  await seedCities()
+
   const hashedPassword = await bcrypt.hash('Admin123!', 10)
   const hashedPassword2 = await bcrypt.hash('Manager123!', 10)
   const hashedPassword3 = await bcrypt.hash('Engineer123!', 10)

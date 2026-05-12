@@ -1,10 +1,93 @@
 import { auth } from '@/auth'
+import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/register', '/api/webauthn/login/', '/api/cron/']
 
-export default auth((req) => {
+function superadminBasicAuthDenied(req: NextRequest): NextResponse | null {
+  const username = process.env.SUPERADMIN_USERNAME
+  const password = process.env.SUPERADMIN_PASSWORD
+  if (!username || !password) {
+    return NextResponse.json({ error: 'Superadmin credentials not configured' }, { status: 503 })
+  }
+  const authHeader = req.headers.get('authorization')
+  if (!authHeader?.startsWith('Basic ')) {
+    return new NextResponse(null, {
+      status: 401,
+      headers: { 'WWW-Authenticate': 'Basic realm="Superadmin"' },
+    })
+  }
+  let decoded: string
+  try {
+    decoded = atob(authHeader.slice(6))
+  } catch {
+    return new NextResponse(null, {
+      status: 401,
+      headers: { 'WWW-Authenticate': 'Basic realm="Superadmin"' },
+    })
+  }
+  const i = decoded.indexOf(':')
+  const user = i === -1 ? decoded : decoded.slice(0, i)
+  const pass = i === -1 ? '' : decoded.slice(i + 1)
+  if (user !== username || pass !== password) {
+    return new NextResponse(null, {
+      status: 401,
+      headers: { 'WWW-Authenticate': 'Basic realm="Superadmin"' },
+    })
+  }
+  return null
+}
+
+async function fetchAppIsActive(req: NextRequest): Promise<boolean> {
+  const base =
+    process.env.INTERNAL_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
+  try {
+    const res = await fetch(`${base}/api/internal/app-status`, {
+      cache: 'no-store',
+      next: { revalidate: 0 },
+    })
+    if (!res.ok) return true
+    const data = (await res.json()) as { active?: boolean }
+    return data.active !== false
+  } catch {
+    return true
+  }
+}
+
+export default auth(async (req: NextRequest) => {
   const pathname = req.nextUrl.pathname
+
+  // Нужен до проверки maintenance (middleware дергает сам себя через fetch)
+  if (pathname === '/api/internal/app-status') {
+    return NextResponse.next()
+  }
+
+  // Скрытая зона владельца — только HTTP Basic из env
+  if (pathname.startsWith('/superadmin') || pathname.startsWith('/api/superadmin')) {
+    const denied = superadminBasicAuthDenied(req)
+    if (denied) return denied
+    return NextResponse.next()
+  }
+
+  let active = true
+  try {
+    active = await fetchAppIsActive(req)
+  } catch {
+    active = true
+  }
+
+  if (!active) {
+    if (pathname.startsWith('/api/cron/')) {
+      return NextResponse.next()
+    }
+    if (pathname === '/system-unavailable' || pathname.startsWith('/system-unavailable/')) {
+      return NextResponse.next()
+    }
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Система временно недоступна' }, { status: 503 })
+    }
+    return NextResponse.redirect(new URL('/system-unavailable', req.url))
+  }
 
   if (pathname.startsWith('/api/')) {
     const isPublic = PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))

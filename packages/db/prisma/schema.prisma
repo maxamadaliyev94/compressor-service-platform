@@ -229,6 +229,25 @@ model Client {
   @@map("clients")
 }
 
+/// Справочник городов для форм клиента (значение в `Client.city` — строка с названием).
+model City {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("cities")
+}
+
+/// Единственная строка настроек приложения (глобальное вкл/выкл).
+model AppSettings {
+  id       String  @id @default("default")
+  isActive Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
 model Branch {
   id            String   @id @default(cuid())
   clientId      String

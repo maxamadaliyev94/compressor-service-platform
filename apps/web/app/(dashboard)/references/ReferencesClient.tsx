@@ -21,19 +21,29 @@ interface Props {
   initialTypes: any[]
   initialBrands: any[]
   initialRegulations: Regulation[]
+  initialCities: { id: string; name: string; sortOrder: number }[]
   isAdmin: boolean
 }
 
-export default function ReferencesClient({ initialTypes, initialBrands, initialRegulations, isAdmin }: Props) {
+export default function ReferencesClient({
+  initialTypes,
+  initialBrands,
+  initialRegulations,
+  initialCities,
+  isAdmin,
+}: Props) {
   const [types, setTypes] = useState(initialTypes)
   const [brands, setBrands] = useState(initialBrands)
   const [regulations, setRegulations] = useState(initialRegulations)
+  const [cities, setCities] = useState(initialCities)
   const [newType, setNewType] = useState('')
   const [newBrand, setNewBrand] = useState('')
+  const [newCity, setNewCity] = useState('')
   const [loadingType, setLoadingType] = useState(false)
   const [loadingBrand, setLoadingBrand] = useState(false)
+  const [loadingCity, setLoadingCity] = useState(false)
   const [loadingRegulation, setLoadingRegulation] = useState(false)
-  const [activeTab, setActiveTab] = useState<'types' | 'brands' | 'regulations'>('types')
+  const [activeTab, setActiveTab] = useState<'types' | 'brands' | 'regulations' | 'cities'>('types')
   const [editingRegulationId, setEditingRegulationId] = useState<string | null>(null)
   const [regulationForm, setRegulationForm] = useState({
     name: '',
@@ -301,6 +311,43 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
     setBrands(prev => prev.filter(b => b.id !== id))
   }
 
+  async function addCity() {
+    if (!newCity.trim()) return
+    setLoadingCity(true)
+    const res = await fetch('/api/cities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newCity.trim() }),
+    })
+    if (res.ok) {
+      const created = (await res.json()) as { id: string; name: string; sortOrder: number }
+      setCities((prev) =>
+        [...prev, created].sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'ru'),
+        ),
+      )
+      setNewCity('')
+    } else {
+      const data = await res.json()
+      alert(data.error || 'Город уже существует')
+    }
+    setLoadingCity(false)
+  }
+
+  async function deleteCity(id: string) {
+    if (!confirm('Удалить этот город из справочника?')) return
+    const res = await fetch('/api/cities', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    if (!res.ok) {
+      alert('Не удалось удалить город')
+      return
+    }
+    setCities((prev) => prev.filter((c) => c.id !== id))
+  }
+
   return (
     <div className="max-w-4xl">
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-full overflow-x-auto">
@@ -333,6 +380,19 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
           📋 Регламенты ТО
           <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
             {regulations.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('cities')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'cities'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          📍 Города
+          <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
+            {cities.length}
           </span>
         </button>
       </div>
@@ -449,6 +509,64 @@ export default function ReferencesClient({ initialTypes, initialBrands, initialR
                   {isAdmin && (
                     <button onClick={() => deleteBrand(brand.id)}
                       className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs ml-1 transition-opacity">
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'cities' && (
+        <div className="bg-white border rounded-xl overflow-hidden">
+          <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+            <div>
+              <h2 className="font-semibold">Города</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Список в форме создания и редактирования клиента
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 border-b bg-blue-50">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addCity()}
+                placeholder="Название города"
+                className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+              <button
+                onClick={addCity}
+                disabled={!newCity.trim() || loadingCity}
+                className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+              >
+                {loadingCity ? '...' : '+ Добавить город'}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {cities.map((city) => (
+                <div
+                  key={city.id}
+                  className="flex items-center justify-between bg-gray-50 hover:bg-gray-100 rounded-lg px-3 py-2.5 transition-colors group"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 bg-emerald-100 rounded text-xs flex items-center justify-center font-bold text-emerald-700 flex-shrink-0">
+                      {city.name.charAt(0)}
+                    </div>
+                    <span className="text-sm font-medium truncate">{city.name}</span>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      onClick={() => deleteCity(city.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs ml-1 transition-opacity flex-shrink-0"
+                    >
                       ✕
                     </button>
                   )}
