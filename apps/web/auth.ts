@@ -41,6 +41,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { login: credentials.login as string },
         })
         if (!user || !user.isActive) return null
+        if (user.clientId) {
+          const clientRow = await db.client.findUnique({
+            where: { id: user.clientId },
+            select: { isActive: true },
+          })
+          if (clientRow && clientRow.isActive === false) return null
+        }
         const valid = await bcrypt.compare(credentials.password as string, user.password)
         if (!valid) return null
         await db.user.update({
@@ -70,6 +77,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!payload) return null
         const user = await db.user.findUnique({ where: { id: payload.userId } })
         if (!user?.isActive) return null
+        if (user.clientId) {
+          const clientRow = await db.client.findUnique({
+            where: { id: user.clientId },
+            select: { isActive: true },
+          })
+          if (clientRow && clientRow.isActive === false) return null
+        }
         return {
           id: user.id,
           email: user.email ?? undefined,

@@ -17,6 +17,7 @@ type ClientRow = {
   phone?: string | null
   city?: string | null
   status: 'VIP' | 'STANDART' | 'PASSIVE'
+  isActive: boolean
   managerId?: string | null
   manager?: Manager | null
   branches?: { objects: { equipment: { id: string }[] }[] }[]
@@ -100,11 +101,59 @@ function ManagerAssignModal({
   )
 }
 
-function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean }) {
+/** Ручной вкл/выкл клиента — только поле isActive в БД. */
+function ClientActiveToggle({ client, isAdmin }: { client: ClientRow; isAdmin: boolean }) {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+
+  async function toggle() {
+    setLoading(true)
+    await fetch(`/api/clients/${client.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: !client.isActive }),
+    })
+    setLoading(false)
+    router.refresh()
+  }
+
+  if (!isAdmin) {
+    return (
+      <span className="text-xs text-gray-500 whitespace-nowrap">
+        {client.isActive ? 'Вкл.' : 'Откл.'}
+      </span>
+    )
+  }
+
+  const on = client.isActive
+  return (
+    <button
+      type="button"
+      onClick={() => void toggle()}
+      disabled={loading}
+      title={
+        on
+          ? 'Клиент включён — нажмите, чтобы отключить (только учётная запись доступа)'
+          : 'Клиент отключён — нажмите, чтобы включить'
+      }
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+        on ? 'bg-green-500' : 'bg-gray-300'
+      } ${loading ? 'opacity-50' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+          on ? 'translate-x-4' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  )
+}
+
+/** Метка VIP / Стандарт / Пассивный — только поле status, без связи с тумблером isActive. */
+function ClientStatusPicker({ client, isAdmin }: { client: ClientRow; isAdmin: boolean }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
-  const isPassive = client.status === 'PASSIVE'
 
   async function changeStatus(status: string) {
     setLoading(true)
@@ -112,7 +161,7 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
     await fetch(`/api/clients/${client.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status }),
     })
     setLoading(false)
     router.refresh()
@@ -127,55 +176,57 @@ function StatusToggle({ client, isAdmin }: { client: ClientRow, isAdmin: boolean
   }
 
   return (
-    <div className="relative flex items-center gap-2">
+    <div className="relative">
       <button
         type="button"
-        onClick={() => changeStatus(isPassive ? 'STANDART' : 'PASSIVE')}
+        onClick={() => setShowMenu(!showMenu)}
         disabled={loading}
-        title={
-          isPassive
-            ? 'Убрать метку «Пассивный» (статус только для учёта)'
-            : 'Поставить метку «Пассивный» (статус только для учёта)'
-        }
-        className={`relative inline-flex h-5 w-9 items-center rounded-full shrink-0 bg-green-500 ${
-          loading ? 'opacity-50' : 'cursor-pointer'
-        }`}
+        className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusColors[client.status]} hover:opacity-80`}
       >
-        <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow translate-x-4" />
+        {statusLabels[client.status]}
+        <span className="text-xs">▾</span>
       </button>
 
-      <div className="relative">
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusColors[client.status]} hover:opacity-80`}>
-          {statusLabels[client.status]}
-          <span className="text-xs">▾</span>
-        </button>
-
-        {showMenu && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}/>
-            <div className="absolute right-0 top-7 w-44 bg-white border rounded-xl shadow-xl z-20 overflow-hidden">
-              <div className="p-1">
-                {['VIP', 'STANDART', 'PASSIVE'].map((s) => (
-                  <button key={s} onClick={() => changeStatus(s)}
-                    disabled={client.status === s}
-                    className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center gap-2 transition-colors
-                      ${client.status === s ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50'}`}>
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      s === 'VIP' ? 'bg-purple-500' :
-                      s === 'STANDART' ? 'bg-blue-500' :
-                      'bg-gray-400'
-                    }`}/>
-                    {statusLabels[s]}
-                    {client.status === s && <span className="ml-auto text-gray-400">✓</span>}
-                  </button>
-                ))}
-              </div>
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+          <div className="absolute right-0 top-7 w-44 bg-white border rounded-xl shadow-xl z-20 overflow-hidden">
+            <div className="p-1">
+              {(['VIP', 'STANDART', 'PASSIVE'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => changeStatus(s)}
+                  disabled={client.status === s}
+                  className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center gap-2 transition-colors
+                      ${
+                        client.status === s
+                          ? 'opacity-40 cursor-not-allowed bg-gray-50'
+                          : 'hover:bg-gray-50'
+                      }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      s === 'VIP' ? 'bg-purple-500' : s === 'STANDART' ? 'bg-blue-500' : 'bg-gray-400'
+                    }`}
+                  />
+                  {statusLabels[s]}
+                  {client.status === s && <span className="ml-auto text-gray-400">✓</span>}
+                </button>
+              ))}
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ClientStatusCell({ client, isAdmin }: { client: ClientRow; isAdmin: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <ClientActiveToggle client={client} isAdmin={isAdmin} />
+      <ClientStatusPicker client={client} isAdmin={isAdmin} />
     </div>
   )
 }
@@ -211,7 +262,7 @@ export default function ClientsTable({
   const router = useRouter()
 
   const showActionsCol = canEditClient || isAdmin
-  const tableColSpan = 6 + (isAdmin ? 1 : 0) + (showActionsCol ? 1 : 0)
+  const tableColSpan = 7 + (isAdmin ? 1 : 0) + (showActionsCol ? 1 : 0)
 
   const cities = [...new Set(clients.map((c) => c.city).filter(Boolean))] as string[]
 
@@ -374,7 +425,7 @@ export default function ClientsTable({
                 <a href={`/clients/${client.id}`} className="font-medium text-sm hover:text-blue-600">
                   {client.name}
                 </a>
-                <StatusToggle client={client} isAdmin={isAdmin} />
+                <ClientStatusCell client={client} isAdmin={isAdmin} />
               </div>
               {client.inn && <div className="text-xs text-gray-400 mt-0.5">ИНН: {client.inn}</div>}
               <div className="mt-2 space-y-1.5 text-xs">
@@ -422,7 +473,7 @@ export default function ClientsTable({
       </div>
 
       <div className="hidden md:block bg-white border rounded-xl overflow-x-auto">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left p-3 font-medium">Клиент</th>
@@ -431,7 +482,8 @@ export default function ClientsTable({
               <th className="text-left p-3 font-medium">Телефон</th>
               <th className="text-left p-3 font-medium">Оборудования</th>
               {isAdmin && <th className="text-left p-3 font-medium">Менеджер</th>}
-              <th className="text-left p-3 font-medium">Статус</th>
+              <th className="text-left p-3 font-medium whitespace-nowrap">Вкл</th>
+              <th className="text-left p-3 font-medium">Категория</th>
               {showActionsCol && (
                 <th className="text-right p-3 font-medium whitespace-nowrap">Действия</th>
               )}
@@ -482,8 +534,11 @@ export default function ClientsTable({
                       </div>
                     </td>
                   )}
+                  <td className="p-3 whitespace-nowrap">
+                    <ClientActiveToggle client={client} isAdmin={isAdmin} />
+                  </td>
                   <td className="p-3">
-                    <StatusToggle client={client} isAdmin={isAdmin} />
+                    <ClientStatusPicker client={client} isAdmin={isAdmin} />
                   </td>
                   {showActionsCol && (
                     <td className="p-3 text-right">

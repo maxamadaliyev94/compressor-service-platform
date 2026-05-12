@@ -17,6 +17,7 @@ export default function ExportClientsButton({ clients }: { clients: any[] }) {
         Телефон: c.phone || '',
         Email: c.email || '',
         Статус: statusLabels[c.status] || c.status,
+        'Включён (учёт)': c.isActive === false ? 'Нет' : 'Да',
         'Кол-во оборудования': equipCount,
         Комментарий: c.comment || '',
       }

@@ -215,6 +215,8 @@ model Client {
   phone         String?
   email         String?
   status        ClientStatus @default(STANDART)
+  /// Ручное включение/отключение клиента (не связано с полем status).
+  isActive      Boolean      @default(true)
   comment       String?
   country       String       @default("Узбекистан")
   city          String?
