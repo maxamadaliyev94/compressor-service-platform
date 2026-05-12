@@ -1,6 +1,5 @@
 import { db } from '@/lib/db'
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
 import { getWarrantyStatus } from '@csp/shared'
 import PrintQR from './PrintQR'
 import UpdateHours from './UpdateHours'
@@ -8,11 +7,11 @@ import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
 import EquipmentPhotosEditor from './EquipmentPhotosEditor'
 import EquipmentTechnicalData from './EquipmentTechnicalData'
+import EquipmentMaintenanceHistory from './EquipmentMaintenanceHistory'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
-import { formatTaskScheduleRangeRu } from '@/lib/task-schedule-display'
 
 export default async function EquipmentPage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -62,6 +61,36 @@ export default async function EquipmentPage({ params }: { params: { id: string }
   }
   const ws = getWarrantyStatus(eq.warrantyUntil, eq.warrantyVoided)
 
+  const maintenanceTasks = eq.tasks.map((task) => ({
+    id: task.id,
+    type: task.type,
+    priority: task.priority,
+    status: task.status,
+    completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+    scheduledAt: task.scheduledAt ? task.scheduledAt.toISOString() : null,
+    startDate: task.startDate ? task.startDate.toISOString() : null,
+    endDate: task.endDate ? task.endDate.toISOString() : null,
+    taskType: task.taskType,
+    comment: task.comment,
+    assignedTo: task.assignedTo ? { name: task.assignedTo.name } : null,
+    report: task.report
+      ? {
+          currentHours: task.report.currentHours,
+          nextServiceHours: task.report.nextServiceHours,
+          partsUsed: task.report.partsUsed.map((p) => ({
+            name: p.name,
+            quantity: p.quantity,
+            unit: p.unit,
+          })),
+          notes: task.report.notes,
+          recommendations: task.report.recommendations,
+          actNumber: task.report.actNumber,
+        }
+      : null,
+  }))
+
+  const canBulkDeleteTasks = !isClientPortal && role === 'ADMIN'
+
   const wsColors: Record<string, string> = {
     ACTIVE: 'bg-green-100 text-green-800',
     EXPIRING: 'bg-orange-100 text-orange-800',
@@ -88,17 +117,6 @@ export default async function EquipmentPage({ params }: { params: { id: string }
     REPAIR: 'bg-red-100 text-red-700',
     PRESERVED: 'bg-blue-100 text-blue-700',
     DECOMMISSIONED: 'bg-gray-100 text-gray-500',
-  }
-  const taskStatusLabels: Record<string, string> = {
-    NEW: 'Новая', ASSIGNED: 'Назначена', IN_PROGRESS: 'В работе',
-    DONE: 'Выполнено', CANCELLED: 'Отменена', REVIEW: 'На проверке',
-    DRAFT: 'Черновик', REVISION: 'Доработка',
-  }
-  const taskStatusColors: Record<string, string> = {
-    NEW: 'bg-gray-100 text-gray-700', ASSIGNED: 'bg-blue-100 text-blue-700',
-    IN_PROGRESS: 'bg-yellow-100 text-yellow-700', DONE: 'bg-green-100 text-green-700',
-    CANCELLED: 'bg-red-100 text-red-700', REVIEW: 'bg-purple-100 text-purple-700',
-    DRAFT: 'bg-gray-100 text-gray-500', REVISION: 'bg-orange-100 text-orange-700',
   }
 
   const qrUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/equipment/${eq.id}`
@@ -229,139 +247,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
                 <QuickTaskButton equipmentId={eq.id} createdById={session.user.id} role={role} />
               )}
             </div>
-            {eq.tasks.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 text-sm">
-                <div className="text-3xl mb-2">📋</div>
-                История работ пока пуста
-              </div>
-            ) : (
-              <div className="divide-y">
-                {eq.tasks.map(task => {
-                  const typeRu: Record<string, string> = {
-                    PLANNED_MAINTENANCE: 'Плановое ТО',
-                    DIAGNOSTICS: 'Диагностика',
-                    WARRANTY_REPAIR: 'Гарантийный ремонт',
-                    EMERGENCY: 'Аварийный выезд',
-                    INSTALLATION: 'Монтаж',
-                    COMMISSIONING: 'Пусконаладка',
-                  }
-                  const priorityColors: Record<string, string> = {
-                    LOW: 'bg-gray-100 text-gray-600',
-                    MEDIUM: 'bg-blue-100 text-blue-600',
-                    HIGH: 'bg-orange-100 text-orange-600',
-                    EMERGENCY: 'bg-red-100 text-red-600',
-                  }
-                  const priorityLabels: Record<string, string> = {
-                    LOW: 'Низкий', MEDIUM: 'Средний', HIGH: 'Высокий', EMERGENCY: 'Аварийный',
-                  }
-                  const isDone = task.status === 'DONE'
-
-                  return (
-                    <div key={task.id} className="relative p-4 hover:bg-gray-50 transition-colors group">
-                      <Link
-                        href={`/tasks/${task.id}`}
-                        className="absolute inset-0 z-0 rounded-lg"
-                        aria-label="Открыть задачу"
-                      />
-                      <div className="relative z-[1] flex items-start justify-between gap-4 pointer-events-none">
-                        <div className="flex gap-3 flex-1 min-w-0">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${
-                            isDone ? 'bg-green-100 text-green-700' :
-                            task.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-                            task.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {isDone ? '✓' : task.status === 'CANCELLED' ? '✕' : task.status === 'IN_PROGRESS' ? '▶' : '○'}
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="font-semibold text-sm text-gray-900">
-                                {typeRu[task.type] || task.type}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${priorityColors[task.priority]}`}>
-                                {priorityLabels[task.priority]}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskStatusColors[task.status]}`}>
-                                {taskStatusLabels[task.status]}
-                              </span>
-                            </div>
-
-                            {task.assignedTo && (
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
-                                  {task.assignedTo.name.charAt(0)}
-                                </div>
-                                <span className="text-xs text-gray-600">{task.assignedTo.name}</span>
-                              </div>
-                            )}
-
-                            {task.report && (
-                              <div className="mt-2 bg-green-50 border border-green-100 rounded-lg p-2.5 grid grid-cols-2 gap-x-4 gap-y-1">
-                                <div className="text-xs text-gray-500">
-                                  Моточасы: <span className="font-semibold text-gray-800">{task.report.currentHours} м/ч</span>
-                                </div>
-                                {task.report.nextServiceHours && (
-                                  <div className="text-xs text-gray-500">
-                                    След. ТО: <span className="font-semibold text-gray-800">{task.report.nextServiceHours} м/ч</span>
-                                  </div>
-                                )}
-                                {task.report.partsUsed?.length > 0 && (
-                                  <div className="text-xs text-gray-500 col-span-2">
-                                    Запчасти: <span className="font-medium text-gray-700">
-                                      {task.report.partsUsed.map((p: any) => `${p.name} (${p.quantity} ${p.unit})`).join(', ')}
-                                    </span>
-                                  </div>
-                                )}
-                                {task.report.notes && (
-                                  <div className="text-xs text-gray-500 col-span-2 italic">
-                                    "{task.report.notes}"
-                                  </div>
-                                )}
-                                {task.report.recommendations && (
-                                  <div className="text-xs col-span-2 bg-yellow-50 border border-yellow-100 rounded px-2 py-1 text-yellow-800">
-                                    💡 {task.report.recommendations}
-                                  </div>
-                                )}
-                                {task.report.actNumber && (
-                                  <div className="text-xs text-gray-400 col-span-2">
-                                    Акт № {task.report.actNumber}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {task.comment && !task.report && (
-                              <div className="text-xs text-gray-500 italic mt-1">"{task.comment}"</div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="text-right flex-shrink-0 space-y-1">
-                          <div className="text-xs text-gray-400">
-                            {task.completedAt
-                              ? new Date(task.completedAt).toLocaleDateString('ru-RU')
-                              : formatTaskScheduleRangeRu(task) !== '—'
-                                ? formatTaskScheduleRangeRu(task)
-                                : '—'}
-                          </div>
-                          {task.report && (
-                            <a
-                              href={`/api/tasks/${task.id}/pdf`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="pointer-events-auto relative z-[2] inline-block text-xs text-blue-600 hover:underline border border-blue-200 px-2 py-0.5 rounded hover:bg-blue-50"
-                            >
-                              📄 Акт
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            <EquipmentMaintenanceHistory tasks={maintenanceTasks} canBulkDelete={canBulkDeleteTasks} />
           </div>
         </div>
 
