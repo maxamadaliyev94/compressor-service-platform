@@ -11,12 +11,25 @@ export async function POST(req: NextRequest) {
   }
 
   const current = await db.appSettings.findUnique({ where: { id: 'default' } })
-  const nextActive = !(current?.isActive ?? true)
+  const prevActive = current?.isActive ?? true
+  const nextActive = !prevActive
+
+  console.log('[api/superadmin/toggle] before write', {
+    rowExists: !!current,
+    isActiveInDb: current?.isActive,
+    computedNextActive: nextActive,
+  })
 
   await db.appSettings.upsert({
     where: { id: 'default' },
     create: { id: 'default', isActive: nextActive },
     update: { isActive: nextActive },
+  })
+
+  const after = await db.appSettings.findUnique({ where: { id: 'default' } })
+  console.log('[api/superadmin/toggle] after write', {
+    isActiveInDb: after?.isActive,
+    responseActive: nextActive,
   })
 
   return NextResponse.json({ active: nextActive })

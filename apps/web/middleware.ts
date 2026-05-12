@@ -57,16 +57,18 @@ async function fetchAppIsActive(req: NextRequest): Promise<boolean> {
   const base =
     process.env.INTERNAL_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
   try {
-    // Каждый запрос — новый URL и заголовки против кэша (Data Cache / CDN / прокси).
-    const url = `${base}/api/internal/app-status?_=${Date.now()}`
+    // POST + cache: 'no-store' — Next.js и прокси реже кэшируют, чем GET.
+    const url = `${base}/api/internal/app-status`
     const res = await fetch(url, {
-      method: 'GET',
+      method: 'POST',
       cache: 'no-store',
       headers: {
         Accept: 'application/json',
+        'Content-Type': 'application/json',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         Pragma: 'no-cache',
       },
+      body: '{}',
     })
     if (!res.ok) return true
     const data = (await res.json()) as { active?: boolean }
