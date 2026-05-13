@@ -181,6 +181,36 @@ export async function countUnreadMessagesTotal(userId: string, role: Role): Prom
   return total
 }
 
+/** Непрочитанные по каждой комнате (сообщения от других после lastReadAt). */
+export async function getUnreadCountsForRooms(
+  userId: string,
+  roomIds: string[]
+): Promise<Map<string, number>> {
+  if (roomIds.length === 0) return new Map()
+
+  const states = await db.chatRoomReadState.findMany({
+    where: { userId, roomId: { in: roomIds } },
+    select: { roomId: true, lastReadAt: true },
+  })
+  const readMap = new Map(states.map((s) => [s.roomId, s.lastReadAt]))
+
+  const pairs = await Promise.all(
+    roomIds.map(async (roomId) => {
+      const lastRead = readMap.get(roomId) ?? new Date(0)
+      const n = await db.chatMessage.count({
+        where: {
+          roomId,
+          authorId: { not: userId },
+          deletedAt: null,
+          createdAt: { gt: lastRead },
+        },
+      })
+      return [roomId, n] as const
+    })
+  )
+  return new Map(pairs)
+}
+
 async function notifyChatRecipients(
   room: { id: string; type: ChatRoomType; dmKey: string | null },
   authorId: string,
@@ -237,7 +267,7 @@ export async function postChatMessage(roomId: string, authorId: string, body: st
       isSystem,
     },
     include: {
-      author: { select: { id: true, name: true } },
+      author: { select: { id: true, name: true, avatarUrl: true } },
       room: { select: { id: true, type: true, dmKey: true } },
     },
   })

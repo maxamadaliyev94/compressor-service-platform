@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { MoreVertical } from 'lucide-react'
 
 type LastMsg = {
   body: string
@@ -13,11 +14,12 @@ type LastMsg = {
 type StaffUser = { id: string; name: string; role: string }
 
 type RoomsPayload = {
-  general: { id: string; type: string; title: string; lastMessage: LastMsg }
+  general: { id: string; type: string; title: string; unreadCount?: number; lastMessage: LastMsg }
   direct: {
     id: string
     type: string
     title: string
+    unreadCount?: number
     peer: StaffUser | null
     lastMessage: LastMsg
   }[]
@@ -26,6 +28,7 @@ type RoomsPayload = {
     type: string
     taskId: string | null
     title: string
+    unreadCount?: number
     lastMessage: LastMsg
   }[]
   staffUsers: StaffUser[]
@@ -40,13 +43,115 @@ type ChatMessage = {
   deletedAt: string | null
   editedAt: string | null
   createdAt: string
-  author: { id: string; name: string; role: string }
+  author: { id: string; name: string; role: string; avatarUrl?: string | null }
 }
 
 function dispatchChatRead() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('csp-chat-mark-read'))
   }
+}
+
+function RoomUnreadBadge({ count }: { count?: number }) {
+  if (!count || count <= 0) return null
+  const label = count > 99 ? '+99' : `+${count}`
+  return (
+    <span className="shrink-0 min-w-[1.35rem] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none flex items-center justify-center">
+      {label}
+    </span>
+  )
+}
+
+function SenderAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null | undefined }) {
+  const initial = name.charAt(0).toUpperCase()
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt=""
+        className="w-9 h-9 rounded-full object-cover border border-gray-200 flex-shrink-0 bg-white"
+      />
+    )
+  }
+  return (
+    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700 flex items-center justify-center text-sm font-semibold flex-shrink-0 border border-gray-200">
+      {initial}
+    </div>
+  )
+}
+
+function DirectChatRowMenu({
+  isOpen,
+  onOpenChange,
+  onClearHistory,
+  onHideChat,
+}: {
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
+  onClearHistory: () => void
+  onHideChat: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onOpenChange(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [isOpen, onOpenChange])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        title="Действия"
+        className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onOpenChange(!isOpen)
+        }}
+      >
+        <MoreVertical className="w-4 h-4" strokeWidth={2} />
+      </button>
+      {isOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+            onClick={(e) => {
+              e.stopPropagation()
+              onClearHistory()
+              onOpenChange(false)
+            }}
+          >
+            Очистить историю
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full px-3 py-2 text-left text-red-700 hover:bg-red-50"
+            onClick={(e) => {
+              e.stopPropagation()
+              onHideChat()
+              onOpenChange(false)
+            }}
+          >
+            Удалить чат
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ChatPageClient({ initialRoomId }: { initialRoomId: string | null }) {
@@ -63,6 +168,7 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
   const [peerPick, setPeerPick] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [directMenuRoomId, setDirectMenuRoomId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const loadRooms = useCallback(async () => {
@@ -158,12 +264,11 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
     }
   }
 
-  async function clearHistory() {
-    if (!selectedRoomId) return
+  async function clearHistoryForRoom(roomId: string) {
     if (!confirm('Удалить все сообщения в этом чате для всех участников?')) return
-    const res = await fetch(`/api/chat/rooms/${selectedRoomId}/clear`, { method: 'POST' })
+    const res = await fetch(`/api/chat/rooms/${roomId}/clear`, { method: 'POST' })
     if (res.ok) {
-      await loadMessages(selectedRoomId)
+      if (selectedRoomId === roomId) await loadMessages(roomId)
       await loadRooms()
       dispatchChatRead()
     } else {
@@ -172,16 +277,33 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
     }
   }
 
-  async function hideChat() {
-    if (!selectedRoomId) return
-    if (!confirm('Скрыть чат из списка? История сохранится — при новом сообщении чат появится снова.')) return
-    const res = await fetch(`/api/chat/rooms/${selectedRoomId}/hide`, { method: 'POST' })
+  async function hideChatForRoom(roomId: string) {
+    if (
+      !confirm(
+        'Удалить этот чат из списка? История сохранится — при новом сообщении чат появится снова.'
+      )
+    )
+      return
+    const res = await fetch(`/api/chat/rooms/${roomId}/hide`, { method: 'POST' })
     if (res.ok) {
-      setSelectedRoomId(null)
-      router.replace('/chat', { scroll: false })
+      setDirectMenuRoomId(null)
+      if (selectedRoomId === roomId) {
+        setSelectedRoomId(null)
+        router.replace('/chat', { scroll: false })
+      }
       await loadRooms()
       dispatchChatRead()
     }
+  }
+
+  async function clearHistory() {
+    if (!selectedRoomId) return
+    await clearHistoryForRoom(selectedRoomId)
+  }
+
+  async function hideChat() {
+    if (!selectedRoomId) return
+    await hideChatForRoom(selectedRoomId)
   }
 
   function startEdit(m: ChatMessage) {
@@ -243,6 +365,7 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
     selectedRoomId &&
     (roomKind === 'DIRECT' || roomKind === 'TASK' || (roomKind === 'GENERAL' && canClearGeneral))
   const showHide = selectedRoomId && (roomKind === 'DIRECT' || roomKind === 'TASK')
+  const isGeneralRoom = roomKind === 'GENERAL'
 
   return (
     <div className="flex flex-col md:flex-row gap-4 min-h-[calc(100vh-8rem)]">
@@ -282,7 +405,12 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
                 selectedRoomId === general.id ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
               }`}
             >
-              <div className="font-medium text-gray-900">💬 {general.title}</div>
+              <div className="flex items-center gap-2 w-full min-w-0">
+                <span className="font-medium text-gray-900 truncate flex-1 min-w-0 text-left">
+                  💬 {general.title}
+                </span>
+                <RoomUnreadBadge count={general.unreadCount} />
+              </div>
               {general.lastMessage && (
                 <div className="text-xs text-gray-500 truncate mt-0.5">{general.lastMessage.body}</div>
               )}
@@ -293,19 +421,40 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
             <div className="text-xs text-gray-400 px-2">Нет переписок</div>
           )}
           {(rooms?.direct ?? []).map((r) => (
-            <button
+            <div
               key={r.id}
-              type="button"
-              onClick={() => selectRoom(r.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+              className={`group flex items-stretch rounded-lg border transition-colors ${
                 selectedRoomId === r.id ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
               }`}
             >
-              <div className="font-medium text-gray-900 truncate">👤 {r.title}</div>
-              {r.lastMessage && (
-                <div className="text-xs text-gray-500 truncate mt-0.5">{r.lastMessage.body}</div>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => selectRoom(r.id)}
+                className="flex-1 min-w-0 text-left px-3 py-2 rounded-l-lg"
+              >
+                <div className="flex items-center gap-2 w-full min-w-0">
+                  <span className="font-medium text-gray-900 truncate flex-1 min-w-0 text-left">
+                    👤 {r.title}
+                  </span>
+                  <RoomUnreadBadge count={r.unreadCount} />
+                </div>
+                {r.lastMessage && (
+                  <div className="text-xs text-gray-500 truncate mt-0.5">{r.lastMessage.body}</div>
+                )}
+              </button>
+              <div
+                className={`flex shrink-0 items-start pt-1.5 pr-1 transition-opacity ${
+                  directMenuRoomId === r.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+              >
+                <DirectChatRowMenu
+                  isOpen={directMenuRoomId === r.id}
+                  onOpenChange={(open) => setDirectMenuRoomId(open ? r.id : null)}
+                  onClearHistory={() => void clearHistoryForRoom(r.id)}
+                  onHideChat={() => void hideChatForRoom(r.id)}
+                />
+              </div>
+            </div>
           ))}
           <div className="text-xs font-semibold text-gray-500 uppercase px-2 pt-3 pb-1">По задачам</div>
           {(rooms?.tasks ?? []).length === 0 && (
@@ -320,7 +469,12 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
                 selectedRoomId === r.id ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
               }`}
             >
-              <div className="font-medium text-gray-900 truncate">📋 {r.title}</div>
+              <div className="flex items-center gap-2 w-full min-w-0">
+                <span className="font-medium text-gray-900 truncate flex-1 min-w-0 text-left">
+                  📋 {r.title}
+                </span>
+                <RoomUnreadBadge count={r.unreadCount} />
+              </div>
               {r.lastMessage && (
                 <div className="text-xs text-gray-500 truncate mt-0.5">{r.lastMessage.body}</div>
               )}
@@ -376,83 +530,114 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
                     Boolean(currentUserId && m.author.id === currentUserId) && !m.isSystem
                   const isDeleted = Boolean(m.deletedAt)
                   const showActions = isOwnAuthor && !isDeleted
+                  const avatarUrl = m.author.avatarUrl ?? null
+
+                  const editBlock =
+                    editingId === m.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          rows={3}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void saveEdit()}
+                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded"
+                          >
+                            Сохранить
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="text-xs px-2 py-1 border rounded"
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    ) : null
+
+                  const bodyBlock =
+                    editingId === m.id ? (
+                      editBlock
+                    ) : isDeleted ? (
+                      <div className="italic text-gray-400">Сообщение удалено</div>
+                    ) : (
+                      <>
+                        <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                        {m.editedAt && <div className="text-[10px] text-gray-400 mt-1">изменено</div>}
+                      </>
+                    )
+
+                  const actionButtons = showActions && (
+                    <div className="absolute -top-0.5 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(m)}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-white border shadow text-gray-700 hover:bg-gray-50"
+                      >
+                        Изменить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteMessage(m.id)}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-white border shadow text-red-600 hover:bg-red-50"
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  )
+
+                  if (m.isSystem) {
+                    return (
+                      <div key={m.id} className="flex justify-center">
+                        <div className="relative group mx-auto max-w-[95%] rounded-xl px-3 py-2 text-sm bg-amber-50 border border-amber-100 text-amber-900 text-center">
+                          <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                          <div className="text-[10px] text-amber-700/80 mt-1">{formatTime(m.createdAt)}</div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  if (isGeneralRoom) {
+                    return (
+                      <div key={m.id} className="flex gap-2 items-start w-full">
+                        <SenderAvatar name={m.author.name} avatarUrl={avatarUrl} />
+                        <div
+                          className={`relative group flex-1 min-w-0 rounded-xl px-3 py-2 text-sm border ${
+                            isOwnAuthor ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-200 shadow-sm'
+                          }`}
+                        >
+                          {actionButtons}
+                          <div className="text-xs text-gray-600 mb-1 pr-14 flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                            <span className="font-semibold text-gray-900">{m.author.name}</span>
+                            <span className="text-gray-400">{formatTime(m.createdAt)}</span>
+                          </div>
+                          {bodyBlock}
+                        </div>
+                      </div>
+                    )
+                  }
 
                   return (
                     <div
                       key={m.id}
-                      className={`flex ${m.isSystem ? 'justify-center' : isOwnAuthor ? 'justify-end' : 'justify-start'}`}
+                      className={`flex ${isOwnAuthor ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
                         className={`relative group max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                          m.isSystem
-                            ? 'mx-auto bg-amber-50 border border-amber-100 text-amber-900 text-center max-w-full'
-                            : isOwnAuthor
-                              ? 'bg-blue-50 border border-blue-100'
-                              : 'bg-white border shadow-sm'
+                          isOwnAuthor ? 'bg-blue-50 border border-blue-100' : 'bg-white border shadow-sm'
                         }`}
                       >
-                        {showActions && (
-                          <div className="absolute -top-0.5 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            <button
-                              type="button"
-                              onClick={() => startEdit(m)}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-white border shadow text-gray-700 hover:bg-gray-50"
-                            >
-                              Изменить
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void deleteMessage(m.id)}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-white border shadow text-red-600 hover:bg-red-50"
-                            >
-                              Удалить
-                            </button>
-                          </div>
-                        )}
-                        {!m.isSystem && (
-                          <div className="text-xs text-gray-500 mb-1 pr-12">
-                            <span className="font-medium text-gray-700">{m.author.name}</span>
-                            <span className="ml-2">{formatTime(m.createdAt)}</span>
-                          </div>
-                        )}
-                        {editingId === m.id ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editDraft}
-                              onChange={(e) => setEditDraft(e.target.value)}
-                              rows={3}
-                              className="w-full border rounded px-2 py-1 text-sm"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void saveEdit()}
-                                className="text-xs px-2 py-1 bg-blue-600 text-white rounded"
-                              >
-                                Сохранить
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingId(null)}
-                                className="text-xs px-2 py-1 border rounded"
-                              >
-                                Отмена
-                              </button>
-                            </div>
-                          </div>
-                        ) : isDeleted ? (
-                          <div className="italic text-gray-400">Сообщение удалено</div>
-                        ) : (
-                          <>
-                            <div className="whitespace-pre-wrap break-words">{m.body}</div>
-                            {m.editedAt && (
-                              <div className="text-[10px] text-gray-400 mt-1">изменено</div>
-                            )}
-                          </>
-                        )}
-                        {m.isSystem && (
-                          <div className="text-[10px] text-amber-700/80 mt-1">{formatTime(m.createdAt)}</div>
-                        )}
+                        {actionButtons}
+                        <div className="text-xs text-gray-500 mb-1 pr-12">
+                          <span className="font-medium text-gray-700">{m.author.name}</span>
+                          <span className="ml-2">{formatTime(m.createdAt)}</span>
+                        </div>
+                        {bodyBlock}
                       </div>
                     </div>
                   )

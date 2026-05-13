@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: { roomId: str
     orderBy: { createdAt: 'asc' },
     take: 200,
     include: {
-      author: { select: { id: true, name: true, role: true } },
+      author: { select: { id: true, name: true, role: true, avatarUrl: true } },
     },
   })
 
@@ -29,7 +29,12 @@ export async function GET(_req: NextRequest, { params }: { params: { roomId: str
       deletedAt: m.deletedAt?.toISOString() ?? null,
       editedAt: m.editedAt?.toISOString() ?? null,
       createdAt: m.createdAt.toISOString(),
-      author: { id: m.author.id, name: m.author.name, role: m.author.role },
+      author: {
+        id: m.author.id,
+        name: m.author.name,
+        role: m.author.role,
+        avatarUrl: m.author.avatarUrl,
+      },
     })),
     currentUserId: session.user.id,
   })
@@ -59,7 +64,11 @@ export async function POST(req: NextRequest, { params }: { params: { roomId: str
         deletedAt: msg.deletedAt?.toISOString() ?? null,
         editedAt: msg.editedAt?.toISOString() ?? null,
         createdAt: msg.createdAt.toISOString(),
-        author: { id: msg.author.id, name: msg.author.name },
+        author: {
+          id: msg.author.id,
+          name: msg.author.name,
+          avatarUrl: msg.author.avatarUrl ?? null,
+        },
       },
     })
   } catch {

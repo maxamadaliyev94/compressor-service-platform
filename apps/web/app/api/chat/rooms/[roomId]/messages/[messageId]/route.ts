@@ -35,7 +35,7 @@ export async function PATCH(
       body: text,
       editedAt: new Date(),
     },
-    include: { author: { select: { id: true, name: true, role: true } } },
+    include: { author: { select: { id: true, name: true, role: true, avatarUrl: true } } },
   })
 
   await db.chatRoom.update({
@@ -55,6 +55,7 @@ export async function PATCH(
         id: updated.author.id,
         name: updated.author.name,
         role: updated.author.role,
+        avatarUrl: updated.author.avatarUrl,
       },
     },
   })

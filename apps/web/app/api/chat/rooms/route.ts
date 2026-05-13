@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import type { Role } from '@prisma/client'
-import { getDmPeer, getOrCreateGeneralRoom, isStaffRole, STAFF_ROLES } from '@/lib/internal-chat'
+import {
+  getDmPeer,
+  getOrCreateGeneralRoom,
+  getUnreadCountsForRooms,
+  isStaffRole,
+  STAFF_ROLES,
+} from '@/lib/internal-chat'
 
 export async function GET() {
   const session = await auth()
@@ -86,12 +92,20 @@ export async function GET() {
     include: { author: { select: { id: true, name: true } } },
   })
 
+  const roomIdsForUnread = [
+    general.id,
+    ...dmRooms.map((r) => r.id),
+    ...taskRooms.map((r) => r.id),
+  ]
+  const unreadMap = await getUnreadCountsForRooms(userId, roomIdsForUnread)
+
   return NextResponse.json({
     currentUserId: userId,
     general: {
       id: general.id,
       type: 'GENERAL',
       title: 'Общий чат',
+      unreadCount: unreadMap.get(general.id) ?? 0,
       lastMessage: generalLast
         ? {
             body: generalLast.body,
@@ -109,6 +123,7 @@ export async function GET() {
         id: r.id,
         type: 'DIRECT',
         title: peer ? peer.name : 'Личный чат',
+        unreadCount: unreadMap.get(r.id) ?? 0,
         peer: peer ? { id: peer.id, name: peer.name, role: peer.role } : null,
         lastMessage: last
           ? {
@@ -127,6 +142,7 @@ export async function GET() {
         type: 'TASK',
         taskId: r.taskId,
         title: r.task ? `Задача №${r.task.requestNumber}` : 'Задача',
+        unreadCount: unreadMap.get(r.id) ?? 0,
         lastMessage: last
           ? {
               body: last.body,
