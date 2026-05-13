@@ -12,6 +12,8 @@ const TASK_TYPES = [
   'COMMISSIONING',
 ] as const satisfies readonly TaskType[]
 
+const ENGINEER_ROLES = ['ENGINEER', 'CHIEF_ENGINEER'] as const
+
 function parseIsoDate(s: string | null): { y: number; m: number; d: number } | null {
   if (!s) return null
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim())
@@ -33,6 +35,55 @@ function utcRangeInclusive(fromIso: string, toIso: string): { start: Date; end: 
   const end = new Date(Date.UTC(b.y, b.m - 1, b.d, 23, 59, 59, 999))
   if (start.getTime() > end.getTime()) return null
   return { start, end }
+}
+
+/** Момент завершения для фильтра по периоду и сортировки. */
+function completionInstant(task: {
+  completedAt: Date | null
+  report: { finishedAt: Date | null; createdAt: Date } | null
+}): Date | null {
+  return task.completedAt ?? task.report?.finishedAt ?? task.report?.createdAt ?? null
+}
+
+type HistoryTaskRow = {
+  assignedToId: string | null
+  assignedTo: { id: string; name: string; role: string } | null
+  report: {
+    engineer: { id: string; name: string; role: string } | null
+  } | null
+  longTermEngineers: { engineerId: string; engineer: { id: string; name: string; role: string } }[]
+}
+
+function engineerGroupForHistory(task: HistoryTaskRow): {
+  engineerId: string
+  engineerName: string
+  engineerRole: string
+} | null {
+  if (task.assignedToId && task.assignedTo) {
+    return {
+      engineerId: task.assignedToId,
+      engineerName: task.assignedTo.name,
+      engineerRole: task.assignedTo.role,
+    }
+  }
+  if (task.report?.engineer) {
+    return {
+      engineerId: task.report.engineer.id,
+      engineerName: task.report.engineer.name,
+      engineerRole: task.report.engineer.role,
+    }
+  }
+  const first = task.longTermEngineers?.find((r) =>
+    ENGINEER_ROLES.includes(r.engineer.role as (typeof ENGINEER_ROLES)[number])
+  )
+  if (first) {
+    return {
+      engineerId: first.engineer.id,
+      engineerName: first.engineer.name,
+      engineerRole: first.engineer.role,
+    }
+  }
+  return null
 }
 
 export async function GET(req: NextRequest) {
@@ -66,19 +117,60 @@ export async function GET(req: NextRequest) {
   const equipmentId =
     equipmentIdRaw && equipmentIdRaw !== 'ALL' && equipmentIdRaw.length >= 8 ? equipmentIdRaw : undefined
 
-  const tasks = await db.serviceTask.findMany({
+  /** Задача попадает в период по дате закрытия на задаче, по дате акта или по дате создания отчёта (если completedAt не заполнен). */
+  const completionDateWhere = {
+    OR: [
+      { completedAt: { gte: start, lte: end } },
+      {
+        AND: [
+          { completedAt: null },
+          {
+            OR: [
+              { report: { finishedAt: { gte: start, lte: end } } },
+              {
+                AND: [{ report: { finishedAt: null } }, { report: { createdAt: { gte: start, lte: end } } }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  /** Учитываем основного исполнителя, соисполнителей и автора акта. */
+  const engineerParticipationWhere =
+    engineerId && engineerId !== 'ALL'
+      ? {
+          OR: [
+            { assignedToId: engineerId },
+            { longTermEngineers: { some: { engineerId } } },
+            { report: { engineerId } },
+          ],
+        }
+      : null
+
+  /** Не отбрасываем задачи без assignedToId (несколько исполнителей / только акт). */
+  const engineeringAttributionWhere = {
+    OR: [
+      { assignedTo: { role: { in: [...ENGINEER_ROLES] } } },
+      { longTermEngineers: { some: { engineer: { role: { in: [...ENGINEER_ROLES] } } } } },
+      { report: { engineer: { role: { in: [...ENGINEER_ROLES] } } } },
+    ],
+  }
+
+  const andFilters = [completionDateWhere, engineeringAttributionWhere, ...(engineerParticipationWhere ? [engineerParticipationWhere] : [])]
+
+  const tasksRaw = await db.serviceTask.findMany({
     where: {
       deletedAt: null,
       status: 'DONE',
-      completedAt: { gte: start, lte: end },
-      assignedToId: engineerId && engineerId !== 'ALL' ? engineerId : undefined,
+      ...managerScope,
+      AND: andFilters,
       type:
         taskType && taskType !== 'ALL' && (TASK_TYPES as readonly string[]).includes(taskType)
           ? (taskType as TaskType)
           : undefined,
       equipmentId: equipmentId ?? undefined,
-      assignedTo: { role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] } },
-      ...managerScope,
     },
     select: {
       id: true,
@@ -99,21 +191,46 @@ export async function GET(req: NextRequest) {
           object: { select: { branch: { select: { client: { select: { name: true } } } } } },
         },
       },
-      report: { select: { id: true, actNumber: true } },
+      report: {
+        select: {
+          id: true,
+          actNumber: true,
+          engineerId: true,
+          finishedAt: true,
+          createdAt: true,
+          engineer: { select: { id: true, name: true, role: true } },
+        },
+      },
+      longTermEngineers: {
+        select: {
+          engineerId: true,
+          engineer: { select: { id: true, name: true, role: true } },
+        },
+      },
     },
-    orderBy: { completedAt: 'desc' },
   })
 
-  const engineerIdsInTasks = [...new Set(tasks.map((t) => t.assignedToId).filter(Boolean))] as string[]
+  const tasks = [...tasksRaw].sort((a, b) => {
+    const ta = completionInstant(a)?.getTime() ?? 0
+    const tb = completionInstant(b)?.getTime() ?? 0
+    return tb - ta
+  })
+
+  const engineerIdsInTasks = new Set<string>()
+  for (const t of tasks) {
+    const g = engineerGroupForHistory(t as HistoryTaskRow)
+    if (g) engineerIdsInTasks.add(g.engineerId)
+  }
+  const engineerIdsInTasksArr = [...engineerIdsInTasks]
 
   const engineers =
-    session.user.role === 'MANAGER' && engineerIdsInTasks.length === 0
+    session.user.role === 'MANAGER' && engineerIdsInTasksArr.length === 0
       ? []
       : await db.user.findMany({
           where: {
             role: { in: ['ENGINEER', 'CHIEF_ENGINEER'] },
             isActive: true,
-            ...(session.user.role === 'MANAGER' ? { id: { in: engineerIdsInTasks } } : {}),
+            ...(session.user.role === 'MANAGER' ? { id: { in: engineerIdsInTasksArr } } : {}),
             ...(engineerId && engineerId !== 'ALL' ? { id: engineerId } : {}),
           },
           select: { id: true, name: true, role: true },
@@ -122,18 +239,26 @@ export async function GET(req: NextRequest) {
 
   type TaskRow = (typeof tasks)[number]
 
-  const groupedMap = new Map<string, { engineerId: string; engineerName: string; engineerRole: string; tasks: TaskRow[] }>()
+  const groupedMap = new Map<
+    string,
+    { engineerId: string; engineerName: string; engineerRole: string; tasks: TaskRow[] }
+  >()
   for (const task of tasks) {
-    if (!task.assignedToId || !task.assignedTo) continue
-    if (!groupedMap.has(task.assignedToId)) {
-      groupedMap.set(task.assignedToId, {
-        engineerId: task.assignedToId,
-        engineerName: task.assignedTo.name,
-        engineerRole: task.assignedTo.role,
+    const group = engineerGroupForHistory(task as HistoryTaskRow)
+    if (!group) continue
+    if (!groupedMap.has(group.engineerId)) {
+      groupedMap.set(group.engineerId, {
+        engineerId: group.engineerId,
+        engineerName: group.engineerName,
+        engineerRole: group.engineerRole,
         tasks: [],
       })
     }
-    groupedMap.get(task.assignedToId)!.tasks.push(task)
+    const effectiveCompletedAt = completionInstant(task)
+    groupedMap.get(group.engineerId)!.tasks.push({
+      ...task,
+      completedAt: effectiveCompletedAt,
+    })
   }
 
   const grouped = [...groupedMap.values()].sort((a, b) => b.tasks.length - a.tasks.length)
@@ -141,7 +266,10 @@ export async function GET(req: NextRequest) {
   const totalDone = tasks.length
 
   const engineerWorkloadGroups = grouped.filter((g) => g.engineerRole === 'ENGINEER')
-  const engineerWorkloadTasks = tasks.filter((t) => t.assignedTo?.role === 'ENGINEER')
+  const engineerWorkloadTasks = tasks.filter((t) => {
+    const g = engineerGroupForHistory(t as HistoryTaskRow)
+    return g?.engineerRole === 'ENGINEER'
+  })
   const avgPerEngineer =
     engineerWorkloadGroups.length > 0 ? engineerWorkloadTasks.length / engineerWorkloadGroups.length : 0
 

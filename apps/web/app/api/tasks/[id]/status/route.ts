@@ -113,7 +113,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const updated = await db.serviceTask.update({
     where: { id: params.id },
-    data: { status },
+    data: {
+      status,
+      ...(status === 'DONE' ? { completedAt: new Date() } : {}),
+    },
   })
 
   if (status === 'IN_PROGRESS' && session.user.role === 'ENGINEER') {

@@ -69,13 +69,39 @@ export default async function EngineerReportPage({
   })
   if (!engineer) notFound()
 
-  const tasks = await db.serviceTask.findMany({
+  const completionDateWhere = {
+    OR: [
+      { completedAt: { gte: start, lte: end } },
+      {
+        AND: [
+          { completedAt: null },
+          {
+            OR: [
+              { report: { finishedAt: { gte: start, lte: end } } },
+              {
+                AND: [{ report: { finishedAt: null } }, { report: { createdAt: { gte: start, lte: end } } }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  const engineerParticipationWhere = {
+    OR: [
+      { assignedToId: engineer.id },
+      { longTermEngineers: { some: { engineerId: engineer.id } } },
+      { report: { engineerId: engineer.id } },
+    ],
+  }
+
+  const tasksRaw = await db.serviceTask.findMany({
     where: {
       deletedAt: null,
       status: 'DONE',
-      assignedToId: engineer.id,
-      completedAt: { gte: start, lte: end },
       ...(isManager ? prismaWhereManagerTasks(managerId) : {}),
+      AND: [completionDateWhere, engineerParticipationWhere],
     },
     select: {
       id: true,
@@ -83,6 +109,9 @@ export default async function EngineerReportPage({
       type: true,
       createdAt: true,
       completedAt: true,
+      report: {
+        select: { finishedAt: true, createdAt: true },
+      },
       equipment: {
         select: {
           id: true,
@@ -93,7 +122,12 @@ export default async function EngineerReportPage({
         },
       },
     },
-    orderBy: { completedAt: 'desc' },
+  })
+
+  const tasks = [...tasksRaw].sort((a, b) => {
+    const ta = (a.completedAt ?? a.report?.finishedAt ?? a.report?.createdAt)?.getTime() ?? 0
+    const tb = (b.completedAt ?? b.report?.finishedAt ?? b.report?.createdAt)?.getTime() ?? 0
+    return tb - ta
   })
 
   return (
