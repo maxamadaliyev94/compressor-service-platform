@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getEquipmentClientId } from '@/lib/api-access'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { MAX_EQUIPMENT_PHOTOS } from '@/lib/photo-limits'
 import { Prisma } from '@prisma/client'
 
@@ -47,6 +48,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await db.equipment.findUnique({
     where: { id: params.id },
     include: { photos: { orderBy: { createdAt: 'desc' } } },
+  })
+
+  await logUserActivity(session.user.id, UserActivityAction.EQUIPMENT_PHOTOS, req, {
+    page: `/equipment/${params.id}`,
+    metadata: { equipmentId: params.id },
   })
 
   return NextResponse.json(updated)
@@ -98,6 +104,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         notes: body.notes ?? null,
       },
     })
+    await logUserActivity(session.user.id, UserActivityAction.EQUIPMENT_EDIT, req, {
+      page: `/equipment/${params.id}`,
+      metadata: { equipmentId: params.id },
+    })
     return NextResponse.json(equipment)
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -110,7 +120,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
@@ -148,6 +158,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     })
 
     await tx.equipment.delete({ where: { id: params.id } })
+  })
+
+  await logUserActivity(session.user.id, UserActivityAction.EQUIPMENT_DELETE, req, {
+    page: `/equipment/${params.id}`,
+    metadata: { equipmentId: params.id },
   })
 
   return NextResponse.json({ ok: true })

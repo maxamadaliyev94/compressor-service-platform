@@ -1,5 +1,6 @@
 import { computeGloballyAccessible } from '@/lib/access-policy'
 import { db } from '@/lib/db'
+import { computeMaintenanceState } from '@/lib/maintenance-policy'
 import { unstable_noStore } from 'next/cache'
 import { NextResponse } from 'next/server'
 
@@ -17,26 +18,46 @@ const noStoreHeaders = {
   'Surrogate-Control': 'no-store',
 } as const
 
-async function readGloballyAccessible(): Promise<boolean> {
+async function readAppStatusPayload() {
   unstable_noStore()
   const row = await db.appSettings.findUnique({ where: { id: 'default' } })
-  return computeGloballyAccessible(
+  const accessible = computeGloballyAccessible(
     row ? { isActive: row.isActive, subscriptionEnd: row.subscriptionEnd } : null,
   )
+  const now = new Date()
+  const m = computeMaintenanceState(
+    now,
+    row
+      ? {
+          maintenanceStart: row.maintenanceStart,
+          maintenanceEnd: row.maintenanceEnd,
+          maintenanceMessage: row.maintenanceMessage,
+        }
+      : null,
+  )
+  return {
+    accessible,
+    maintenance: {
+      phase: m.phase,
+      message: m.message,
+      start: m.start?.toISOString() ?? null,
+      end: m.end?.toISOString() ?? null,
+    },
+  }
 }
 
-function jsonAccessible(accessible: boolean) {
-  return NextResponse.json({ accessible }, { headers: { ...noStoreHeaders } })
+function jsonStatus(payload: Awaited<ReturnType<typeof readAppStatusPayload>>) {
+  return NextResponse.json(payload, { headers: { ...noStoreHeaders } })
 }
 
 /** GET — для отладки; middleware использует POST. */
 export async function GET() {
-  const accessible = await readGloballyAccessible()
-  return jsonAccessible(accessible)
+  const payload = await readAppStatusPayload()
+  return jsonStatus(payload)
 }
 
 /** POST — вызывается из middleware (без кэширования как у типичного GET). */
 export async function POST() {
-  const accessible = await readGloballyAccessible()
-  return jsonAccessible(accessible)
+  const payload = await readAppStatusPayload()
+  return jsonStatus(payload)
 }

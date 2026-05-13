@@ -1,7 +1,8 @@
-import { auth, signOut } from '@/auth'
+import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { getSessionPermissions } from '@/lib/permissions'
 import DashboardSidebarClient from './DashboardSidebarClient'
+import { UserSessionTracker } from '@/components/UserSessionTracker'
 import { db } from '@/lib/db'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -66,10 +67,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     select: { avatarUrl: true },
   })
   const roleLabel = roleLabels[userRole as string] || userRole || '—'
-  const logoutAction = async () => {
-    'use server'
-    await signOut({ redirectTo: '/login' })
-  }
 
   return (
     <DashboardSidebarClient
@@ -77,8 +74,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       userName={userName}
       roleLabel={roleLabel}
       userAvatarUrl={profile?.avatarUrl ?? null}
-      logoutAction={logoutAction}
     >
+      <UserSessionTracker />
       {children}
     </DashboardSidebarClient>
   )

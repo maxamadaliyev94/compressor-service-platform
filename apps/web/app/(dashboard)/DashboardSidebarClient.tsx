@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, useRef, useState } from 'react'
 import NotificationBell from '@/components/NotificationBell'
+import { LogoutButton } from '@/components/LogoutButton'
 
 type NavItem = { href: string; label: string; icon: string }
 
@@ -11,14 +12,12 @@ export default function DashboardSidebarClient({
   roleLabel,
   userAvatarUrl,
   children,
-  logoutAction,
 }: {
   navItems: NavItem[]
   userName: string
   roleLabel: string
   userAvatarUrl: string | null
   children: React.ReactNode
-  logoutAction: () => Promise<void>
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(userAvatarUrl)
@@ -169,11 +168,7 @@ export default function DashboardSidebarClient({
               >
                 <span>🖼️</span> {uploadingAvatar ? 'Загрузка...' : 'Сменить аватар'}
               </button>
-              <form action={logoutAction}>
-                <button className="w-full min-h-11 text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded-md flex items-center gap-2">
-                  <span>→</span> Выйти
-                </button>
-              </form>
+              <LogoutButton className="w-full min-h-11 text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded-md flex items-center gap-2" />
             </div>
           </aside>
         </div>
@@ -215,11 +210,7 @@ export default function DashboardSidebarClient({
           >
             <span>🖼️</span> {uploadingAvatar ? 'Загрузка...' : 'Сменить аватар'}
           </button>
-          <form action={logoutAction}>
-            <button className="w-full text-left min-h-11 px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded-md flex items-center gap-2">
-              <span>→</span> Выйти
-            </button>
-          </form>
+          <LogoutButton className="w-full text-left min-h-11 px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded-md flex items-center gap-2" />
         </div>
       </aside>
       <main className="w-full min-w-0 md:flex-1 overflow-auto">{children}</main>

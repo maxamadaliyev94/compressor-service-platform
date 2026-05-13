@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -46,6 +47,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     where: { id: params.id },
     data,
   })
+  await logUserActivity(session.user.id, UserActivityAction.CLIENT_EDIT, req, {
+    page: `/clients/${params.id}`,
+    metadata: { clientId: params.id },
+  })
   return NextResponse.json(client)
 }
 
@@ -71,6 +76,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data,
   })
 
+  await logUserActivity(session.user.id, UserActivityAction.CLIENT_ADMIN_PATCH, req, {
+    page: `/clients/${params.id}`,
+    metadata: { clientId: params.id },
+  })
+
   return NextResponse.json(client)
 }
 
@@ -81,6 +91,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
   try {
     await db.client.delete({ where: { id: params.id } })
+    await logUserActivity(session.user.id, UserActivityAction.CLIENT_DELETE, req, {
+      page: `/clients/${params.id}`,
+      metadata: { clientId: params.id },
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: 'Невозможно удалить — есть связанные данные' }, { status: 400 })

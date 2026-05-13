@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { NextRequest, NextResponse } from 'next/server'
 
 /** Окончательное удаление задач, уже находящихся в корзине (soft-delete). Только ADMIN. */
@@ -53,6 +54,11 @@ export async function POST(req: NextRequest) {
     await tx.serviceTask.deleteMany({
       where: { id: { in: taskIds }, deletedAt: { not: null } },
     })
+  })
+
+  await logUserActivity(session.user.id, UserActivityAction.TASK_TRASH_PURGE, req, {
+    page: '/tasks/trash',
+    metadata: { ids: taskIds, count: taskIds.length },
   })
 
   return NextResponse.json({ ok: true, deleted: taskIds.length })

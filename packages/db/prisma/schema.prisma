@@ -124,8 +124,15 @@ model User {
   engineerStatus String @default("FREE")
   lastLoginAt DateTime?
   clientId      String?
+  /// Принудительный сброс сессий: JWT, выданные раньше этого времени, считаются недействительными.
+  sessionInvalidatedAt DateTime?
+  /// Временная блокировка входа (суперадмин), без удаления учётной записи.
+  loginSuspendedByAdmin Boolean @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  userActivities UserActivity[]
+  userSessions   UserSession[]
 
   assignedTasks ServiceTask[] @relation("AssignedEngineer")
   createdTasks  ServiceTask[] @relation("TaskCreator")
@@ -143,6 +150,46 @@ model User {
   webauthnCredentials WebAuthnCredential[]
 
   @@map("users")
+}
+
+/// Журнал действий пользователей для суперадмин-панели.
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  page      String?
+  ip        String?
+  userAgent String?  @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@map("user_activities")
+}
+
+/// Браузерная сессия (устройство, гео по IP, длительность).
+model UserSession {
+  id          String    @id @default(cuid())
+  userId      String
+  startedAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  endedAt     DateTime?
+  ip          String?
+  userAgent   String?   @db.Text
+  deviceType  String?
+  browserName String?
+  city        String?
+  country     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lastSeenAt])
+  @@index([endedAt])
+  @@map("user_sessions")
 }
 
 model WebAuthnCredential {
@@ -249,6 +296,12 @@ model AppSettings {
   subscriptionStart DateTime? @db.Date
   /// Конец периода подписки включительно (UTC); после этой даты доступ блокируется.
   subscriptionEnd   DateTime? @db.Date
+  /// Запланированные технические работы: начало (момент времени).
+  maintenanceStart DateTime?
+  /// Запланированные технические работы: окончание.
+  maintenanceEnd   DateTime?
+  /// Текст для баннера и страницы блокировки.
+  maintenanceMessage String? @db.Text
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")

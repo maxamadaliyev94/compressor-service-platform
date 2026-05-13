@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy } from '@/lib/engineerPresence'
@@ -149,6 +150,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (createdTasks.length > 0) {
+    await logUserActivity(creator.id, UserActivityAction.TASK_CREATE, req, {
+      page: '/tasks',
+      metadata: { taskIds: createdTasks.map((t) => t.id), count: createdTasks.length },
+    })
     const skipUserIds = [creator.id, ...targetIds]
     const n = createdTasks.length
     await notifyClientSubscriberForEquipmentWork(

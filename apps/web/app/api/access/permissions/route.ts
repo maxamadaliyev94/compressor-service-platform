@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { auth } from '@/auth'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { NextRequest, NextResponse } from 'next/server'
 import { clearPermissionCache } from '@/lib/permissions'
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_DEFINITIONS } from '@/lib/rbac-defaults'
@@ -145,6 +146,11 @@ export async function PATCH(req: NextRequest) {
       entityId: 'roles',
       newValue: JSON.stringify(updates),
     },
+  })
+
+  await logUserActivity(session.user.id, UserActivityAction.ACCESS_MATRIX_EDIT, req, {
+    page: '/access',
+    metadata: { updates: updates.length },
   })
 
   clearPermissionCache()

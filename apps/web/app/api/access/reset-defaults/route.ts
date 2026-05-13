@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { auth } from '@/auth'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_DEFINITIONS } from '@/lib/rbac-defaults'
@@ -65,6 +66,11 @@ export async function POST(req: NextRequest) {
         ? `RBAC defaults restored for role ${requestedRole}`
         : 'RBAC matrix reset to defaults',
     },
+  })
+
+  await logUserActivity(session.user.id, UserActivityAction.ACCESS_RESET, req, {
+    page: '/access',
+    metadata: { role: requestedRole ?? 'all' },
   })
 
   clearPermissionCache()

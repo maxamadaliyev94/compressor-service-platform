@@ -53,7 +53,16 @@ function superadminBasicAuthDenied(req: NextRequest): NextResponse | null {
   return null
 }
 
-async function fetchGloballyAccessible(req: NextRequest): Promise<boolean> {
+type AppAccessJson = {
+  accessible?: boolean
+  active?: boolean
+  maintenance?: { phase?: string }
+}
+
+async function fetchAppAccessState(req: NextRequest): Promise<{
+  accessible: boolean
+  maintenanceBlocked: boolean
+}> {
   const base =
     process.env.INTERNAL_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
   try {
@@ -69,12 +78,14 @@ async function fetchGloballyAccessible(req: NextRequest): Promise<boolean> {
       },
       body: '{}',
     })
-    if (!res.ok) return true
-    const data = (await res.json()) as { accessible?: boolean; active?: boolean }
-    if (typeof data.accessible === 'boolean') return data.accessible
-    return data.active !== false
+    if (!res.ok) return { accessible: true, maintenanceBlocked: false }
+    const data = (await res.json()) as AppAccessJson
+    const accessible =
+      typeof data.accessible === 'boolean' ? data.accessible : data.active !== false
+    const maintenanceBlocked = data.maintenance?.phase === 'blocked'
+    return { accessible, maintenanceBlocked }
   } catch {
-    return true
+    return { accessible: true, maintenanceBlocked: false }
   }
 }
 
@@ -94,10 +105,14 @@ export default auth(async (req: NextRequest) => {
   }
 
   let accessible = true
+  let maintenanceBlocked = false
   try {
-    accessible = await fetchGloballyAccessible(req)
+    const st = await fetchAppAccessState(req)
+    accessible = st.accessible
+    maintenanceBlocked = st.maintenanceBlocked
   } catch {
     accessible = true
+    maintenanceBlocked = false
   }
 
   if (!accessible) {
@@ -111,6 +126,25 @@ export default auth(async (req: NextRequest) => {
       return NextResponse.json({ error: 'Система временно недоступна' }, { status: 503 })
     }
     return NextResponse.redirect(new URL('/system-unavailable', req.url))
+  }
+
+  if (maintenanceBlocked) {
+    if (pathname.startsWith('/api/cron/')) {
+      return NextResponse.next()
+    }
+    if (pathname === '/technical-maintenance' || pathname.startsWith('/technical-maintenance/')) {
+      return NextResponse.next()
+    }
+    if (pathname === '/api/internal/app-status' || pathname.startsWith('/api/internal/app-status')) {
+      return NextResponse.next()
+    }
+    if (pathname.startsWith('/api/auth')) {
+      return NextResponse.next()
+    }
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Идут технические работы' }, { status: 503 })
+    }
+    return NextResponse.redirect(new URL('/technical-maintenance', req.url))
   }
 
   if (pathname.startsWith('/api/')) {

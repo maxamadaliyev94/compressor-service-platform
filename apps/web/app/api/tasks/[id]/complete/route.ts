@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { createNotification, notifyClientSubscriberForEquipmentWork } from '@/lib/notifications'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
@@ -311,6 +312,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (task.assignedToId) {
     await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
   }
+
+  await logUserActivity(session.user.id, UserActivityAction.ACT_COMPLETE, req, {
+    page: `/tasks/${params.id}`,
+    metadata: { taskId: task.id },
+  })
 
   return NextResponse.json({ ok: true })
 }

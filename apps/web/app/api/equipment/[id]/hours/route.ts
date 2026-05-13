@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { canMutateEquipment, type AuthedSession } from '@/lib/api-access'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -47,6 +48,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       hoursPerDay: parsedHoursPerDay,
       daysPerWeek: parsedDaysPerWeek,
     }
+  })
+
+  await logUserActivity(session.user.id, UserActivityAction.EQUIPMENT_HOURS, req, {
+    page: `/equipment/${params.id}`,
+    metadata: { equipmentId: params.id },
   })
 
   return NextResponse.json(updated)

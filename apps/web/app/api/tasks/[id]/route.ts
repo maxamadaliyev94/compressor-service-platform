@@ -10,6 +10,7 @@ import {
   notifyTaskAssigned,
 } from '@/lib/notifications'
 import { formatDateRu, formatLongTermNotifyPeriod } from '@/lib/task-schedule-display'
+import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import type { Role, TaskWorkType } from '@prisma/client'
 
 function utcDateOnlyFromDate(d: Date): Date {
@@ -438,6 +439,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  await logUserActivity(session.user.id, UserActivityAction.TASK_EDIT, req, {
+    page: `/tasks/${params.id}`,
+    metadata: { taskId: params.id },
+  })
+
   return NextResponse.json({
     ok: true,
     task: {
@@ -452,7 +458,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   })
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (session.user.role !== 'ADMIN') {
@@ -480,5 +486,9 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
   if (task.assignedToId) {
     await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
   }
+  await logUserActivity(session.user.id, UserActivityAction.TASK_DELETE, req, {
+    page: `/tasks/${params.id}`,
+    metadata: { taskId: params.id },
+  })
   return NextResponse.json({ ok: true })
 }
