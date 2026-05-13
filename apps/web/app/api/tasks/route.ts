@@ -5,6 +5,7 @@ import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy } from '@/lib/engineerPresence'
+import { announceNewTaskInGeneralChat } from '@/lib/internal-chat'
 import type { Role } from '@prisma/client'
 
 export async function POST(req: NextRequest) {
@@ -180,6 +181,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (createdTasks.length > 0) {
+    for (const t of createdTasks) {
+      await announceNewTaskInGeneralChat(t.id, creator.id)
+    }
     await logUserActivity(creator.id, UserActivityAction.TASK_CREATE, req, {
       page: '/tasks',
       metadata: { taskIds: createdTasks.map((t) => t.id), count: createdTasks.length },

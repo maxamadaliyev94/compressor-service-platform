@@ -10,6 +10,7 @@ import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } fro
 import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
 
 import { collectParticipantEngineerIdsForAct, participantEngineerIdsJson } from '@/lib/task-participation'
+import { announceTaskCompletedInGeneralChat } from '@/lib/internal-chat'
 
 function canExecuteServiceTask(
   role: Role,
@@ -321,6 +322,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       link: `/tasks/${task.id}`,
     })
   }
+
+  await announceTaskCompletedInGeneralChat(task.id, session.user.id)
 
   await notifyClientSubscriberForEquipmentWork(
     task.equipmentId,

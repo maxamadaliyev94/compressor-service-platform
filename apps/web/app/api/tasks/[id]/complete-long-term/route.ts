@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskCompletedForUser } from '@/lib/notifications'
+import { announceTaskCompletedInGeneralChat } from '@/lib/internal-chat'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { Role } from '@prisma/client'
@@ -223,6 +224,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     console.error(e)
     return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 })
   }
+
+  await announceTaskCompletedInGeneralChat(task.id, session.user.id)
 
   const completionRecipients = new Set<string>()
   if (task.createdById) completionRecipients.add(task.createdById)

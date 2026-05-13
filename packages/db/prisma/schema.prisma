@@ -99,6 +99,12 @@ enum AttachmentType {
   OTHER
 }
 
+enum ChatRoomType {
+  GENERAL
+  DIRECT
+  TASK
+}
+
 enum ChecklistItemType {
   CONTROL
   WORK
@@ -155,6 +161,7 @@ model User {
   notifications Notification[]
   rolePermissionsUpdated RolePermission[] @relation("RolePermissionUpdatedBy")
   webauthnCredentials WebAuthnCredential[]
+  chatMessages ChatMessage[]
 
   @@map("users")
 }
@@ -430,9 +437,40 @@ model ServiceTask {
   report     WorkReport?
   dailyWorks DailyWork[]
   longTermEngineers LongTermTaskEngineer[]
+  chatRoom ChatRoom?
 
   @@map("service_tasks")
   @@index([requestNumber])
+}
+
+model ChatRoom {
+  id        String       @id @default(cuid())
+  type      ChatRoomType
+  /// Ключ для личного чата: два id пользователей через «:» в лексикографическом порядке.
+  dmKey     String?      @unique
+  taskId    String?      @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  messages  ChatMessage[]
+  task      ServiceTask? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@map("chat_rooms")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  roomId    String
+  authorId  String
+  body      String   @db.Text
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@map("chat_messages")
 }
 
 /// Назначенные на задачу инженеры (долгосрочная или быстрая с совместным выполнением).

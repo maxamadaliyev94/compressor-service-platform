@@ -242,6 +242,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           </p>
         </div>
         <div className="flex items-center gap-2 md:gap-3 flex-wrap md:justify-end">
+          {role !== 'CLIENT' && (
+            <a
+              href={`/chat?task=${task.id}`}
+              className="border border-indigo-200 bg-indigo-50 text-indigo-800 px-4 py-2 rounded-lg text-sm hover:bg-indigo-100 flex items-center gap-2"
+            >
+              💬 Обсудить
+            </a>
+          )}
           {clientSignaturePending && (
             <span className="px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-900 border border-amber-200">
               Без подписи клиента

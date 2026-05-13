@@ -6,6 +6,7 @@ import { hasPermission } from '@/lib/permissions'
 import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import type { Role, ServiceTask, TaskStatus } from '@prisma/client'
+import { announceTaskCompletedInGeneralChat } from '@/lib/internal-chat'
 
 const MUTABLE_STATUSES = new Set<TaskStatus>(['ASSIGNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'])
 const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
@@ -197,6 +198,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (status === 'DONE') {
+    await announceTaskCompletedInGeneralChat(task.id, session.user.id)
     await notifyClientSubscriberForEquipmentWork(
       task.equipmentId,
       {

@@ -25,6 +25,7 @@ function timeAgo(date: string) {
 }
 
 const typeStyles: Record<string, { icon: string; color: string }> = {
+  CHAT: { icon: '💬', color: 'text-indigo-600' },
   TASK: { icon: '📋', color: 'text-blue-600' },
   URGENT: { icon: '🔴', color: 'text-red-600' },
   SUCCESS: { icon: '✅', color: 'text-green-600' },
@@ -49,7 +50,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     loadNotifications()
-    const interval = setInterval(loadNotifications, 30000)
+    const interval = setInterval(loadNotifications, 12000)
     return () => clearInterval(interval)
   }, [loadNotifications])
 
