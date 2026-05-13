@@ -13,7 +13,16 @@ import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
 
 export const dynamic = 'force-dynamic'
 
-export default async function TasksPage() {
+function readCompletedTab(completed: string | string[] | undefined): boolean {
+  const v = Array.isArray(completed) ? completed[0] : completed
+  return v === '1' || v === 'true'
+}
+
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams?: { completed?: string | string[] }
+}) {
   noStore()
   await requirePermission('section:tasks')
   const session = await getSession()
@@ -21,18 +30,21 @@ export default async function TasksPage() {
   const isAdmin = role === 'ADMIN'
   const canCreateTask = role !== 'ENGINEER' && (await hasPermission(role as Role, 'action:task.create'))
 
-  /** На списке «Задачи» для персонала — только незавершённые (без выполненных и отменённых). Для клиента показываем все задачи по своей организации, кроме отменённых (в т.ч. выполненные без подписи на акте). */
+  /** Для персонала по умолчанию — только активные (без выполненных и отменённых). Вкладка ?completed=1 — только DONE. Клиенту — все задачи организации, кроме отменённых. */
   const closedStatuses: TaskStatus[] = ['DONE', 'CANCELLED']
   const activeOnlyWhere = { status: { notIn: closedStatuses } }
+  const showCompletedTab = role !== 'CLIENT' && readCompletedTab(searchParams?.completed)
+  const staffStatusWhere = showCompletedTab ? { status: 'DONE' as const } : activeOnlyWhere
+
   let tasks = await db.serviceTask.findMany({
     where:
       role === 'ENGINEER'
-        ? { deletedAt: null, ...activeOnlyWhere, ...prismaWhereEngineerTaskAssignment(session.user.id) }
+        ? { deletedAt: null, ...staffStatusWhere, ...prismaWhereEngineerTaskAssignment(session.user.id) }
         : role === 'MANAGER'
-          ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id), ...activeOnlyWhere }
+          ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id), ...staffStatusWhere }
           : role === 'CLIENT'
             ? prismaWhereClientPortalTaskList(session.user.clientId)
-            : { deletedAt: null, ...activeOnlyWhere },
+            : { deletedAt: null, ...staffStatusWhere },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
@@ -40,7 +52,7 @@ export default async function TasksPage() {
       report: { select: { id: true, clientSignature: true } },
       longTermEngineers: { include: { engineer: { select: { id: true, name: true } } } },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: showCompletedTab ? [{ completedAt: 'desc' }, { updatedAt: 'desc' }] : { createdAt: 'desc' },
   })
 
   if (role === 'CLIENT') {
@@ -85,7 +97,29 @@ export default async function TasksPage() {
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">
-        <h1 className="text-xl md:text-2xl font-bold">Задачи</h1>
+        <div className="space-y-3">
+          <h1 className="text-xl md:text-2xl font-bold">Задачи</h1>
+          {role !== 'CLIENT' && (
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-sm">
+              <a
+                href="/tasks"
+                className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                  !showCompletedTab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Активные
+              </a>
+              <a
+                href="/tasks?completed=1"
+                className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                  showCompletedTab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Выполненные
+              </a>
+            </div>
+          )}
+        </div>
         <div className="flex flex-col w-full md:w-auto md:flex-row gap-2 md:gap-3">
           {isAdmin && (
             <a href="/tasks/trash" className="w-full md:w-auto min-h-11 border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 inline-flex items-center justify-center">
