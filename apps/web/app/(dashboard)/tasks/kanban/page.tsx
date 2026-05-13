@@ -3,10 +3,19 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
+import { unstable_noStore as noStore } from 'next/cache'
 import KanbanBoard from './KanbanBoard'
-import { prismaWhereClientTasks, prismaWhereEngineerTaskAssignment, prismaWhereManagerTasks } from '@/lib/api-access'
+import {
+  prismaWhereClientPortalTaskList,
+  prismaWhereEngineerTaskAssignment,
+  prismaWhereManagerTasks,
+} from '@/lib/api-access'
+import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
+
+export const dynamic = 'force-dynamic'
 
 export default async function KanbanPage() {
+  noStore()
   await requirePermission('section:tasks')
   const session = await auth()
   if (!session) redirect('/login')
@@ -14,14 +23,16 @@ export default async function KanbanPage() {
   const isAdmin = role === 'ADMIN'
   const canCreateTask = role !== 'ENGINEER' && (await hasPermission(role as Role, 'action:task.create'))
 
-  const tasks = await db.serviceTask.findMany({
-    where: {
-      status: { not: 'CANCELLED' },
-      deletedAt: null,
-      ...(role === 'ENGINEER' ? prismaWhereEngineerTaskAssignment(session.user.id) : {}),
-      ...(role === 'MANAGER' ? prismaWhereManagerTasks(session.user.id) : {}),
-      ...(role === 'CLIENT' ? prismaWhereClientTasks(session.user.clientId) : {}),
-    },
+  let tasks = await db.serviceTask.findMany({
+    where:
+      role === 'CLIENT'
+        ? prismaWhereClientPortalTaskList(session.user.clientId)
+        : {
+            status: { not: 'CANCELLED' },
+            deletedAt: null,
+            ...(role === 'ENGINEER' ? prismaWhereEngineerTaskAssignment(session.user.id) : {}),
+            ...(role === 'MANAGER' ? prismaWhereManagerTasks(session.user.id) : {}),
+          },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
@@ -29,6 +40,11 @@ export default async function KanbanPage() {
     },
     orderBy: { createdAt: 'desc' },
   })
+
+  if (role === 'CLIENT') {
+    tasks = await sanitizeTasksForClientPortal(tasks)
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-6">

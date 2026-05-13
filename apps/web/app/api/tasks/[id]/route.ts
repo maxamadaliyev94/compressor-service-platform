@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { syncEngineerFreeIfNoActiveTasks, markEngineerBusy } from '@/lib/engineerPresence'
@@ -471,7 +472,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    select: { id: true, status: true, assignedToId: true, deletedAt: true },
+    select: { id: true, status: true, assignedToId: true, deletedAt: true, equipmentId: true },
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (task.deletedAt) {
@@ -487,6 +488,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       status: 'CANCELLED',
     },
   })
+
+  revalidatePath('/tasks')
+  revalidatePath('/tasks/kanban')
+  revalidatePath('/equipment')
+  revalidatePath(`/equipment/${task.equipmentId}`)
+
   if (task.assignedToId) {
     await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
   }

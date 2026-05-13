@@ -2,6 +2,7 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 
 /** Окончательное удаление задач, уже находящихся в корзине (soft-delete). Только ADMIN. */
 export async function POST(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const tasks = await db.serviceTask.findMany({
     where: { id: { in: ids } },
-    select: { id: true, deletedAt: true },
+    select: { id: true, deletedAt: true, equipmentId: true },
   })
 
   if (tasks.length !== ids.length) {
@@ -55,6 +56,13 @@ export async function POST(req: NextRequest) {
       where: { id: { in: taskIds }, deletedAt: { not: null } },
     })
   })
+
+  revalidatePath('/tasks')
+  revalidatePath('/tasks/kanban')
+  revalidatePath('/equipment')
+  for (const t of tasks) {
+    revalidatePath(`/equipment/${t.equipmentId}`)
+  }
 
   await logUserActivity(session.user.id, UserActivityAction.TASK_TRASH_PURGE, req, {
     page: '/tasks/trash',

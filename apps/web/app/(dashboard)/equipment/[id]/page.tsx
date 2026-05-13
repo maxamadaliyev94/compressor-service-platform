@@ -12,6 +12,7 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
+import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
 
 export default async function EquipmentPage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -58,7 +59,11 @@ export default async function EquipmentPage({ params }: { params: { id: string }
   }
   const ws = getWarrantyStatus(eq.warrantyUntil, eq.warrantyVoided)
 
-  const maintenanceTasks = eq.tasks.map((task) => ({
+  const tasksForHistory = isClientPortal
+    ? await sanitizeTasksForClientPortal(eq.tasks)
+    : eq.tasks
+
+  const maintenanceTasks = tasksForHistory.map((task) => ({
     id: task.id,
     type: task.type,
     priority: task.priority,
@@ -239,7 +244,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
 
           <div className="bg-white border rounded-xl overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b">
-              <h2 className="font-semibold">История обслуживания ({eq.tasks.length})</h2>
+              <h2 className="font-semibold">История обслуживания ({tasksForHistory.length})</h2>
               {!isClientPortal && (
                 <QuickTaskButton equipmentId={eq.id} createdById={session.user.id} role={role} />
               )}

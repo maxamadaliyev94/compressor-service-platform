@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import type { TaskStatus } from '@prisma/client'
 
 /** Сессия после проверки `auth()` (есть user.id и role). */
 export type AuthedSession = {
@@ -186,6 +187,20 @@ export function prismaWhereClientTasks(clientId: string | null | undefined) {
         branch: { clientId },
       },
     },
+  }
+}
+
+/** Список задач в ЛК клиента: только не в корзине (`deletedAt`) и не отменённые (в т.ч. после удаления в корзину). */
+export function prismaWhereClientPortalTaskList(clientId: string | null | undefined) {
+  if (!clientId) return { id: { in: [] as string[] } }
+  return {
+    deletedAt: null,
+    equipment: {
+      object: {
+        branch: { clientId },
+      },
+    },
+    status: { not: 'CANCELLED' as TaskStatus },
   }
 }
 

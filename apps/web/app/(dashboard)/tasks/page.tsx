@@ -2,10 +2,19 @@ import { db } from '@/lib/db'
 import { getSession } from '@/lib/roles'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role, TaskStatus } from '@prisma/client'
+import { unstable_noStore as noStore } from 'next/cache'
 import TasksTable from './TasksTable'
-import { prismaWhereClientTasks, prismaWhereEngineerTaskAssignment, prismaWhereManagerTasks } from '@/lib/api-access'
+import {
+  prismaWhereClientPortalTaskList,
+  prismaWhereEngineerTaskAssignment,
+  prismaWhereManagerTasks,
+} from '@/lib/api-access'
+import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
+
+export const dynamic = 'force-dynamic'
 
 export default async function TasksPage() {
+  noStore()
   await requirePermission('section:tasks')
   const session = await getSession()
   const role = session.user.role
@@ -15,20 +24,14 @@ export default async function TasksPage() {
   /** На списке «Задачи» для персонала — только незавершённые (без выполненных и отменённых). Для клиента показываем все задачи по своей организации, кроме отменённых (в т.ч. выполненные без подписи на акте). */
   const closedStatuses: TaskStatus[] = ['DONE', 'CANCELLED']
   const activeOnlyWhere = { status: { notIn: closedStatuses } }
-  const clientTasksWhere = {
-    deletedAt: null,
-    ...prismaWhereClientTasks(session.user.clientId),
-    status: { not: 'CANCELLED' as TaskStatus },
-  }
-
-  const tasks = await db.serviceTask.findMany({
+  let tasks = await db.serviceTask.findMany({
     where:
       role === 'ENGINEER'
         ? { deletedAt: null, ...activeOnlyWhere, ...prismaWhereEngineerTaskAssignment(session.user.id) }
         : role === 'MANAGER'
           ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id), ...activeOnlyWhere }
           : role === 'CLIENT'
-            ? clientTasksWhere
+            ? prismaWhereClientPortalTaskList(session.user.clientId)
             : { deletedAt: null, ...activeOnlyWhere },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
@@ -39,6 +42,10 @@ export default async function TasksPage() {
     },
     orderBy: { createdAt: 'desc' },
   })
+
+  if (role === 'CLIENT') {
+    tasks = await sanitizeTasksForClientPortal(tasks)
+  }
 
   const typeLabels: Record<string, string> = {
     PLANNED_MAINTENANCE: 'Плановое ТО',
