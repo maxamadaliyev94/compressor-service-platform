@@ -47,6 +47,10 @@ export async function POST(req: NextRequest) {
       ? [body.assignedToId]
       : []
 
+  if ((role === 'ADMIN' || role === 'MANAGER') && targetIds.length === 0) {
+    return NextResponse.json({ error: 'Выберите главного инженера' }, { status: 400 })
+  }
+
   if (role === 'CHIEF_ENGINEER' && targetIds.length > 0) {
     const hasScheduledAt = typeof body.scheduledAt === 'string' && body.scheduledAt.trim().length > 0
     if (!hasScheduledAt) {

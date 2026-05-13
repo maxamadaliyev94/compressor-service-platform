@@ -86,10 +86,19 @@ export default function NewTaskPage() {
         })
   const selectedEquipment = equipment.find((eq: any) => eq.id === form.equipmentId)
 
+  const requiresChiefEngineer =
+    currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER'
+  const chiefEngineerSelected = Boolean(form.assignedToId?.trim())
+  const submitBlockedForChief = requiresChiefEngineer && !chiefEngineerSelected
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.equipmentId) {
       alert('Выберите оборудование')
+      return
+    }
+    if (submitBlockedForChief) {
+      alert('Выберите главного инженера')
       return
     }
     const chiefAssignsEngineers = currentUser?.role === 'CHIEF_ENGINEER' && selectedEngineerIds.length > 0
@@ -279,8 +288,11 @@ export default function NewTaskPage() {
 
         <div>
           <label className="block text-sm font-medium mb-1">
-            Назначить{' '}
-            {currentUser?.role === 'CHIEF_ENGINEER' ? 'инженера' : 'ответственного'}
+            {currentUser?.role === 'CHIEF_ENGINEER'
+              ? 'Назначить инженера'
+              : requiresChiefEngineer
+                ? 'Главный инженер *'
+                : 'Назначить ответственного'}
           </label>
           {currentUser?.role === 'CHIEF_ENGINEER' ? (
             <div className="border rounded-lg p-3 space-y-2 max-h-44 overflow-y-auto">
@@ -305,11 +317,14 @@ export default function NewTaskPage() {
             </div>
           ) : (
             <select
+              required={requiresChiefEngineer}
               value={form.assignedToId}
               onChange={(e) => set('assignedToId', e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Не назначен</option>
+              <option value="">
+                {requiresChiefEngineer ? 'Выберите главного инженера' : 'Не назначен'}
+              </option>
               {assignableUsers.map((u: any) => (
                 <option key={u.id} value={u.id}>
                   {roleLabels[u.role] || ''} {u.name}
@@ -349,8 +364,9 @@ export default function NewTaskPage() {
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={loading}
-            className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            disabled={loading || submitBlockedForChief}
+            title={submitBlockedForChief ? 'Выберите главного инженера' : undefined}
+            className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
           >
             {loading ? 'Создание...' : '✓ Создать и отправить уведомление'}
           </button>
