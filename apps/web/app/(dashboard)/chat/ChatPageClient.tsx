@@ -29,14 +29,24 @@ type RoomsPayload = {
     lastMessage: LastMsg
   }[]
   staffUsers: StaffUser[]
+  currentUserId?: string
+  currentUserRole?: string
 }
 
 type ChatMessage = {
   id: string
   body: string
   isSystem: boolean
+  deletedAt: string | null
+  editedAt: string | null
   createdAt: string
   author: { id: string; name: string; role: string }
+}
+
+function dispatchChatRead() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('csp-chat-mark-read'))
+  }
 }
 
 export default function ChatPageClient({ initialRoomId }: { initialRoomId: string | null }) {
@@ -45,11 +55,14 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
   const [rooms, setRooms] = useState<RoomsPayload | null>(null)
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialRoomId)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [loadingRooms, setLoadingRooms] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [sending, setSending] = useState(false)
   const [peerPick, setPeerPick] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const loadRooms = useCallback(async () => {
@@ -57,18 +70,29 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
     if (!res.ok) return
     const data = (await res.json()) as RoomsPayload
     setRooms(data)
+    if (data.currentUserId) setCurrentUserId(data.currentUserId)
     setLoadingRooms(false)
   }, [])
 
-  const loadMessages = useCallback(async (roomId: string) => {
-    setLoadingMessages(true)
-    const res = await fetch(`/api/chat/rooms/${roomId}/messages`)
-    if (res.ok) {
-      const data = (await res.json()) as { messages: ChatMessage[] }
-      setMessages(data.messages)
-    }
-    setLoadingMessages(false)
+  const markRoomRead = useCallback(async (roomId: string) => {
+    await fetch(`/api/chat/rooms/${roomId}/read`, { method: 'POST' })
+    dispatchChatRead()
   }, [])
+
+  const loadMessages = useCallback(
+    async (roomId: string) => {
+      setLoadingMessages(true)
+      const res = await fetch(`/api/chat/rooms/${roomId}/messages`)
+      if (res.ok) {
+        const data = (await res.json()) as { messages: ChatMessage[]; currentUserId?: string }
+        setMessages(data.messages)
+        if (data.currentUserId) setCurrentUserId(data.currentUserId)
+        await markRoomRead(roomId)
+      }
+      setLoadingMessages(false)
+    },
+    [markRoomRead]
+  )
 
   useEffect(() => {
     void loadRooms()
@@ -89,6 +113,7 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
 
   function selectRoom(roomId: string) {
     setSelectedRoomId(roomId)
+    setEditingId(null)
     router.replace(`/chat?room=${encodeURIComponent(roomId)}`, { scroll: false })
   }
 
@@ -133,6 +158,62 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
     }
   }
 
+  async function clearHistory() {
+    if (!selectedRoomId) return
+    if (!confirm('Удалить все сообщения в этом чате для всех участников?')) return
+    const res = await fetch(`/api/chat/rooms/${selectedRoomId}/clear`, { method: 'POST' })
+    if (res.ok) {
+      await loadMessages(selectedRoomId)
+      await loadRooms()
+      dispatchChatRead()
+    } else {
+      const d = await res.json().catch(() => ({}))
+      alert((d as { error?: string }).error || 'Не удалось очистить')
+    }
+  }
+
+  async function hideChat() {
+    if (!selectedRoomId) return
+    if (!confirm('Скрыть чат из списка? История сохранится — при новом сообщении чат появится снова.')) return
+    const res = await fetch(`/api/chat/rooms/${selectedRoomId}/hide`, { method: 'POST' })
+    if (res.ok) {
+      setSelectedRoomId(null)
+      router.replace('/chat', { scroll: false })
+      await loadRooms()
+      dispatchChatRead()
+    }
+  }
+
+  function startEdit(m: ChatMessage) {
+    setEditingId(m.id)
+    setEditDraft(m.body)
+  }
+
+  async function saveEdit() {
+    if (!selectedRoomId || !editingId || !editDraft.trim()) return
+    const res = await fetch(`/api/chat/rooms/${selectedRoomId}/messages/${editingId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: editDraft.trim() }),
+    })
+    if (res.ok) {
+      setEditingId(null)
+      await loadMessages(selectedRoomId)
+      await loadRooms()
+    }
+  }
+
+  async function deleteMessage(messageId: string) {
+    if (!selectedRoomId || !confirm('Удалить сообщение?')) return
+    const res = await fetch(`/api/chat/rooms/${selectedRoomId}/messages/${messageId}`, {
+      method: 'DELETE',
+    })
+    if (res.ok) {
+      await loadMessages(selectedRoomId)
+      await loadRooms()
+    }
+  }
+
   function formatTime(iso: string) {
     try {
       return new Date(iso).toLocaleString('ru-RU', {
@@ -147,6 +228,21 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
   }
 
   const general = rooms?.general
+  const role = rooms?.currentUserRole ?? ''
+  const roomKind: 'GENERAL' | 'DIRECT' | 'TASK' | null =
+    general && selectedRoomId === general.id
+      ? 'GENERAL'
+      : rooms?.direct.some((d) => d.id === selectedRoomId)
+        ? 'DIRECT'
+        : rooms?.tasks.some((t) => t.id === selectedRoomId)
+          ? 'TASK'
+          : null
+
+  const canClearGeneral = role === 'ADMIN'
+  const showClear =
+    selectedRoomId &&
+    (roomKind === 'DIRECT' || roomKind === 'TASK' || (roomKind === 'GENERAL' && canClearGeneral))
+  const showHide = selectedRoomId && (roomKind === 'DIRECT' || roomKind === 'TASK')
 
   return (
     <div className="flex flex-col md:flex-row gap-4 min-h-[calc(100vh-8rem)]">
@@ -240,40 +336,127 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
           </div>
         ) : (
           <>
-            <div className="border-b px-4 py-3 bg-gray-50 text-sm font-medium text-gray-800">
-              {general && selectedRoomId === general.id && general.title}
-              {rooms?.direct.find((d) => d.id === selectedRoomId) && (
-                <>👤 {rooms.direct.find((d) => d.id === selectedRoomId)?.title}</>
-              )}
-              {rooms?.tasks.find((t) => t.id === selectedRoomId) && (
-                <>📋 {rooms.tasks.find((t) => t.id === selectedRoomId)?.title}</>
-              )}
+            <div className="border-b px-4 py-3 bg-gray-50 flex flex-wrap items-center gap-2 justify-between">
+              <div className="text-sm font-medium text-gray-800 min-w-0">
+                {general && selectedRoomId === general.id && general.title}
+                {rooms?.direct.find((d) => d.id === selectedRoomId) && (
+                  <>👤 {rooms.direct.find((d) => d.id === selectedRoomId)?.title}</>
+                )}
+                {rooms?.tasks.find((t) => t.id === selectedRoomId) && (
+                  <>📋 {rooms.tasks.find((t) => t.id === selectedRoomId)?.title}</>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {showClear && (
+                  <button
+                    type="button"
+                    onClick={() => void clearHistory()}
+                    className="text-xs px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-50"
+                  >
+                    Очистить историю
+                  </button>
+                )}
+                {showHide && (
+                  <button
+                    type="button"
+                    onClick={() => void hideChat()}
+                    className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100"
+                  >
+                    Скрыть чат
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
               {loadingMessages && messages.length === 0 ? (
                 <div className="text-gray-400 text-sm">Загрузка сообщений…</div>
               ) : (
-                messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                      m.isSystem
-                        ? 'mx-auto bg-amber-50 border border-amber-100 text-amber-900 text-center max-w-full'
-                        : 'bg-white border shadow-sm'
-                    }`}
-                  >
-                    {!m.isSystem && (
-                      <div className="text-xs text-gray-500 mb-1">
-                        <span className="font-medium text-gray-700">{m.author.name}</span>
-                        <span className="ml-2">{formatTime(m.createdAt)}</span>
+                messages.map((m) => {
+                  const isOwnAuthor =
+                    Boolean(currentUserId && m.author.id === currentUserId) && !m.isSystem
+                  const isDeleted = Boolean(m.deletedAt)
+                  const showActions = isOwnAuthor && !isDeleted
+
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex ${m.isSystem ? 'justify-center' : isOwnAuthor ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`relative group max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+                          m.isSystem
+                            ? 'mx-auto bg-amber-50 border border-amber-100 text-amber-900 text-center max-w-full'
+                            : isOwnAuthor
+                              ? 'bg-blue-50 border border-blue-100'
+                              : 'bg-white border shadow-sm'
+                        }`}
+                      >
+                        {showActions && (
+                          <div className="absolute -top-0.5 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <button
+                              type="button"
+                              onClick={() => startEdit(m)}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-white border shadow text-gray-700 hover:bg-gray-50"
+                            >
+                              Изменить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteMessage(m.id)}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-white border shadow text-red-600 hover:bg-red-50"
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        )}
+                        {!m.isSystem && (
+                          <div className="text-xs text-gray-500 mb-1 pr-12">
+                            <span className="font-medium text-gray-700">{m.author.name}</span>
+                            <span className="ml-2">{formatTime(m.createdAt)}</span>
+                          </div>
+                        )}
+                        {editingId === m.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editDraft}
+                              onChange={(e) => setEditDraft(e.target.value)}
+                              rows={3}
+                              className="w-full border rounded px-2 py-1 text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void saveEdit()}
+                                className="text-xs px-2 py-1 bg-blue-600 text-white rounded"
+                              >
+                                Сохранить
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                                className="text-xs px-2 py-1 border rounded"
+                              >
+                                Отмена
+                              </button>
+                            </div>
+                          </div>
+                        ) : isDeleted ? (
+                          <div className="italic text-gray-400">Сообщение удалено</div>
+                        ) : (
+                          <>
+                            <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                            {m.editedAt && (
+                              <div className="text-[10px] text-gray-400 mt-1">изменено</div>
+                            )}
+                          </>
+                        )}
+                        {m.isSystem && (
+                          <div className="text-[10px] text-amber-700/80 mt-1">{formatTime(m.createdAt)}</div>
+                        )}
                       </div>
-                    )}
-                    <div className="whitespace-pre-wrap break-words">{m.body}</div>
-                    {m.isSystem && (
-                      <div className="text-[10px] text-amber-700/80 mt-1">{formatTime(m.createdAt)}</div>
-                    )}
-                  </div>
-                ))
+                    </div>
+                  )
+                })
               )}
               <div ref={bottomRef} />
             </div>

@@ -2,9 +2,15 @@
 
 import { type ChangeEvent, useRef, useState } from 'react'
 import NotificationBell from '@/components/NotificationBell'
+import ChatUnreadBadge from '@/components/ChatUnreadBadge'
 import { LogoutButton } from '@/components/LogoutButton'
 
 type NavItem = { href: string; label: string; icon: string }
+
+const navLinkClassDesktop =
+  'flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100'
+const navLinkClassMobile =
+  'flex items-center gap-2 px-3 py-3 rounded-md text-sm text-gray-700 hover:bg-gray-100 w-full'
 
 export default function DashboardSidebarClient({
   navItems,
@@ -67,6 +73,25 @@ export default function DashboardSidebarClient({
       setUploadingAvatar(false)
       e.target.value = ''
     }
+  }
+
+  function renderNavItem(item: NavItem, mobile: boolean, onNavigate?: () => void) {
+    const c = mobile ? navLinkClassMobile : navLinkClassDesktop
+    if (item.href === '/chat') {
+      return (
+        <a key={item.href} href={item.href} className={`${c} w-full`} onClick={onNavigate}>
+          <span>{item.icon}</span>
+          <span className={mobile ? 'min-w-0 flex-1 text-left' : ''}>{item.label}</span>
+          <ChatUnreadBadge />
+        </a>
+      )
+    }
+    return (
+      <a key={item.href} href={item.href} className={c} onClick={onNavigate}>
+        <span>{item.icon}</span>
+        <span>{item.label}</span>
+      </a>
+    )
   }
 
   function renderAvatar(sizeClass: string, textClass: string) {
@@ -140,17 +165,7 @@ export default function DashboardSidebarClient({
               </button>
             </div>
             <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-              {navItems.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2 px-3 py-3 rounded-md text-sm text-gray-700 hover:bg-gray-100"
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </a>
-              ))}
+              {navItems.map((item) => renderNavItem(item, true, () => setMobileOpen(false)))}
             </nav>
             <div className="p-3 border-t">
               <div className="flex items-center gap-2 px-3 py-2 mb-2">
@@ -183,16 +198,7 @@ export default function DashboardSidebarClient({
           <NotificationBell />
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {navItems.map((item) => renderNavItem(item, false))}
         </nav>
         <div className="p-3 border-t">
           <div className="flex items-center gap-2 px-3 py-2 mb-1">

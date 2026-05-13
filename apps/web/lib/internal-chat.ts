@@ -67,6 +67,120 @@ export async function assertStaffCanAccessTaskChat(userId: string, role: Role, t
   throw new Error('forbidden')
 }
 
+export type StaffAccessibleRoom = {
+  id: string
+  type: ChatRoomType
+  dmKey: string | null
+  taskId: string | null
+}
+
+export async function assertStaffCanAccessRoom(
+  userId: string,
+  role: Role,
+  roomId: string
+): Promise<StaffAccessibleRoom | null> {
+  const room = await db.chatRoom.findUnique({
+    where: { id: roomId },
+    select: { id: true, type: true, dmKey: true, taskId: true },
+  })
+  if (!room || !isStaffRole(role)) return null
+  if (room.type === 'GENERAL') return room
+  if (room.type === 'DIRECT' && room.dmKey) {
+    return getDmPeer(room.dmKey, userId) ? room : null
+  }
+  if (room.type === 'TASK' && room.taskId) {
+    try {
+      await assertStaffCanAccessTaskChat(userId, role, room.taskId)
+      return room
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+export async function markRoomRead(userId: string, roomId: string) {
+  const now = new Date()
+  await db.chatRoomReadState.upsert({
+    where: { userId_roomId: { userId, roomId } },
+    create: { userId, roomId, lastReadAt: now },
+    update: { lastReadAt: now },
+  })
+}
+
+async function collectAccessibleRoomIds(userId: string, role: Role): Promise<string[]> {
+  const general = await getOrCreateGeneralRoom()
+  const hiddenRows = await db.chatRoomHidden.findMany({
+    where: { userId },
+    select: { roomId: true },
+  })
+  const hidden = new Set(hiddenRows.map((h) => h.roomId))
+
+  const dmRooms = await db.chatRoom.findMany({
+    where: {
+      type: 'DIRECT',
+      OR: [
+        { dmKey: { startsWith: `${userId}:` } },
+        { dmKey: { endsWith: `:${userId}` } },
+      ],
+    },
+    select: { id: true },
+  })
+
+  const taskWhere =
+    role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER'
+      ? { deletedAt: null }
+      : {
+          deletedAt: null,
+          OR: [{ assignedToId: userId }, { longTermEngineers: { some: { engineerId: userId } } }],
+        }
+
+  const taskRooms = await db.chatRoom.findMany({
+    where: {
+      type: 'TASK',
+      task: taskWhere,
+    },
+    select: { id: true },
+  })
+
+  const ids: string[] = []
+  if (!hidden.has(general.id)) ids.push(general.id)
+  for (const r of dmRooms) {
+    if (!hidden.has(r.id)) ids.push(r.id)
+  }
+  for (const r of taskRooms) {
+    if (!hidden.has(r.id)) ids.push(r.id)
+  }
+  return ids
+}
+
+export async function countUnreadMessagesTotal(userId: string, role: Role): Promise<number> {
+  if (!isStaffRole(role)) return 0
+  const roomIds = await collectAccessibleRoomIds(userId, role)
+  if (roomIds.length === 0) return 0
+
+  const states = await db.chatRoomReadState.findMany({
+    where: { userId, roomId: { in: roomIds } },
+    select: { roomId: true, lastReadAt: true },
+  })
+  const readMap = new Map(states.map((s) => [s.roomId, s.lastReadAt]))
+
+  let total = 0
+  for (const roomId of roomIds) {
+    const lastRead = readMap.get(roomId) ?? new Date(0)
+    const n = await db.chatMessage.count({
+      where: {
+        roomId,
+        authorId: { not: userId },
+        deletedAt: null,
+        createdAt: { gt: lastRead },
+      },
+    })
+    total += n
+  }
+  return total
+}
+
 async function notifyChatRecipients(
   room: { id: string; type: ChatRoomType; dmKey: string | null },
   authorId: string,
@@ -133,8 +247,12 @@ export async function postChatMessage(roomId: string, authorId: string, body: st
     data: { updatedAt: new Date() },
   })
 
+  await db.chatRoomHidden.deleteMany({ where: { roomId } })
+
   const preview = isSystem ? trimmed : `${msg.author.name}: ${trimmed}`
   await notifyChatRecipients(msg.room, authorId, preview)
+
+  await markRoomRead(authorId, roomId)
 
   return msg
 }

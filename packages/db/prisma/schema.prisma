@@ -162,6 +162,8 @@ model User {
   rolePermissionsUpdated RolePermission[] @relation("RolePermissionUpdatedBy")
   webauthnCredentials WebAuthnCredential[]
   chatMessages ChatMessage[]
+  chatReadStates ChatRoomReadState[]
+  chatHiddenRooms ChatRoomHidden[]
 
   @@map("users")
 }
@@ -453,9 +455,35 @@ model ChatRoom {
   updatedAt DateTime     @updatedAt
   messages  ChatMessage[]
   task      ServiceTask? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  readStates ChatRoomReadState[]
+  hiddenBy ChatRoomHidden[]
 
   @@index([type])
   @@map("chat_rooms")
+}
+
+model ChatRoomReadState {
+  userId     String
+  roomId     String
+  lastReadAt DateTime @default(now())
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roomId])
+  @@map("chat_room_read_states")
+}
+
+model ChatRoomHidden {
+  userId    String
+  roomId    String
+  createdAt DateTime @default(now())
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roomId])
+  @@map("chat_room_hiddens")
 }
 
 model ChatMessage {
@@ -465,6 +493,8 @@ model ChatMessage {
   body      String   @db.Text
   isSystem  Boolean  @default(false)
   createdAt DateTime @default(now())
+  deletedAt DateTime?
+  editedAt  DateTime?
 
   room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   author User     @relation(fields: [authorId], references: [id], onDelete: Cascade)

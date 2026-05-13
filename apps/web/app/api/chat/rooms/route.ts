@@ -12,11 +12,18 @@ export async function GET() {
 
   const userId = session.user.id
 
+  const hiddenRows = await db.chatRoomHidden.findMany({
+    where: { userId },
+    select: { roomId: true },
+  })
+  const hiddenIds = hiddenRows.map((h) => h.roomId)
+
   const general = await getOrCreateGeneralRoom()
 
   const dmRooms = await db.chatRoom.findMany({
     where: {
       type: 'DIRECT',
+      ...(hiddenIds.length > 0 ? { id: { notIn: hiddenIds } } : {}),
       OR: [
         { dmKey: { startsWith: `${userId}:` } },
         { dmKey: { endsWith: `:${userId}` } },
@@ -24,6 +31,7 @@ export async function GET() {
     },
     include: {
       messages: {
+        where: { deletedAt: null },
         take: 1,
         orderBy: { createdAt: 'desc' },
         include: { author: { select: { id: true, name: true } } },
@@ -56,11 +64,13 @@ export async function GET() {
   const taskRooms = await db.chatRoom.findMany({
     where: {
       type: 'TASK',
+      ...(hiddenIds.length > 0 ? { id: { notIn: hiddenIds } } : {}),
       task: taskWhere,
     },
     include: {
       task: { select: { id: true, requestNumber: true } },
       messages: {
+        where: { deletedAt: null },
         take: 1,
         orderBy: { createdAt: 'desc' },
         include: { author: { select: { id: true, name: true } } },
@@ -71,12 +81,13 @@ export async function GET() {
   })
 
   const generalLast = await db.chatMessage.findFirst({
-    where: { roomId: general.id },
+    where: { roomId: general.id, deletedAt: null },
     orderBy: { createdAt: 'desc' },
     include: { author: { select: { id: true, name: true } } },
   })
 
   return NextResponse.json({
+    currentUserId: userId,
     general: {
       id: general.id,
       type: 'GENERAL',
@@ -131,5 +142,6 @@ export async function GET() {
       select: { id: true, name: true, role: true },
       orderBy: { name: 'asc' },
     }),
+    currentUserRole: session.user.role,
   })
 }
