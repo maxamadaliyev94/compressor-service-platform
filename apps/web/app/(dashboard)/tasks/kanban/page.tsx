@@ -25,6 +25,7 @@ export default async function KanbanPage() {
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },
       assignedTo: true,
+      longTermEngineers: { include: { engineer: { select: { id: true, name: true } } } },
     },
     orderBy: { createdAt: 'desc' },
   })

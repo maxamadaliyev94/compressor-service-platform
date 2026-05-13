@@ -30,6 +30,7 @@ export default async function TasksPage() {
       assignedTo: true,
       createdBy: true,
       report: { select: { id: true, clientSignature: true } },
+      longTermEngineers: { include: { engineer: { select: { id: true, name: true } } } },
     },
     orderBy: { createdAt: 'desc' },
   })

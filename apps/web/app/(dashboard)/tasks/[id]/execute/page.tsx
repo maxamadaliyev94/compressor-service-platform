@@ -24,8 +24,7 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
       assignedTo: true,
       createdBy: true,
       longTermEngineers: {
-        where: { engineerId: session.user.id },
-        select: { id: true },
+        select: { engineerId: true },
       },
     },
   })
@@ -59,7 +58,11 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
   })
 
   const role = session.user.role
-  if (role === 'ENGINEER' && task.assignedToId !== session.user.id) {
+  const isParticipant =
+    task.assignedToId === session.user.id ||
+    task.longTermEngineers.some((r) => r.engineerId === session.user.id)
+
+  if (role === 'ENGINEER' && !isParticipant) {
     redirect('/')
   }
 

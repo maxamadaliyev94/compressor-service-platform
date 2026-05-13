@@ -80,14 +80,23 @@ export default function KanbanBoard({ tasks }: { tasks: any[] }) {
                   <div className="text-xs text-gray-500 truncate mb-2">
                     {task.equipment?.object?.branch?.client?.name}
                   </div>
-                  {task.assignedTo && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
-                        {task.assignedTo.name.charAt(0)}
+                  {(() => {
+                    const co = task.longTermEngineers as { engineer: { name: string } }[] | undefined
+                    const label =
+                      co && co.length > 0
+                        ? co.map((r: { engineer: { name: string } }) => r.engineer.name).join(', ')
+                        : task.assignedTo?.name
+                    if (!label) return null
+                    const initial = label.trim().charAt(0)
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
+                          {initial}
+                        </div>
+                        <span className="text-xs text-gray-500 truncate">{label}</span>
                       </div>
-                      <span className="text-xs text-gray-500 truncate">{task.assignedTo.name}</span>
-                    </div>
-                  )}
+                    )
+                  })()}
                   {formatTaskScheduleRangeRu(task) !== '—' && (
                     <div
                       className={`text-xs mt-1 ${isTaskEndDateOverdue(task) ? 'text-red-600 font-semibold' : 'text-gray-400'}`}

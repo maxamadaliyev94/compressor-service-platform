@@ -109,7 +109,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   await db.$transaction(async (tx) => {
     await tx.longTermTaskEngineer.deleteMany({ where: { taskId: task.id } })
     await tx.longTermTaskEngineer.createMany({
-      data: engineerIdsNorm.map((engineerId) => ({ taskId: task.id, engineerId })),
+      data: engineerIdsNorm.map((engineerId) => ({
+        taskId: task.id,
+        engineerId,
+        participationStatus: 'ASSIGNED' as const,
+      })),
     })
     await tx.serviceTask.update({
       where: { id: task.id },

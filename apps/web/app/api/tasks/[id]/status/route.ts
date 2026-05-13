@@ -22,13 +22,21 @@ const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
 function canExecuteServiceTask(
   role: Role,
   userId: string,
-  task: ServiceTask & { longTermEngineers?: { id: string }[] }
+  task: ServiceTask & { longTermEngineers?: { id: string; engineerId: string }[] }
 ): boolean {
   if (role === 'CLIENT') return false
-  if (role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER') return true
+  if (role === 'ADMIN' || role === 'MANAGER') return true
+  if (role === 'CHIEF_ENGINEER') {
+    if (task.managedByChiefId === userId && task.assignedToId !== userId) {
+      return false
+    }
+    return true
+  }
   if (role === 'ENGINEER') {
     if (task.assignedToId === userId) return true
-    if (task.taskType === 'LONG_TERM' && (task.longTermEngineers?.length ?? 0) > 0) return true
+    if ((task.longTermEngineers?.length ?? 0) > 0) {
+      return task.longTermEngineers!.some((r) => r.engineerId === userId)
+    }
     return false
   }
   return false
@@ -48,8 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id },
     include: {
       longTermEngineers: {
-        where: { engineerId: session.user.id },
-        select: { id: true },
+        select: { id: true, engineerId: true },
       },
     },
   })
@@ -77,9 +84,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
       const parent = await db.serviceTask.findUnique({
         where: { id: parentId },
-        select: { assignedToId: true, deletedAt: true },
+        select: { assignedToId: true, managedByChiefId: true, deletedAt: true },
       })
-      if (!parent || parent.deletedAt || parent.assignedToId !== session.user.id) {
+      if (
+        !parent ||
+        parent.deletedAt ||
+        (parent.assignedToId !== session.user.id && parent.managedByChiefId !== session.user.id)
+      ) {
         return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
       }
     } else {
@@ -105,16 +116,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data: { status },
   })
 
+  if (status === 'IN_PROGRESS' && session.user.role === 'ENGINEER') {
+    const lte = await db.longTermTaskEngineer.findFirst({
+      where: { taskId: task.id, engineerId: session.user.id },
+      select: { id: true },
+    })
+    if (lte) {
+      await db.longTermTaskEngineer.update({
+        where: { id: lte.id },
+        data: { participationStatus: 'IN_PROGRESS' },
+      })
+    }
+  }
+
   if (status === 'IN_PROGRESS') {
     const busyIds = new Set<string>()
     if (updated.assignedToId) busyIds.add(updated.assignedToId)
-    if (task.taskType === 'LONG_TERM') {
-      const ltRows = await db.longTermTaskEngineer.findMany({
-        where: { taskId: task.id },
-        select: { engineerId: true },
-      })
-      for (const r of ltRows) busyIds.add(r.engineerId)
-    }
+    const ltRows = await db.longTermTaskEngineer.findMany({
+      where: { taskId: task.id },
+      select: { engineerId: true },
+    })
+    for (const r of ltRows) busyIds.add(r.engineerId)
     for (const uid of busyIds) {
       await markEngineerBusy(uid)
     }
@@ -122,13 +144,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (status === 'DONE' || status === 'CANCELLED') {
     const idsToSync = new Set<string>()
     if (updated.assignedToId) idsToSync.add(updated.assignedToId)
-    if (task.taskType === 'LONG_TERM') {
-      const ltRows = await db.longTermTaskEngineer.findMany({
-        where: { taskId: task.id },
-        select: { engineerId: true },
-      })
-      for (const r of ltRows) idsToSync.add(r.engineerId)
-    }
+    const ltRows = await db.longTermTaskEngineer.findMany({
+      where: { taskId: task.id },
+      select: { engineerId: true },
+    })
+    for (const r of ltRows) idsToSync.add(r.engineerId)
     for (const uid of idsToSync) {
       await syncEngineerFreeIfNoActiveTasks(uid)
     }

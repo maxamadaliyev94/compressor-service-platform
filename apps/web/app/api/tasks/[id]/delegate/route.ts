@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { hasPermission } from '@/lib/permissions'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
-import { markEngineerBusy } from '@/lib/engineerPresence'
+import { markEngineerBusy, syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import type { Role } from '@prisma/client'
 
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       requestNumber: true,
       equipmentId: true,
       assignedToId: true,
+      managedByChiefId: true,
       type: true,
       taskType: true,
       priority: true,
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       comment: true,
       deletedAt: true,
       report: { select: { id: true } },
+      longTermEngineers: { select: { engineerId: true } },
       equipment: { select: { object: { select: { branch: { select: { client: { select: { managerId: true } } } } } } } },
     },
   })
@@ -66,10 +68,41 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const canUseTask =
     role === 'ADMIN' ||
-    (role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||
-    role === 'MANAGER'
+    role === 'MANAGER' ||
+    (role === 'CHIEF_ENGINEER' &&
+      (task.assignedToId === session.user.id ||
+        task.managedByChiefId === session.user.id))
   if (!canUseTask) {
     return NextResponse.json({ error: 'Нет прав на распределение этой задачи' }, { status: 403 })
+  }
+
+  const assigneeRole =
+    task.assignedToId &&
+    (await db.user.findUnique({
+      where: { id: task.assignedToId },
+      select: { role: true },
+    }))?.role
+
+  const alreadyOnTask = new Set(task.longTermEngineers.map((r) => r.engineerId))
+  if (task.assignedToId && assigneeRole === 'ENGINEER') {
+    alreadyOnTask.add(task.assignedToId)
+  }
+  const newlyPicked = engineerIds.filter((id) => !alreadyOnTask.has(id))
+  if (newlyPicked.length === 0) {
+    return NextResponse.json(
+      { error: 'Все выбранные инженеры уже назначены на эту заявку' },
+      { status: 400 }
+    )
+  }
+  for (const id of engineerIds) alreadyOnTask.add(id)
+  const mergedEngineerIds = [...alreadyOnTask]
+
+  const engineers = await db.user.findMany({
+    where: { id: { in: mergedEngineerIds }, role: 'ENGINEER', isActive: true },
+    select: { id: true, name: true },
+  })
+  if (engineers.length !== mergedEngineerIds.length) {
+    return NextResponse.json({ error: 'Некорректный список инженеров' }, { status: 400 })
   }
 
   const marker = `[Распределено ГИ из задачи ${task.id}]`
@@ -77,42 +110,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     where: { deletedAt: null, comment: { contains: marker } },
     select: { id: true, status: true, assignedToId: true, comment: true },
   })
-  const mappedChildren = existingChildren.filter((c) => parseDelegationParentTaskId(c.comment) === task.id)
-  const activeByEngineer = new Map<string, { id: string; status: string }>()
-  const cancelledByEngineer = new Map<string, { id: string; status: string }>()
-  for (const c of mappedChildren) {
-    if (!c.assignedToId) continue
-    if (c.status === 'CANCELLED' || c.status === 'DONE') {
-      if (!cancelledByEngineer.has(c.assignedToId)) {
-        cancelledByEngineer.set(c.assignedToId, { id: c.id, status: c.status })
-      }
-      continue
-    }
-    if (!activeByEngineer.has(c.assignedToId)) {
-      activeByEngineer.set(c.assignedToId, { id: c.id, status: c.status })
-    }
-  }
-
-  const engineers = await db.user.findMany({
-    where: { id: { in: engineerIds }, role: 'ENGINEER', isActive: true },
-    select: { id: true, name: true },
-  })
-  if (engineers.length !== engineerIds.length) {
-    return NextResponse.json({ error: 'Некорректный список инженеров' }, { status: 400 })
-  }
-
-  const toReactivate = engineers
-    .filter((e) => !activeByEngineer.has(e.id))
-    .map((e) => ({ engineerId: e.id, cancelledTaskId: cancelledByEngineer.get(e.id)?.id ?? null }))
-  const engineersToCreate = toReactivate.filter((e) => !e.cancelledTaskId).map((e) => e.engineerId)
-  const reactivateTaskIds = toReactivate.filter((e) => !!e.cancelledTaskId).map((e) => e.cancelledTaskId as string)
-
-  if (engineersToCreate.length === 0 && reactivateTaskIds.length === 0) {
-    return NextResponse.json(
-      { error: 'Все выбранные инженеры уже назначены на эту заявку' },
-      { status: 400 }
-    )
-  }
+  const legacyChildIds = existingChildren
+    .filter((c) => parseDelegationParentTaskId(c.comment) === task.id && !['DONE', 'CANCELLED'].includes(c.status))
+    .map((c) => c.id)
+  const legacyFreedEngineerIds = existingChildren
+    .filter((c) => parseDelegationParentTaskId(c.comment) === task.id && !['DONE', 'CANCELLED'].includes(c.status))
+    .map((c) => c.assignedToId)
+    .filter((id): id is string => Boolean(id))
 
   const chief = await db.user.findUnique({
     where: { id: session.user.id },
@@ -122,92 +126,96 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Пользователь не найден' }, { status: 401 })
   }
 
-  const baseComment = task.comment?.trim() || ''
-  const prefix = `${marker}\n`
+  const prevJunctionIds = task.longTermEngineers.map((r) => r.engineerId)
+  const prevAssignee = task.assignedToId
 
-  const createdIds = await db.$transaction(async (tx) => {
-    const ids: string[] = []
-    for (const engineerId of engineersToCreate) {
-      const alreadyExists = await tx.serviceTask.findFirst({
-        where: {
-          deletedAt: null,
-          assignedToId: engineerId,
-          comment: { contains: marker },
-          status: { notIn: ['DONE', 'CANCELLED'] },
-        },
-        select: { id: true, comment: true },
-      })
-      if (alreadyExists && parseDelegationParentTaskId(alreadyExists.comment) === task.id) {
-        ids.push(alreadyExists.id)
-        continue
-      }
-      const created = await tx.serviceTask.create({
+  const managedByChiefId =
+    role === 'CHIEF_ENGINEER' ? chief.id : task.managedByChiefId ?? null
+
+  await db.$transaction(async (tx) => {
+    if (legacyChildIds.length > 0) {
+      await tx.serviceTask.updateMany({
+        where: { id: { in: legacyChildIds } },
         data: {
-          requestNumber: task.requestNumber,
-          equipmentId: task.equipmentId,
-          createdById: chief.id,
-          assignedToId: engineerId,
-          type: task.type,
-          taskType: 'QUICK',
-          managedByChiefId: null,
-          priority: task.priority,
-          status: 'ASSIGNED',
-          scheduledAt: task.scheduledAt,
-          comment: `${prefix}${baseComment}`.trim(),
+          status: 'CANCELLED',
+          cancelReason: 'Заменено: единая заявка на родительской задаче',
         },
       })
-      ids.push(created.id)
     }
-    for (const reactivateId of reactivateTaskIds) {
+
+    await tx.longTermTaskEngineer.deleteMany({ where: { taskId: task.id } })
+
+    if (mergedEngineerIds.length === 1) {
+      /** Один исполнитель: задача уходит с ГИ, ГИ только наблюдатель (managedByChiefId). */
       await tx.serviceTask.update({
-        where: { id: reactivateId },
-        data: { status: 'ASSIGNED', cancelReason: null },
+        where: { id: task.id },
+        data: {
+          assignedToId: mergedEngineerIds[0],
+          managedByChiefId,
+          status: 'ASSIGNED',
+          cancelReason: null,
+        },
       })
-      ids.push(reactivateId)
+    } else {
+      await tx.serviceTask.update({
+        where: { id: task.id },
+        data: {
+          assignedToId: null,
+          managedByChiefId,
+          status: 'ASSIGNED',
+          cancelReason: null,
+        },
+      })
+      await tx.longTermTaskEngineer.createMany({
+        data: mergedEngineerIds.map((engineerId) => ({
+          taskId: task.id,
+          engineerId,
+          participationStatus: 'ASSIGNED' as const,
+        })),
+      })
     }
-
-    await tx.serviceTask.update({
-      where: { id: task.id },
-      data: {
-        status: 'ASSIGNED',
-        cancelReason: null,
-        assignedToId: role === 'CHIEF_ENGINEER' ? chief.id : task.assignedToId,
-      },
-    })
-
-    return ids
   })
 
-  const newTasks = await db.serviceTask.findMany({
-    where: { id: { in: createdIds } },
-    select: { id: true, type: true, priority: true, comment: true, assignedToId: true },
-  })
-
-  for (const t of newTasks) {
-    if (t.assignedToId) {
-      await markEngineerBusy(t.assignedToId)
-      const assignedUser = engineers.find((e) => e.id === t.assignedToId)
-      if (assignedUser) {
-        await notifyTaskAssigned(t, assignedUser, chief)
-      }
+  for (const uid of legacyFreedEngineerIds) {
+    await syncEngineerFreeIfNoActiveTasks(uid)
+  }
+  for (const uid of prevJunctionIds) {
+    if (!mergedEngineerIds.includes(uid)) {
+      await syncEngineerFreeIfNoActiveTasks(uid)
     }
   }
+  if (prevAssignee && !mergedEngineerIds.includes(prevAssignee) && prevAssignee !== managedByChiefId) {
+    await syncEngineerFreeIfNoActiveTasks(prevAssignee)
+  }
 
-  const n = createdIds.length
-  const newEngineerIds = [...new Set([...engineersToCreate, ...toReactivate.map((e) => e.engineerId)])]
+  for (const e of engineers.filter((x) => newlyPicked.includes(x.id))) {
+    await markEngineerBusy(e.id)
+    await notifyTaskAssigned(
+      {
+        id: task.id,
+        type: task.type,
+        priority: task.priority,
+        comment: task.comment,
+      },
+      e,
+      chief
+    )
+  }
+
+  const n = newlyPicked.length
   await notifyClientSubscriberForEquipmentWork(
     task.equipmentId,
     {
-      title: n === 1 ? 'Новая задача по клиенту' : `Новые задачи по клиенту (${n})`,
+      title: n === 1 ? 'Назначен исполнитель по заявке' : `Назначены исполнители по заявке (${n})`,
       message:
-        n === 1
-          ? 'Главный инженер распределил задачу на исполнителя.'
-          : `Главный инженер распределил задачи на исполнителей (${n}).`,
+        mergedEngineerIds.length === 1
+          ? 'Задача передана инженеру для выполнения (один акт).'
+          : 'Задача распределена между инженерами (одна заявка, один акт при закрытии).',
       type: 'TASK',
-      link: `/tasks/${createdIds[0]}`,
+      link: `/tasks/${task.id}`,
     },
-    { skipUserIds: newEngineerIds }
+    { skipUserIds: newlyPicked }
   )
 
-  return NextResponse.json({ ok: true, taskIds: createdIds })
+  return NextResponse.json({ ok: true, taskIds: [task.id] })
 }

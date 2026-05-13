@@ -9,16 +9,26 @@ import type { ChecklistItemAction, Role, ServiceTask } from '@prisma/client'
 import { isValidDiagnosticsActionForLabel, needsDiagnosticsPerformedAction } from '@/lib/checklist-diagnostics'
 import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
 
+import { collectParticipantEngineerIdsForAct, participantEngineerIdsJson } from '@/lib/task-participation'
+
 function canExecuteServiceTask(
   role: Role,
   userId: string,
-  task: ServiceTask & { longTermEngineers?: { id: string }[] }
+  task: ServiceTask & { longTermEngineers?: { id: string; engineerId: string }[] }
 ): boolean {
   if (role === 'CLIENT') return false
-  if (role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER') return true
+  if (role === 'ADMIN' || role === 'MANAGER') return true
+  if (role === 'CHIEF_ENGINEER') {
+    if (task.managedByChiefId === userId && task.assignedToId !== userId) {
+      return false
+    }
+    return true
+  }
   if (role === 'ENGINEER') {
     if (task.assignedToId === userId) return true
-    if (task.taskType === 'LONG_TERM' && (task.longTermEngineers?.length ?? 0) > 0) return true
+    if ((task.longTermEngineers?.length ?? 0) > 0) {
+      return task.longTermEngineers!.some((r) => r.engineerId === userId)
+    }
     return false
   }
   return false
@@ -147,8 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       report: true,
       equipment: true,
       longTermEngineers: {
-        where: { engineerId: session.user.id },
-        select: { id: true },
+        select: { id: true, engineerId: true },
       },
     },
   })
@@ -189,6 +198,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const actNumber = `AKT-${task.id.slice(-8).toUpperCase()}`
 
+  const participantIds = collectParticipantEngineerIdsForAct({
+    assignedToId: task.assignedToId,
+    managedByChiefId: task.managedByChiefId,
+    longTermEngineers: task.longTermEngineers,
+    signingEngineerId: session.user.id,
+  })
+
   const prevHours = task.equipment.currentHours
 
   try {
@@ -197,6 +213,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         data: {
           taskId: task.id,
           engineerId: session.user.id,
+          participantEngineerIds: participantEngineerIdsJson(participantIds),
           startedAt: new Date(),
           finishedAt: new Date(),
           currentHours,
@@ -259,6 +276,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       })
 
+      if (task.longTermEngineers.length > 0) {
+        await tx.longTermTaskEngineer.updateMany({
+          where: { taskId: task.id },
+          data: { participationStatus: 'DONE' },
+        })
+      }
+
       await tx.equipment.update({
         where: { id: task.equipmentId },
         data: {
@@ -309,8 +333,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     { skipUserIds: task.createdById ? [task.createdById] : [] }
   )
 
-  if (task.assignedToId) {
-    await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
+  const engineersToFree = new Set<string>()
+  if (task.assignedToId) engineersToFree.add(task.assignedToId)
+  for (const r of task.longTermEngineers) engineersToFree.add(r.engineerId)
+  for (const uid of engineersToFree) {
+    await syncEngineerFreeIfNoActiveTasks(uid)
   }
 
   await logUserActivity(session.user.id, UserActivityAction.ACT_COMPLETE, req, {

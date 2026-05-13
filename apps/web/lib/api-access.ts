@@ -113,6 +113,7 @@ export async function canReadTask(session: AuthedSession, taskId: string): Promi
     select: {
       deletedAt: true,
       assignedToId: true,
+      managedByChiefId: true,
       createdById: true,
       equipment: { select: { object: { select: { branch: { select: { clientId: true } } } } } },
       longTermEngineers: {
@@ -126,7 +127,14 @@ export async function canReadTask(session: AuthedSession, taskId: string): Promi
   const clientId = task.equipment.object.branch.clientId
   const role = session.user.role
 
-  if (role === 'ADMIN' || role === 'CHIEF_ENGINEER') return true
+  if (role === 'ADMIN') return true
+  if (role === 'CHIEF_ENGINEER') {
+    return (
+      task.assignedToId === session.user.id ||
+      task.longTermEngineers.length > 0 ||
+      task.managedByChiefId === session.user.id
+    )
+  }
   if (role === 'MANAGER') {
     return true
   }

@@ -7,6 +7,7 @@ type Child = {
   status: string
   assignedToId: string | null
   assignedTo: { id: string; name: string } | null
+  isLegacyChild?: boolean
 }
 
 type Engineer = { id: string; name: string }
@@ -148,14 +149,18 @@ export default function TaskDelegationEditModal({
     return s
   }
 
-  async function cancelAssignment(childId: string) {
+  async function cancelAssignment(child: Child) {
     if (!confirm('Снять назначение (отменить задачу для этого инженера)?')) return
-    setSavingId(childId)
-    const r = await fetch(`/api/tasks/${childId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'CANCELLED' }),
-    })
+    setSavingId(child.id)
+    const r = child.isLegacyChild
+      ? await fetch(`/api/tasks/${child.id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'CANCELLED' }),
+        })
+      : await fetch(`/api/tasks/${taskId}/delegation-participants?participantRowId=${encodeURIComponent(child.id)}`, {
+          method: 'DELETE',
+        })
     setSavingId(null)
     if (!r.ok) {
       const d = await r.json().catch(() => ({}))
@@ -166,13 +171,19 @@ export default function TaskDelegationEditModal({
     onSaved()
   }
 
-  async function saveReplace(childId: string, assignedToId: string) {
-    setSavingId(childId)
-    const r = await fetch(`/api/tasks/${childId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignedToId }),
-    })
+  async function saveReplace(child: Child, assignedToId: string) {
+    setSavingId(child.id)
+    const r = child.isLegacyChild
+      ? await fetch(`/api/tasks/${child.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignedToId }),
+        })
+      : await fetch(`/api/tasks/${taskId}/delegation-participants`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participantRowId: child.id, engineerId: assignedToId }),
+        })
     setSavingId(null)
     if (!r.ok) {
       const d = await r.json().catch(() => ({}))
@@ -226,8 +237,8 @@ export default function TaskDelegationEditModal({
                   engineers={engineers}
                   siblingTakenIds={siblingTakenIds(c.id)}
                   busy={savingId === c.id}
-                  onCancel={() => void cancelAssignment(c.id)}
-                  onSaveReplace={(id) => void saveReplace(c.id, id)}
+                  onCancel={() => void cancelAssignment(c)}
+                  onSaveReplace={(id) => void saveReplace(c, id)}
                 />
               ))}
             </ul>

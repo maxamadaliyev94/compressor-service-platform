@@ -47,9 +47,13 @@ async function chiefOwnsDelegationParent(task: { comment: string | null }, chief
   if (!parentId) return false
   const parent = await db.serviceTask.findUnique({
     where: { id: parentId },
-    select: { assignedToId: true, deletedAt: true },
+    select: { assignedToId: true, managedByChiefId: true, deletedAt: true },
   })
-  return Boolean(parent && !parent.deletedAt && parent.assignedToId === chiefUserId)
+  return Boolean(
+    parent &&
+      !parent.deletedAt &&
+      (parent.assignedToId === chiefUserId || parent.managedByChiefId === chiefUserId)
+  )
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -485,6 +489,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   })
   if (task.assignedToId) {
     await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
+  }
+  const lteRows = await db.longTermTaskEngineer.findMany({
+    where: { taskId: params.id },
+    select: { engineerId: true },
+  })
+  for (const r of lteRows) {
+    await syncEngineerFreeIfNoActiveTasks(r.engineerId)
   }
   await logUserActivity(session.user.id, UserActivityAction.TASK_DELETE, req, {
     page: `/tasks/${params.id}`,

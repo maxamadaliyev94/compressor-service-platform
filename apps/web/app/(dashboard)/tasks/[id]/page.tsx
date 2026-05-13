@@ -100,7 +100,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     task.taskType !== 'LONG_TERM' &&
     canAssignTasks &&
     (session?.user?.role === 'ADMIN' ||
-      (session?.user?.role === 'CHIEF_ENGINEER' && task.assignedToId === session.user.id) ||
+      (session?.user?.role === 'CHIEF_ENGINEER' &&
+        (task.assignedToId === session.user.id || task.managedByChiefId === session.user.id)) ||
       session?.user?.role === 'MANAGER') &&
     isNotDone &&
     !task.report
@@ -120,10 +121,12 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     if (parentId) {
       const parentRow = await db.serviceTask.findUnique({
         where: { id: parentId },
-        select: { assignedToId: true, deletedAt: true },
+        select: { assignedToId: true, managedByChiefId: true, deletedAt: true },
       })
       chiefOwnsDelegatedSubtree = Boolean(
-        parentRow && !parentRow.deletedAt && parentRow.assignedToId === session.user.id
+        parentRow &&
+          !parentRow.deletedAt &&
+          (parentRow.assignedToId === session.user.id || parentRow.managedByChiefId === session.user.id)
       )
     }
   }
@@ -132,7 +135,9 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     isNotDone &&
     (session.user.role === 'ADMIN' ||
       (session.user.role === 'CHIEF_ENGINEER' &&
-        (task.assignedToId === session.user.id || chiefOwnsDelegatedSubtree)))
+        (task.assignedToId === session.user.id ||
+          task.managedByChiefId === session.user.id ||
+          chiefOwnsDelegatedSubtree)))
 
   const canEditLongTermPlanDates =
     isNotDone &&
@@ -152,29 +157,42 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   const role = session?.user?.role ?? ''
   const clientHidesLongTermDayDetails = role === 'CLIENT'
   const longTermEngineerIds = new Set(task.longTermEngineers.map((r) => r.engineerId))
+  const coEngineerNamesForDisplay = (() => {
+    if (task.longTermEngineers.length === 0) return null
+    const seen = new Set<string>()
+    const names: string[] = []
+    for (const r of task.longTermEngineers) {
+      if (!seen.has(r.engineerId)) {
+        seen.add(r.engineerId)
+        names.push(r.engineer.name)
+      }
+    }
+    if (task.assignedToId && task.assignedTo && !seen.has(task.assignedToId)) {
+      names.push(task.assignedTo.name)
+    }
+    return names.length > 0 ? names.join(', ') : null
+  })()
   const longTermEngineerDisplayNames =
-    task.taskType === 'LONG_TERM'
-      ? (() => {
-          const seen = new Set<string>()
-          const names: string[] = []
-          for (const r of task.longTermEngineers) {
-            if (!seen.has(r.engineerId)) {
-              seen.add(r.engineerId)
-              names.push(r.engineer.name)
-            }
-          }
-          if (task.assignedToId && task.assignedTo && !seen.has(task.assignedToId)) {
-            names.push(task.assignedTo.name)
-          }
-          return names.length > 0 ? names.join(', ') : null
-        })()
-      : null
+    task.taskType === 'LONG_TERM' ? coEngineerNamesForDisplay : null
+  const quickEngineerDisplayNames = task.taskType !== 'LONG_TERM' ? coEngineerNamesForDisplay : null
   const showWorkDayLink =
     task.taskType === 'LONG_TERM' &&
     isNotDone &&
     role === 'ENGINEER' &&
     (task.assignedToId === session.user.id || longTermEngineerIds.has(session.user.id))
-  const showExecuteLink = task.taskType !== 'LONG_TERM' && canExecute && isNotDone
+  const isQuickParticipant =
+    task.assignedToId === session.user.id ||
+    longTermEngineerIds.has(session.user.id)
+  const chiefObserverOnly =
+    role === 'CHIEF_ENGINEER' &&
+    task.managedByChiefId === session.user.id &&
+    task.assignedToId !== session.user.id
+  const showExecuteLink =
+    task.taskType !== 'LONG_TERM' &&
+    canExecute &&
+    isNotDone &&
+    !chiefObserverOnly &&
+    (role === 'ENGINEER' || role === 'CHIEF_ENGINEER' ? isQuickParticipant : true)
   const isDelegatedChild = Boolean(parseDelegationParentTaskId(task.comment))
   const canChiefSetWorkType =
     isNotDone &&
@@ -355,7 +373,10 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
             <div className="flex gap-2">
               <span className="text-gray-500 w-28 shrink-0">Инженер:</span>
               <span>
-                {longTermEngineerDisplayNames ?? task.assignedTo?.name ?? 'Не назначен'}
+                {longTermEngineerDisplayNames ??
+                  quickEngineerDisplayNames ??
+                  task.assignedTo?.name ??
+                  'Не назначен'}
               </span>
             </div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Создал:</span><span>{task.createdBy.name}</span></div>

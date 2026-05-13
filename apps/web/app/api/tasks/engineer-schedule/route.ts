@@ -14,6 +14,7 @@ type ScheduleTask = {
   scheduledAt: Date | null
   startDate: Date | null
   endDate: Date | null
+  updatedAt: Date
   equipment: { brand: string; model: string; serialNumber: string }
 }
 
@@ -128,13 +129,25 @@ export async function GET(req: NextRequest) {
   const quickTasksRaw = (await db.serviceTask.findMany({
     where: {
       taskType: 'QUICK',
-      assignedToId: { in: engineerIds },
       deletedAt: null,
       status: { notIn: ['CANCELLED', 'DONE'] },
       ...managerScope,
+      OR: [
+        { assignedToId: { in: engineerIds } },
+        { longTermEngineers: { some: { engineerId: { in: engineerIds } } } },
+      ],
     },
-    select: taskSelect,
-  })) as Array<ScheduleTask & { assignedToId: string | null; createdAt: Date }>
+    select: {
+      ...taskSelect,
+      longTermEngineers: { select: { engineerId: true } },
+    },
+  })) as Array<
+    ScheduleTask & {
+      assignedToId: string | null
+      createdAt: Date
+      longTermEngineers: { engineerId: string }[]
+    }
+  >
 
   const ltStaffLinks = await db.longTermTaskEngineer.findMany({
     where: { engineerId: { in: engineerIds } },
@@ -190,11 +203,16 @@ export async function GET(req: NextRequest) {
   }
 
   for (const task of quickTasksRaw) {
-    if (!task.assignedToId) continue
     const dk = quickCalendarDay(task)
     if (!dateKeyInUtcMonth(dk, monthStart, monthEndEx)) continue
-    const { createdAt: _c, ...payload } = task
-    add(task.assignedToId, dk, payload as ScheduleTask)
+    const { createdAt: _c, longTermEngineers, ...payload } = task
+    const assigneeIds = new Set<string>()
+    if (task.assignedToId) assigneeIds.add(task.assignedToId)
+    for (const r of longTermEngineers) assigneeIds.add(r.engineerId)
+    if (assigneeIds.size === 0) continue
+    for (const eng of assigneeIds) {
+      add(eng, dk, payload as ScheduleTask)
+    }
   }
 
   for (const task of ltTasksRaw) {

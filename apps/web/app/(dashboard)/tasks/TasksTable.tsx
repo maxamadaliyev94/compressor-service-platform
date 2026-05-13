@@ -37,6 +37,23 @@ type TaskRow = {
   assignedTo: { id: string; name: string } | null
   report?: { id: string; clientSignature: string | null } | null
   comment?: string | null
+  longTermEngineers?: { engineer: { id: string; name: string } }[]
+}
+
+function taskCoengineers(t: TaskRow): { engineer: { id: string; name: string } }[] {
+  return t.longTermEngineers ?? []
+}
+
+function taskAssigneeNamesLine(t: TaskRow): string {
+  const co = taskCoengineers(t)
+  if (co.length > 0) return co.map((r) => r.engineer.name).join(', ')
+  return t.assignedTo?.name || ''
+}
+
+function taskPrimaryAssigneeSectionKey(t: TaskRow): string {
+  const co = taskCoengineers(t)
+  if (co.length > 0) return co[0].engineer.id
+  return t.assignedToId || '_none'
 }
 
 type TaskBundle = {
@@ -168,15 +185,16 @@ function sortBundleTasksForDisplay(bundle: TaskBundle): TaskRow[] {
 }
 
 function bundleAssigneeSectionKey(bundle: TaskBundle): string {
-  return getRepresentativeTask(bundle).assignedToId || '_none'
+  return taskPrimaryAssigneeSectionKey(getRepresentativeTask(bundle))
 }
 
 function bundleAssigneeSectionLabel(bundle: TaskBundle, currentUserId: string): string {
   const rep = getRepresentativeTask(bundle)
-  const id = rep.assignedToId || '_none'
+  const id = taskPrimaryAssigneeSectionKey(rep)
   if (id === currentUserId) return 'На мне (распределить / выполнить)'
   if (id === '_none') return 'Без исполнителя'
-  return rep.assignedTo?.name || 'Не назначен'
+  const label = taskAssigneeNamesLine(rep)
+  return label || 'Не назначен'
 }
 
 function bundleStatusKey(bundle: TaskBundle): string {
@@ -186,11 +204,18 @@ function bundleStatusKey(bundle: TaskBundle): string {
 function bundleToExportTask(bundle: TaskBundle): TaskRow {
   const rep = getRepresentativeTask(bundle)
   const sorted = sortBundleTasksForDisplay(bundle)
-  const names = sorted
-    .map((t) => t.assignedTo?.name)
-    .filter(Boolean)
-    .join(', ')
-  const firstId = sorted.find((t) => t.assignedTo)?.assignedTo?.id ?? rep.assignedTo?.id ?? rep.id
+  const names =
+    taskCoengineers(rep).length > 0
+      ? taskAssigneeNamesLine(rep)
+      : sorted
+          .map((t) => t.assignedTo?.name)
+          .filter(Boolean)
+          .join(', ')
+  const firstId =
+    taskCoengineers(rep)[0]?.engineer.id ??
+    sorted.find((t) => t.assignedTo)?.assignedTo?.id ??
+    rep.assignedTo?.id ??
+    rep.id
   return {
     ...rep,
     assignedTo: names ? { id: firstId, name: names } : rep.assignedTo,
@@ -216,9 +241,14 @@ function BundleEngineerCountBadge({ bundle }: { bundle: TaskBundle }) {
     }
   }, [mobileOpen])
 
-  const names = sortBundleTasksForDisplay(bundle)
-    .map((t) => t.assignedTo?.name)
-    .filter((n): n is string => Boolean(n))
+  const rep = getRepresentativeTask(bundle)
+  const co = taskCoengineers(rep)
+  const names =
+    bundle.tasks.length > 1
+      ? sortBundleTasksForDisplay(bundle)
+          .map((t) => t.assignedTo?.name)
+          .filter((n): n is string => Boolean(n))
+      : co.map((r) => r.engineer.name)
 
   const list = (
     <ul className="max-h-48 overflow-y-auto space-y-1 py-0.5">
@@ -249,7 +279,13 @@ function BundleEngineerCountBadge({ bundle }: { bundle: TaskBundle }) {
           }
         }}
       >
-        · {bundle.tasks.length} инж.
+        ·{' '}
+        {bundle.tasks.length > 1
+          ? bundle.tasks.length
+          : co.length > 1
+            ? co.length
+            : bundle.tasks.length}{' '}
+        инж.
       </button>
       <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden min-w-[11rem] max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 shadow-lg md:block md:opacity-0 md:invisible md:shadow-xl md:transition-opacity md:duration-150 md:group-hover/pill:pointer-events-auto md:group-hover/pill:visible md:group-hover/pill:opacity-100">
         {list}
@@ -428,7 +464,9 @@ export default function TasksTable({
       <div className="flex flex-col gap-0.5 min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
           <span className="font-medium text-gray-900 truncate">
-            {rep.assignedTo?.name || <span className="text-gray-400 font-normal">Не назначен</span>}
+            {taskAssigneeNamesLine(rep) || (
+              <span className="text-gray-400 font-normal">Не назначен</span>
+            )}
           </span>
           {multi && bundle.sourceTaskId && rep.id === bundle.sourceTaskId && (
             <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 shrink-0">
@@ -478,7 +516,7 @@ export default function TasksTable({
                   📅 Долгоср.
                 </span>
               )}
-              {multi && <BundleEngineerCountBadge bundle={bundle} />}
+              {(multi || taskCoengineers(rep).length > 1) && <BundleEngineerCountBadge bundle={bundle} />}
             </div>
             <div className="flex flex-col items-end gap-1">
               <span
@@ -583,7 +621,7 @@ export default function TasksTable({
                 </span>
               )}
             </span>
-            {multi && <BundleEngineerCountBadge bundle={bundle} />}
+            {(multi || taskCoengineers(rep).length > 1) && <BundleEngineerCountBadge bundle={bundle} />}
           </div>
         </td>
         <td className="p-3">

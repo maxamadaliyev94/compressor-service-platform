@@ -12,7 +12,13 @@ export async function PATCH(_: Request, { params }: { params: { id: string } }) 
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
-    select: { id: true, assignedToId: true, deletedAt: true, deletedStatus: true },
+    select: {
+      id: true,
+      assignedToId: true,
+      deletedAt: true,
+      deletedStatus: true,
+      longTermEngineers: { select: { engineerId: true } },
+    },
   })
   if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!task.deletedAt) {
@@ -29,12 +35,22 @@ export async function PATCH(_: Request, { params }: { params: { id: string } }) 
     },
   })
 
+  const restoredStatus = task.deletedStatus ?? 'NEW'
+
   if (task.assignedToId) {
-    const restoredStatus = task.deletedStatus ?? 'NEW'
     if (['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'].includes(restoredStatus)) {
       await markEngineerBusy(task.assignedToId)
     } else {
       await syncEngineerFreeIfNoActiveTasks(task.assignedToId)
+    }
+  }
+  if (['NEW', 'ASSIGNED', 'IN_PROGRESS', 'DRAFT', 'REVIEW'].includes(restoredStatus)) {
+    for (const r of task.longTermEngineers) {
+      await markEngineerBusy(r.engineerId)
+    }
+  } else {
+    for (const r of task.longTermEngineers) {
+      await syncEngineerFreeIfNoActiveTasks(r.engineerId)
     }
   }
 

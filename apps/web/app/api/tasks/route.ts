@@ -98,7 +98,6 @@ export async function POST(req: NextRequest) {
 
   /** Формат «быстрая / долгосрочная» задаёт только главный инженер на странице задачи, не при создании. */
   const taskType = 'QUICK' as const
-  const managedByChiefId = null
 
   const createdByUser = await db.user.findUnique({ where: { id: creator.id } })
   const createdTasks = []
@@ -114,7 +113,7 @@ export async function POST(req: NextRequest) {
         assignedToId: null,
         type: body.type,
         taskType,
-        managedByChiefId,
+        managedByChiefId: null,
         priority: body.priority || 'MEDIUM',
         status: 'NEW',
         scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
@@ -122,25 +121,52 @@ export async function POST(req: NextRequest) {
       },
     })
     createdTasks.push(task)
+  } else if (targetIds.length === 1) {
+    const assigneeId = targetIds[0]
+    const task = await db.serviceTask.create({
+      data: {
+        requestNumber: nextRequestNumber,
+        equipmentId: body.equipmentId,
+        createdById: creator.id,
+        assignedToId: assigneeId,
+        type: body.type,
+        taskType,
+        managedByChiefId: null,
+        priority: body.priority || 'MEDIUM',
+        status: 'ASSIGNED',
+        scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+        comment: body.comment || null,
+      },
+    })
+    createdTasks.push(task)
+    await markEngineerBusy(assigneeId)
+    const assignedUser = assignees?.find((user) => user.id === assigneeId)
+    if (assignedUser && createdByUser) {
+      await notifyTaskAssigned(task, assignedUser, createdByUser)
+    }
   } else {
-    const groupedRequestNumber = targetIds.length > 1 ? nextRequestNumber : nextRequestNumber
-    for (const assigneeId of targetIds) {
-      const task = await db.serviceTask.create({
-        data: {
-          requestNumber: groupedRequestNumber,
-          equipmentId: body.equipmentId,
-          createdById: creator.id,
-          assignedToId: assigneeId,
-          type: body.type,
-          taskType,
-          managedByChiefId,
-          priority: body.priority || 'MEDIUM',
-          status: 'ASSIGNED',
-          scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
-          comment: body.comment || null,
+    /** Несколько инженеров: одна заявка, соисполнители в long_term_task_engineers, один акт при закрытии. */
+    const managedByChiefId = role === 'CHIEF_ENGINEER' ? creator.id : null
+    const task = await db.serviceTask.create({
+      data: {
+        requestNumber: nextRequestNumber,
+        equipmentId: body.equipmentId,
+        createdById: creator.id,
+        assignedToId: null,
+        type: body.type,
+        taskType,
+        managedByChiefId,
+        priority: body.priority || 'MEDIUM',
+        status: 'ASSIGNED',
+        scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+        comment: body.comment || null,
+        longTermEngineers: {
+          create: targetIds.map((engineerId) => ({ engineerId, participationStatus: 'ASSIGNED' as const })),
         },
-      })
-      createdTasks.push(task)
+      },
+    })
+    createdTasks.push(task)
+    for (const assigneeId of targetIds) {
       await markEngineerBusy(assigneeId)
       const assignedUser = assignees?.find((user) => user.id === assigneeId)
       if (assignedUser && createdByUser) {

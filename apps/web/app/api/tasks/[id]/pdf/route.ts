@@ -36,10 +36,23 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const eq = task.equipment
   const client = eq.object.branch.client
   const report = task.report
-  const engineerName =
-    task.taskType === 'LONG_TERM' && report?.engineer?.name
-      ? report.engineer.name
-      : task.assignedTo?.name || '—'
+  const rawParticipants = report?.participantEngineerIds
+  const participantIds = Array.isArray(rawParticipants)
+    ? rawParticipants.filter((x): x is string => typeof x === 'string')
+    : []
+  let engineerName = '—'
+  if (participantIds.length > 0) {
+    const users = await db.user.findMany({
+      where: { id: { in: participantIds } },
+      select: { name: true },
+      orderBy: { name: 'asc' },
+    })
+    engineerName = users.map((u) => u.name).join(', ') || '—'
+  } else if (task.taskType === 'LONG_TERM' && report?.engineer?.name) {
+    engineerName = report.engineer.name
+  } else if (task.assignedTo?.name) {
+    engineerName = task.assignedTo.name
+  }
   const clientSignerName = client.contactPerson?.trim() || client.name || '—'
 
   const checkedItems = report?.checklistItems?.filter((item) => item.checked) ?? []

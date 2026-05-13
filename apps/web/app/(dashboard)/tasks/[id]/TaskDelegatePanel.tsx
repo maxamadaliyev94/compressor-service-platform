@@ -11,6 +11,7 @@ type DelegatedChild = {
   status: string
   assignedToId: string | null
   assignedTo: { id: string; name: string } | null
+  isLegacyChild?: boolean
 }
 
 export default function TaskDelegatePanel({
@@ -93,7 +94,7 @@ export default function TaskDelegatePanel({
       alert('Выберите инженеров, которые ещё не назначены на эту заявку')
       return
     }
-    if (!confirm(`Создать ${toAssign.length} задач(и) для выбранных инженеров?`)) return
+    if (!confirm(`Добавить ${toAssign.length} инженер(а) к заявке? Одна заявка, один акт при закрытии.`)) return
     setLoading(true)
     const res = await fetch(`/api/tasks/${taskId}/delegate`, {
       method: 'POST',
@@ -123,8 +124,8 @@ export default function TaskDelegatePanel({
     <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 mb-6">
       <h2 className="font-semibold text-indigo-900 mb-1">Распределить инженерам</h2>
       <p className="text-sm text-indigo-800 mb-3">
-        Выберите одного или нескольких инженеров. Для каждого будет создана отдельная задача, эта заявка будет закрыта
-        как «распределённая».
+        Выберите одного или нескольких инженеров. Заявка остаётся одной: соисполнители вносятся в список исполнителей,
+        акт один на всю заявку.
       </p>
       {!hasScheduledAt && (
         <p className="text-sm text-amber-700 mb-3">
