@@ -109,9 +109,16 @@ export default async function MapPage() {
     <div className="p-4 md:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Карта клиентов</h1>
-        <p className="text-sm text-gray-500 mt-1">Узбекистан — филиалы с координатами и города по геолокации / карточке клиента</p>
+        <p className="text-sm text-gray-500 mt-1">
+          Узбекистан — Яндекс.Карты; филиалы с координатами и города по геолокации / карточке клиента
+        </p>
       </div>
-      <MapView cityData={cityData} clients={clients} branchPoints={branchPoints} />
+      <MapView
+        cityData={cityData}
+        clients={clients}
+        branchPoints={branchPoints}
+        yandexMapsApiKey={process.env.YANDEX_MAPS_API_KEY ?? ''}
+      />
     </div>
   )
 }

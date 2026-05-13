@@ -1,8 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 
-const LeafletMap = dynamic(() => import('./LeafletMap'), {
+const YandexMap = dynamic(() => import('./YandexMap'), {
   ssr: false,
   loading: () => (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -11,7 +11,7 @@ const LeafletMap = dynamic(() => import('./LeafletMap'), {
         <div>Загрузка карты...</div>
       </div>
     </div>
-  )
+  ),
 })
 
 const STATUS_COLORS: Record<string, string> = {
@@ -23,7 +23,17 @@ const STATUS_LABELS: Record<string, string> = {
   PASSIVE: 'Пассивный',
 }
 
-export default function MapView({ cityData, clients, branchPoints }: { cityData: any[], clients: any[], branchPoints: any[] }) {
+export default function MapView({
+  cityData,
+  clients,
+  branchPoints,
+  yandexMapsApiKey,
+}: {
+  cityData: any[]
+  clients: any[]
+  branchPoints: any[]
+  yandexMapsApiKey: string
+}) {
   const [selected, setSelected] = useState<any>(null)
   const [selectedCity, setSelectedCity] = useState<string>('ALL')
   const maxClients = Math.max(...cityData.map((c: any) => c.total), 1)
@@ -31,21 +41,24 @@ export default function MapView({ cityData, clients, branchPoints }: { cityData:
   const filteredBranchPoints =
     selectedCity === 'ALL' ? branchPoints : branchPoints.filter((point: any) => point.city === selectedCity)
 
+  const handleMapCityClick = useCallback((data: any) => {
+    setSelected(data)
+    setSelectedCity(data?.city || 'ALL')
+  }, [])
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
       <div className="xl:col-span-2">
         <div className="bg-white border rounded-xl overflow-hidden h-[360px] sm:h-[420px] md:h-[560px]">
-          <LeafletMap
+          <YandexMap
+            apiKey={yandexMapsApiKey}
             cityData={cityData}
             branchPoints={filteredBranchPoints}
-            onCityClick={(data) => {
-              setSelected(data)
-              setSelectedCity(data?.city || 'ALL')
-            }}
+            onCityClick={handleMapCityClick}
           />
         </div>
         <p className="text-xs text-gray-400 mt-2 text-center">
-          Карта интерактивна — можно зумировать и перемещать. Нажмите на маркер для деталей.
+          Карта Яндекса — зум и перемещение; круги городов и маркеры филиалов. Нажмите на объект для деталей.
         </p>
       </div>
 
