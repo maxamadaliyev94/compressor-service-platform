@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { prismaWhereManagerTasks } from '@/lib/api-access'
+import { TASK_TYPE_LABELS, type TaskType } from '@csp/shared'
 import { requirePermission } from '@/lib/permissions'
 import { redirect, notFound } from 'next/navigation'
 
@@ -194,7 +195,9 @@ export default async function EngineerReportPage({
                       {task.completedAt ? new Date(task.completedAt).toLocaleDateString('ru-RU') : '—'}
                     </td>
                     <td className="p-3">{task.requestNumber}</td>
-                    <td className="p-3">{task.type}</td>
+                    <td className="p-3">
+                      {TASK_TYPE_LABELS[task.type as TaskType] ?? task.type}
+                    </td>
                     <td className="p-3">
                       {task.equipment.brand} {task.equipment.model} ({task.equipment.serialNumber})
                     </td>

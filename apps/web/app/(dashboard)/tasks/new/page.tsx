@@ -76,6 +76,7 @@ export default function NewTaskPage() {
             eq.model,
             eq.serialNumber,
             eq.object?.branch?.client?.name,
+            eq.object?.branch?.name,
             eq.object?.name,
             eq.object?.branch?.address,
           ]

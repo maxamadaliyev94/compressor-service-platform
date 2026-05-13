@@ -87,15 +87,6 @@ export default function SearchableEquipment({
   }
 
   function getCity(eq: any) {
-    const branchCity = eq.object?.branch?.city
-    if (typeof branchCity === 'string' && branchCity.trim().length > 0) return branchCity.trim()
-
-    const objectName = eq.object?.name
-    if (typeof objectName === 'string' && objectName.trim().length > 0) return objectName.trim()
-
-    const branchName = eq.object?.branch?.name
-    if (typeof branchName === 'string' && branchName.trim().length > 0) return branchName.trim()
-
     const clientCity = eq.object?.branch?.client?.city
     return typeof clientCity === 'string' && clientCity.trim().length > 0 ? clientCity.trim() : 'Без города'
   }
@@ -141,7 +132,9 @@ export default function SearchableEquipment({
       eq.brand.toLowerCase().includes(q) ||
       eq.model.toLowerCase().includes(q) ||
       eq.serialNumber.toLowerCase().includes(q) ||
-      eq.object?.branch?.client?.name?.toLowerCase().includes(q)
+      eq.object?.branch?.client?.name?.toLowerCase().includes(q) ||
+      eq.object?.branch?.name?.toLowerCase().includes(q) ||
+      eq.object?.name?.toLowerCase().includes(q)
     const matchStatus = filterStatus === 'ALL' || ms === filterStatus
     const matchType = filterType === 'ALL' || eq.type === filterType
     const matchWarranty =
@@ -437,7 +430,14 @@ export default function SearchableEquipment({
               <div className="mt-2 space-y-1.5 text-xs">
                 <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Тип</span><span className="text-gray-700">{typeLabels[eq.type]}</span></div>
                 <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Клиент</span><span className="text-gray-700 text-right">{eq.object?.branch?.client?.name || '—'}</span></div>
-                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Объект</span><span className="text-gray-700 text-right">{eq.object?.name || '—'}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Филиал</span><span className="text-gray-700 text-right">{eq.object?.branch?.name || '—'}</span></div>
+                {eq.object?.name &&
+                  eq.object.name.trim() !== (eq.object?.branch?.name || '').trim() && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-500">Площадка</span>
+                      <span className="text-gray-700 text-right">{eq.object.name}</span>
+                    </div>
+                  )}
                 <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Моточасы</span><span className="text-gray-700">{eq.currentHours} м/ч</span></div>
                 {eq.lastServiceDate && (
                   <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Последнее ТО</span><span className="text-gray-700">{new Date(eq.lastServiceDate).toLocaleDateString('ru-RU')}</span></div>
@@ -474,7 +474,7 @@ export default function SearchableEquipment({
             <tr>
               <th className="text-left p-3 font-medium">Оборудование</th>
               <th className="text-left p-3 font-medium">Тип</th>
-              <th className="text-left p-3 font-medium">Клиент / Объект</th>
+              <th className="text-left p-3 font-medium">Клиент / Филиал</th>
               <th className="text-left p-3 font-medium">
                 <button
                   type="button"
@@ -532,7 +532,11 @@ export default function SearchableEquipment({
                   <td className="p-3 text-gray-600">{typeLabels[eq.type]}</td>
                   <td className="p-3">
                     <div>{eq.object?.branch?.client?.name}</div>
-                    <div className="text-xs text-gray-500">{eq.object?.name}</div>
+                    <div className="text-xs text-gray-500">{eq.object?.branch?.name || '—'}</div>
+                    {eq.object?.name &&
+                      eq.object.name.trim() !== (eq.object?.branch?.name || '').trim() && (
+                        <div className="text-xs text-gray-400">{eq.object.name}</div>
+                      )}
                   </td>
                   <td className="p-3" style={{ minWidth: '160px' }}>
                     <div className="space-y-1.5">

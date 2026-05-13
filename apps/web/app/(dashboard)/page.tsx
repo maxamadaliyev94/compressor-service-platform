@@ -95,7 +95,11 @@ export default async function DashboardPage() {
                       <div className="text-sm text-gray-600 mb-1">🏭 {client.name}</div>
                       <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                         <span>
-                          📍 {eq.object.name}, {eq.object.branch.name}
+                          📍{' '}
+                          {eq.object.branch.name}
+                          {eq.object.name.trim() !== eq.object.branch.name.trim()
+                            ? `, ${eq.object.name}`
+                            : ''}
                         </span>
                         {eq.object.branch.address && <span>{eq.object.branch.address}</span>}
                         {client.phone && (

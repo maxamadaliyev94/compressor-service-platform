@@ -12,6 +12,7 @@ import TaskScheduledAtEditor from './TaskScheduledAtEditor'
 import TaskLongTermDatesEditor from './TaskLongTermDatesEditor'
 import ClientSignaturePanel from './ClientSignaturePanel'
 import type { Role } from '@prisma/client'
+import { formatMapSearchAddress } from '@/lib/location-display'
 
 const typeLabels: Record<string, string> = {
   PLANNED_MAINTENANCE: 'Плановое ТО', DIAGNOSTICS: 'Диагностика',
@@ -148,7 +149,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
 
   const eq = task.equipment
   const branch = eq.object.branch
-  const destinationText = [client.city, branch.address, eq.object.name, client.name].filter(Boolean).join(', ')
+  const destinationText = formatMapSearchAddress({
+    clientCity: client.city,
+    branchAddress: branch.address,
+    branchName: branch.name,
+    objectName: eq.object.name,
+    clientName: client.name,
+  })
   const yandexRouteUrl =
     branch.latitude !== null && branch.longitude !== null
       ? `https://yandex.ru/maps/?mode=routes&rtext=~${branch.latitude},${branch.longitude}&rtt=auto`
@@ -351,7 +358,10 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                 </a>
               )}
             </div>
-            <div className="flex gap-2"><span className="text-gray-500 w-28">Объект:</span><span>{eq.object.name}</span></div>
+            <div className="flex gap-2"><span className="text-gray-500 w-28">Филиал:</span><span>{branch.name}</span></div>
+            {eq.object.name.trim() !== branch.name.trim() && (
+              <div className="flex gap-2"><span className="text-gray-500 w-28">Площадка:</span><span>{eq.object.name}</span></div>
+            )}
             <div className="flex gap-2"><span className="text-gray-500 w-28">Адрес:</span><span>{branch.address || 'Не указан'}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Моточасы:</span><span>{eq.currentHours} м/ч</span></div>
           </div>

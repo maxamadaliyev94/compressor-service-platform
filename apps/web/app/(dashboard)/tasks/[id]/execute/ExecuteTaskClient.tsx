@@ -24,6 +24,7 @@ import {
   validDiagnosticsActionsForLabel,
 } from '@/lib/checklist-diagnostics'
 import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
+import { objectNameIfDistinctFromBranch } from '@/lib/location-display'
 
 type TaskWithRelations = ServiceTask & {
   equipment: Equipment & {
@@ -519,8 +520,16 @@ export default function ExecuteTaskClient({
                 <span className="text-gray-500">Клиент:</span> <strong>{client.name}</strong>
               </div>
               <div>
-                <span className="text-gray-500">Объект:</span> {eq.object.name}
+                <span className="text-gray-500">Филиал:</span> {eq.object.branch.name}
               </div>
+              {(() => {
+                const siteName = objectNameIfDistinctFromBranch(eq.object.branch.name, eq.object.name)
+                return siteName ? (
+                  <div>
+                    <span className="text-gray-500">Площадка:</span> {siteName}
+                  </div>
+                ) : null
+              })()}
               <div>
                 <span className="text-gray-500">Адрес:</span>{' '}
                 {eq.object.branch.address || eq.object.branch.name}

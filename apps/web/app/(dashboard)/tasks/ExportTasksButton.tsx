@@ -18,6 +18,7 @@ type ExportTask = {
     object: {
       name: string
       branch: {
+        name: string
         client: { name: string; city: string | null }
       }
     }
@@ -41,7 +42,8 @@ export default function ExportTasksButton({
       Тип: typeLabels[t.type] || t.type,
       Оборудование: `${t.equipment.brand} ${t.equipment.model}`.trim(),
       'Серийный №': t.equipment.serialNumber || '',
-      Объект: t.equipment.object.name,
+      Филиал: t.equipment.object.branch.name,
+      'Площадка / цех': t.equipment.object.name,
       Клиент: t.equipment.object.branch.client.name,
       Город: t.equipment.object.branch.client.city || '',
       Инженер: t.assignedTo?.name || 'Не назначен',
@@ -59,6 +61,7 @@ export default function ExportTasksButton({
       { wch: 28 },
       { wch: 14 },
       { wch: 22 },
+      { wch: 18 },
       { wch: 26 },
       { wch: 14 },
       { wch: 22 },

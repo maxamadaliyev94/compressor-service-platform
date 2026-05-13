@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { canReadTask, type AuthedSession } from '@/lib/api-access'
 import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
+import { objectNameIfDistinctFromBranch } from '@/lib/location-display'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await auth()
@@ -35,6 +36,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const eq = task.equipment
   const client = eq.object.branch.client
+  const branchNamePdf = esc(eq.object.branch.name)
+  const distinctObjectPdf = objectNameIfDistinctFromBranch(eq.object.branch.name, eq.object.name)
+  const distinctObjectPdfEsc = distinctObjectPdf ? esc(distinctObjectPdf) : ''
   const report = task.report
   const rawParticipants = report?.participantEngineerIds
   const participantIds = Array.isArray(rawParticipants)
@@ -165,7 +169,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     <div class="field"><div class="label">Компания</div><div class="value">${client.name}</div></div>
     <div class="field"><div class="label">Контактное лицо</div><div class="value">${client.contactPerson || '—'}</div></div>
     <div class="field"><div class="label">Телефон</div><div class="value">${client.phone || '—'}</div></div>
-    <div class="field"><div class="label">Объект</div><div class="value">${eq.object.name}, ${eq.object.branch.name}</div></div>
+    <div class="field"><div class="label">Филиал</div><div class="value">${branchNamePdf}</div></div>
+    ${
+      distinctObjectPdfEsc
+        ? `<div class="field"><div class="label">Площадка / цех</div><div class="value">${distinctObjectPdfEsc}</div></div>`
+        : ''
+    }
     <div class="field"><div class="label">Адрес</div><div class="value">${eq.object.branch.address || '—'}</div></div>
   </div>
 </div>

@@ -7,6 +7,7 @@ import {
   isTaskEndDateOverdue,
   taskCalendarAnchorDate,
 } from '@/lib/task-schedule-display'
+import { formatMapSearchAddress } from '@/lib/location-display'
 
 type TaskRow = {
   id: string
@@ -27,6 +28,7 @@ type TaskRow = {
     object: {
       name: string
       branch: {
+        name: string
         address: string | null
         latitude: number | null
         longitude: number | null
@@ -412,9 +414,13 @@ export default function TasksTable({
     if (branch.latitude !== null && branch.longitude !== null) {
       return `https://yandex.ru/maps/?mode=routes&rtext=~${branch.latitude},${branch.longitude}&rtt=auto`
     }
-    const destinationText = [branch.client.city, branch.address, task.equipment.object.name, branch.client.name]
-      .filter(Boolean)
-      .join(', ')
+    const destinationText = formatMapSearchAddress({
+      clientCity: branch.client.city,
+      branchAddress: branch.address,
+      branchName: branch.name,
+      objectName: task.equipment.object.name,
+      clientName: branch.client.name,
+    })
     return `https://yandex.ru/maps/?text=${encodeURIComponent(destinationText)}`
   }
 
@@ -535,7 +541,10 @@ export default function TasksTable({
             {rep.equipment.brand} {rep.equipment.model}
           </div>
           <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
-          <div className="mt-2 text-xs text-gray-600">Клиент: {rep.equipment.object.branch.client.name}</div>
+          <div className="mt-2 text-xs text-gray-600">
+            Клиент: {rep.equipment.object.branch.client.name}
+            <div className="text-gray-500 font-normal">{rep.equipment.object.branch.name}</div>
+          </div>
           <div className="mt-1 text-xs text-gray-700 space-y-0.5">
             <div className="font-medium text-gray-800">Инженеры</div>
             {renderEngineersCell(bundle)}
@@ -630,7 +639,10 @@ export default function TasksTable({
           </div>
           <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
         </td>
-        <td className="p-3 text-gray-600">{rep.equipment.object.branch.client.name}</td>
+        <td className="p-3 text-gray-600">
+          <div>{rep.equipment.object.branch.client.name}</div>
+          <div className="text-xs text-gray-500">{rep.equipment.object.branch.name}</div>
+        </td>
         <td className="p-3 text-gray-600 max-w-[14rem]">{renderEngineersCell(bundle)}</td>
         <td className={`p-3 ${isTaskEndDateOverdue(rep) ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
           {formatTaskScheduleRangeRu(rep)}
@@ -852,7 +864,7 @@ export default function TasksTable({
               <tr>
                 <th className="text-left p-3 font-medium">Тип</th>
                 <th className="text-left p-3 font-medium">Оборудование</th>
-                <th className="text-left p-3 font-medium">Клиент</th>
+                <th className="text-left p-3 font-medium">Клиент / филиал</th>
                 <th className="text-left p-3 font-medium">Инженер</th>
                 <th className="text-left p-3 font-medium">Срок</th>
                 <th className="text-left p-3 font-medium">Статус</th>

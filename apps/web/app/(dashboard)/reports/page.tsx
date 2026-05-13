@@ -5,6 +5,21 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { prismaWhereManagerEquipment, prismaWhereManagerTasks } from '@/lib/api-access'
 
+/** Участие инженера в задаче (как в /reports/engineers/[id]): основной исполнитель, состав бригады или автор акта. */
+function engineerParticipatesInTask(
+  task: {
+    assignedToId: string | null
+    longTermEngineers: { engineerId: string }[]
+    report: { engineerId: string } | null
+  },
+  engineerId: string
+): boolean {
+  if (task.assignedToId === engineerId) return true
+  if (task.longTermEngineers.some((r) => r.engineerId === engineerId)) return true
+  if (task.report?.engineerId === engineerId) return true
+  return false
+}
+
 export default async function ReportsPage() {
   await requirePermission('section:reports')
   const session = await auth()
@@ -14,7 +29,7 @@ export default async function ReportsPage() {
   const managerId = session.user.id
 
   const equipmentWhere = isManager ? prismaWhereManagerEquipment(managerId) : undefined
-  const taskWhereBase = { deletedAt: null as const, ...(isManager ? prismaWhereManagerTasks(managerId) : {}) }
+  const taskWhereBase = { deletedAt: null, ...(isManager ? prismaWhereManagerTasks(managerId) : {}) }
 
   const [
     totalEquipment,
@@ -39,7 +54,12 @@ export default async function ReportsPage() {
     }),
     db.serviceTask.findMany({
       where: taskWhereBase,
-      include: { assignedTo: true, equipment: true },
+      include: {
+        assignedTo: true,
+        equipment: true,
+        longTermEngineers: { select: { engineerId: true } },
+        report: { select: { engineerId: true } },
+      },
       orderBy: { createdAt: 'desc' },
     }),
     db.user.findMany({
@@ -48,12 +68,36 @@ export default async function ReportsPage() {
         isActive: true,
         ...(isManager
           ? {
-              assignedTasks: {
-                some: {
-                  deletedAt: null,
-                  ...prismaWhereManagerTasks(managerId),
+              OR: [
+                {
+                  assignedTasks: {
+                    some: {
+                      deletedAt: null,
+                      ...prismaWhereManagerTasks(managerId),
+                    },
+                  },
                 },
-              },
+                {
+                  longTermTaskAssignments: {
+                    some: {
+                      task: {
+                        deletedAt: null,
+                        ...prismaWhereManagerTasks(managerId),
+                      },
+                    },
+                  },
+                },
+                {
+                  workReports: {
+                    some: {
+                      task: {
+                        deletedAt: null,
+                        ...prismaWhereManagerTasks(managerId),
+                      },
+                    },
+                  },
+                },
+              ],
             }
           : {}),
       },
@@ -115,7 +159,7 @@ export default async function ReportsPage() {
   // Статистика инженеров
   const engineerStats = engineers
     .map((eng) => {
-      const engTasks = allTasks.filter((t) => t.assignedToId === eng.id)
+      const engTasks = allTasks.filter((t) => engineerParticipatesInTask(t, eng.id))
       const doneEngTasks = engTasks.filter((t) => t.status === 'DONE')
       return {
         ...eng,

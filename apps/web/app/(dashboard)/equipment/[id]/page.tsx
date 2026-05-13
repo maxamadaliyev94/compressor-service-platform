@@ -183,7 +183,10 @@ export default async function EquipmentPage({ params }: { params: { id: string }
                 {client.email && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Email:</span>
                   <a href={`mailto:${client.email}`} className="text-blue-600 hover:underline truncate">{client.email}</a>
                 </div>}
-                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Объект:</span><span>{eq.object.name}</span></div>
+                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Филиал:</span><span>{eq.object.branch.name}</span></div>
+                {eq.object.name.trim() !== eq.object.branch.name.trim() && (
+                  <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Площадка:</span><span>{eq.object.name}</span></div>
+                )}
                 {eq.object.branch.address && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Адрес:</span><span className="text-xs break-words">{eq.object.branch.address}</span></div>}
               </div>
             </div>
