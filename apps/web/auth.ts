@@ -5,10 +5,28 @@ import { isGloballyActive } from '@/lib/app-settings'
 import bcrypt from 'bcryptjs'
 
 const JWT_RECHECK_MS = 30_000
+/** 30 суток в секундах — срок JWT и cookie сессии (Auth.js / NextAuth). */
+const SESSION_MAX_AGE_SEC = 2592000
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
-  session: { strategy: 'jwt' },
+  session: {
+    strategy: 'jwt',
+    maxAge: SESSION_MAX_AGE_SEC,
+    /** Как часто обновлять запись сессии (не влияет на «выкидывание» при JWT). */
+    updateAge: 24 * 60 * 60,
+  },
+  /** Срок зашифрованного JWE в cookie — должен совпадать с session.maxAge. */
+  jwt: {
+    maxAge: SESSION_MAX_AGE_SEC,
+  },
+  cookies: {
+    sessionToken: {
+      options: {
+        maxAge: SESSION_MAX_AGE_SEC,
+      },
+    },
+  },
   pages: {
     signIn: '/login',
   },
@@ -19,6 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id
         token.clientId = (user as { clientId?: string | null }).clientId ?? null
         token.lastValidityCheck = Date.now()
+        token.exp = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SEC
         return token
       }
       const id = token.id as string | undefined
@@ -28,11 +47,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (Date.now() - last < JWT_RECHECK_MS) return token
       token.lastValidityCheck = Date.now()
 
-      const u = await db.user.findUnique({
-        where: { id },
-        select: { isActive: true, loginSuspendedByAdmin: true, sessionInvalidatedAt: true },
-      })
-      if (!u?.isActive || u.loginSuspendedByAdmin) {
+      let u: {
+        isActive: boolean
+        loginSuspendedByAdmin: boolean
+        sessionInvalidatedAt: Date | null
+      } | null
+      try {
+        u = await db.user.findUnique({
+          where: { id },
+          select: { isActive: true, loginSuspendedByAdmin: true, sessionInvalidatedAt: true },
+        })
+      } catch {
+        return token
+      }
+      if (!u) return token
+
+      if (!u.isActive || u.loginSuspendedByAdmin) {
         return { ...token, exp: Math.floor(Date.now() / 1000) - 3600 }
       }
       const iatSec = token.iat as number | undefined
