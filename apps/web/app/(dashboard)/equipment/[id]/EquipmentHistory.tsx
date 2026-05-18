@@ -40,32 +40,56 @@ export default function EquipmentHistory({ equipmentId }: { equipmentId: string 
   const [loading, setLoading] = useState(true)
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadHistory()
   }, [equipmentId])
 
   async function loadHistory() {
-    const res = await fetch(`/api/equipment/${equipmentId}/history`)
-    const data = await res.json()
-    setLogs(data)
-    setLoading(false)
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/equipment/${equipmentId}/history`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.error || 'Не удалось загрузить историю')
+        setLogs([])
+        return
+      }
+      const data = await res.json()
+      setLogs(Array.isArray(data) ? data : [])
+    } catch {
+      setError('Не удалось загрузить историю')
+      setLogs([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function addComment() {
     if (!comment.trim()) return
     setSending(true)
-    const res = await fetch(`/api/equipment/${equipmentId}/comment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comment })
-    })
-    if (res.ok) {
+    setError(null)
+    try {
+      const res = await fetch(`/api/equipment/${equipmentId}/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: comment.trim() }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.error || 'Не удалось сохранить комментарий')
+        return
+      }
       const newLog = await res.json()
       setLogs(prev => [newLog, ...prev])
       setComment('')
+    } catch {
+      setError('Не удалось сохранить комментарий')
+    } finally {
+      setSending(false)
     }
-    setSending(false)
   }
 
   return (
@@ -88,6 +112,9 @@ export default function EquipmentHistory({ equipmentId }: { equipmentId: string 
           className="mt-2 w-full bg-purple-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50">
           {sending ? 'Отправка...' : '💬 Добавить комментарий'}
         </button>
+        {error && (
+          <p className="mt-2 text-xs text-red-600">{error}</p>
+        )}
       </div>
 
       <div className="overflow-y-auto" style={{ maxHeight: '600px' }}>
