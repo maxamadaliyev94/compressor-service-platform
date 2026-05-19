@@ -6,6 +6,7 @@ const actionLabels: Record<string, { label: string; icon: string; color: string 
   UPDATE_HOURS:  { label: 'Моточасы',           icon: '⏱',  color: 'bg-blue-100 text-blue-700' },
   UPDATE:        { label: 'Изменено',            icon: '✏️', color: 'bg-yellow-100 text-yellow-700' },
   COMMENT:       { label: 'Комментарий',         icon: '💬', color: 'bg-purple-100 text-purple-700' },
+  TRANSFER:      { label: 'Перенос',             icon: '↔',  color: 'bg-indigo-100 text-indigo-700' },
   DELETE:        { label: 'Удалено',             icon: '✕',  color: 'bg-red-100 text-red-700' },
 }
 
@@ -130,6 +131,7 @@ export default function EquipmentHistory({ equipmentId }: { equipmentId: string 
         {logs.map((log) => {
           const action = actionLabels[log.action] || { label: log.action, icon: 'ℹ️', color: 'bg-gray-100 text-gray-700' }
           const isHours = log.action === 'UPDATE_HOURS'
+          const isTransfer = log.action === 'TRANSFER'
           const oldH = log.oldValue ? parseInt(log.oldValue) : null
           const newH = log.newValue ? parseInt(log.newValue) : null
           const diff = (oldH !== null && newH !== null) ? newH - oldH : null
@@ -157,6 +159,14 @@ export default function EquipmentHistory({ equipmentId }: { equipmentId: string 
                         {diff >= 0 ? `+${diff}` : diff}
                       </span>
                     )}
+                  </div>
+                )}
+
+                {isTransfer && log.oldValue && log.newValue && (
+                  <div className="text-xs text-gray-600 mb-1">
+                    <span className="line-through">{log.oldValue}</span>
+                    <span className="mx-1">→</span>
+                    <span className="font-medium text-gray-800">{log.newValue}</span>
                   </div>
                 )}
 

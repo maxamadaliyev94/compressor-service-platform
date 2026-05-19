@@ -11,6 +11,11 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
     brand: equipment.brand ?? '',
     model: equipment.model ?? '',
     serialNumber: equipment.serialNumber ?? '',
+    yearOfManufacture:
+      equipment.yearOfManufacture != null ? String(equipment.yearOfManufacture) : '',
+    installDate: equipment.installDate
+      ? new Date(equipment.installDate).toISOString().slice(0, 10)
+      : '',
     currentHours: String(equipment.currentHours ?? 0),
     nextServiceHours: equipment.nextServiceHours != null ? String(equipment.nextServiceHours) : '',
     warrantyUntil: equipment.warrantyUntil ? new Date(equipment.warrantyUntil).toISOString().slice(0, 10) : '',
@@ -37,6 +42,8 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
           ...form,
           currentHours: Number(form.currentHours) || 0,
           nextServiceHours: form.nextServiceHours === '' ? null : Number(form.nextServiceHours),
+          yearOfManufacture: form.yearOfManufacture === '' ? null : form.yearOfManufacture,
+          installDate: form.installDate || null,
           warrantyUntil: form.warrantyUntil || null,
           pressureBar: form.pressureBar.trim() === '' ? null : Number(form.pressureBar.replace(',', '.')),
         }),
@@ -93,6 +100,30 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
       <div>
         <label className="block text-sm font-medium mb-1">Серийный номер</label>
         <input value={form.serialNumber} onChange={(e) => set('serialNumber', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Год выпуска</label>
+          <input
+            type="number"
+            min={1970}
+            max={2100}
+            value={form.yearOfManufacture}
+            onChange={(e) => set('yearOfManufacture', e.target.value)}
+            placeholder="Необязательно"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Дата установки</label>
+          <input
+            type="date"
+            value={form.installDate}
+            onChange={(e) => set('installDate', e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

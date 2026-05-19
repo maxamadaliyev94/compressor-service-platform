@@ -7,6 +7,7 @@ import EquipmentHistory from './EquipmentHistory'
 import QuickTaskButton from './QuickTaskButton'
 import EquipmentPhotosEditor from './EquipmentPhotosEditor'
 import EquipmentTechnicalData from './EquipmentTechnicalData'
+import TransferEquipmentBranch from './TransferEquipmentBranch'
 import EquipmentMaintenanceHistory from './EquipmentMaintenanceHistory'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
@@ -183,7 +184,18 @@ export default async function EquipmentPage({ params }: { params: { id: string }
                 {client.email && <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Email:</span>
                   <a href={`mailto:${client.email}`} className="text-blue-600 hover:underline truncate">{client.email}</a>
                 </div>}
-                <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Филиал:</span><span>{eq.object.branch.name}</span></div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-gray-500 w-24">Филиал:</span>
+                  <span>{eq.object.branch.name}</span>
+                  {!isClientPortal && (role === 'ADMIN' || role === 'MANAGER') && (
+                    <TransferEquipmentBranch
+                      equipmentId={eq.id}
+                      currentClientId={client.id}
+                      currentBranchId={eq.object.branch.id}
+                      currentBranchName={eq.object.branch.name}
+                    />
+                  )}
+                </div>
                 {eq.object.name.trim() !== eq.object.branch.name.trim() && (
                   <div className="flex flex-wrap gap-2"><span className="text-gray-500 w-24">Площадка:</span><span>{eq.object.name}</span></div>
                 )}
