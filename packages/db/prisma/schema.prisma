@@ -617,7 +617,8 @@ model MaintenanceRegulation {
   name          String
   equipmentType EquipmentType
   intervalHours Int
-  taskType      TaskType      @default(PLANNED_MAINTENANCE)
+  /// Код типа работы из справочника `WorkTypeRef.code`.
+  taskType      String        @default("PLANNED_MAINTENANCE")
   description   String?
   isActive      Boolean       @default(true)
   createdAt     DateTime      @default(now())
@@ -657,6 +658,19 @@ model EquipmentTypeRef {
   createdAt DateTime @default(now())
 
   @@map("equipment_type_refs")
+}
+
+/// Справочник типов работ (чек-листы, регламенты ТО).
+model WorkTypeRef {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameRu    String
+  isSystem  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("work_type_refs")
 }
 
 model AuditLog {

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { assertActiveWorkTypeCode } from '@/lib/work-types'
 
 export async function GET() {
   const session = await auth()
@@ -27,12 +28,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const body = await req.json()
+  const taskType = String(body.taskType || 'PLANNED_MAINTENANCE')
+  if (!(await assertActiveWorkTypeCode(taskType))) {
+    return NextResponse.json({ error: 'Неизвестный тип работы' }, { status: 400 })
+  }
   const regulation = await db.maintenanceRegulation.create({
     data: {
       name: body.name,
       equipmentType: body.equipmentType || 'COMPRESSOR',
       intervalHours: parseInt(body.intervalHours) || 0,
-      taskType: body.taskType || 'PLANNED_MAINTENANCE',
+      taskType,
       description: body.description || null,
       items: {
         create: (body.items || []).map((item: any, i: number) => ({
@@ -68,6 +73,13 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Regulation id is required' }, { status: 400 })
   }
 
+  if (body.taskType !== undefined) {
+    const taskType = String(body.taskType)
+    if (!(await assertActiveWorkTypeCode(taskType))) {
+      return NextResponse.json({ error: 'Неизвестный тип работы' }, { status: 400 })
+    }
+  }
+
   const updated = await db.$transaction(async (tx) => {
     const regulation = await tx.maintenanceRegulation.update({
       where: { id: body.id },
@@ -76,7 +88,7 @@ export async function PATCH(req: NextRequest) {
         equipmentType: body.equipmentType as any,
         intervalHours:
           body.intervalHours === undefined ? undefined : parseInt(String(body.intervalHours), 10) || 0,
-        taskType: body.taskType as any,
+        taskType: body.taskType === undefined ? undefined : String(body.taskType),
         description: body.description ?? null,
       },
     })

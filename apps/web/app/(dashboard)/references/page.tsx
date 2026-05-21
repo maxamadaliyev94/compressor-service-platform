@@ -6,7 +6,7 @@ export default async function ReferencesPage() {
   const session = await auth()
   const isAdmin = session?.user?.role === 'ADMIN'
 
-  const [equipmentTypes, brands, regulations, cities] = await Promise.all([
+  const [equipmentTypes, brands, regulations, cities, workTypes] = await Promise.all([
     db.equipmentTypeRef.findMany({
       where: { isActive: true },
       orderBy: [{ isSystem: 'desc' }, { nameRu: 'asc' }]
@@ -23,6 +23,10 @@ export default async function ReferencesPage() {
     db.city.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     }),
+    db.workTypeRef.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { nameRu: 'asc' }],
+    }),
   ])
 
   return (
@@ -30,7 +34,7 @@ export default async function ReferencesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Справочники</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Типы, бренды и города используются в формах оборудования и клиентов
+          Типы оборудования, бренды, города и типы работ — в формах и чек-листах
         </p>
       </div>
       <ReferencesClient
@@ -38,6 +42,7 @@ export default async function ReferencesPage() {
         initialBrands={brands}
         initialRegulations={regulations}
         initialCities={cities}
+        initialWorkTypes={workTypes}
         isAdmin={isAdmin}
       />
     </div>

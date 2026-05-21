@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { workTypeLabelMap } from '@/lib/work-types'
 
 type RegulationItem = {
   id?: string
@@ -17,11 +18,20 @@ type Regulation = {
   items: RegulationItem[]
 }
 
+type WorkType = {
+  id: string
+  code: string
+  nameRu: string
+  isSystem: boolean
+  sortOrder: number
+}
+
 interface Props {
   initialTypes: any[]
   initialBrands: any[]
   initialRegulations: Regulation[]
   initialCities: { id: string; name: string; sortOrder: number }[]
+  initialWorkTypes: WorkType[]
   isAdmin: boolean
 }
 
@@ -30,21 +40,33 @@ export default function ReferencesClient({
   initialBrands,
   initialRegulations,
   initialCities,
+  initialWorkTypes,
   isAdmin,
 }: Props) {
   const [types, setTypes] = useState(initialTypes)
   const [brands, setBrands] = useState(initialBrands)
   const [regulations, setRegulations] = useState(initialRegulations)
   const [cities, setCities] = useState(initialCities)
+  const [workTypes, setWorkTypes] = useState(initialWorkTypes)
   const [newType, setNewType] = useState('')
   const [newBrand, setNewBrand] = useState('')
   const [newCity, setNewCity] = useState('')
+  const [newWorkType, setNewWorkType] = useState('')
   const [loadingType, setLoadingType] = useState(false)
   const [loadingBrand, setLoadingBrand] = useState(false)
   const [loadingCity, setLoadingCity] = useState(false)
+  const [loadingWorkType, setLoadingWorkType] = useState(false)
   const [loadingRegulation, setLoadingRegulation] = useState(false)
-  const [activeTab, setActiveTab] = useState<'types' | 'brands' | 'regulations' | 'cities'>('types')
+  const [editingWorkTypeId, setEditingWorkTypeId] = useState<string | null>(null)
+  const [editWorkTypeName, setEditWorkTypeName] = useState('')
+  const [activeTab, setActiveTab] = useState<
+    'types' | 'brands' | 'regulations' | 'cities' | 'workTypes'
+  >('types')
   const [editingRegulationId, setEditingRegulationId] = useState<string | null>(null)
+
+  const taskLabels = useMemo(() => workTypeLabelMap(workTypes), [workTypes])
+  const defaultTaskTypeCode = workTypes[0]?.code ?? 'PLANNED_MAINTENANCE'
+
   const [regulationForm, setRegulationForm] = useState({
     name: '',
     equipmentType: 'COMPRESSOR',
@@ -53,15 +75,6 @@ export default function ReferencesClient({
     description: '',
     itemsText: '',
   })
-
-  const taskLabels: Record<string, string> = {
-    PLANNED_MAINTENANCE: 'Плановое ТО',
-    DIAGNOSTICS: 'Диагностика',
-    WARRANTY_REPAIR: 'Гарантийный ремонт',
-    EMERGENCY: 'Аварийный выезд',
-    INSTALLATION: 'Монтаж',
-    COMMISSIONING: 'Пусконаладка',
-  }
 
   const compressorChecklistItems = [
     'Замена масла',
@@ -140,7 +153,7 @@ export default function ReferencesClient({
     setRegulationForm({
       name: '',
       equipmentType: 'COMPRESSOR',
-      taskType: 'PLANNED_MAINTENANCE',
+      taskType: defaultTaskTypeCode,
       intervalHours: '2000',
       description: '',
       itemsText: '',
@@ -237,7 +250,7 @@ export default function ReferencesClient({
             equipmentType: 'COMPRESSOR',
             taskType: def.taskType,
             intervalHours: def.intervalHours,
-            description: `Чек-лист для этапа: ${taskLabels[def.taskType]}`,
+            description: `Чек-лист для этапа: ${taskLabels[def.taskType] ?? def.taskType}`,
             items: compressorChecklistItems.map((label) => ({ label, isRequired: false })),
           }),
         })
@@ -348,6 +361,78 @@ export default function ReferencesClient({
     setCities((prev) => prev.filter((c) => c.id !== id))
   }
 
+  async function addWorkType() {
+    if (!newWorkType.trim()) return
+    setLoadingWorkType(true)
+    const res = await fetch('/api/work-types', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nameRu: newWorkType.trim() }),
+    })
+    if (res.ok) {
+      const created = (await res.json()) as WorkType
+      setWorkTypes((prev) =>
+        [...prev, created].sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.nameRu.localeCompare(b.nameRu, 'ru'),
+        ),
+      )
+      setNewWorkType('')
+    } else {
+      const data = await res.json()
+      alert(data.error || 'Ошибка')
+    }
+    setLoadingWorkType(false)
+  }
+
+  function startEditWorkType(wt: WorkType) {
+    setEditingWorkTypeId(wt.id)
+    setEditWorkTypeName(wt.nameRu)
+  }
+
+  function cancelEditWorkType() {
+    setEditingWorkTypeId(null)
+    setEditWorkTypeName('')
+  }
+
+  async function saveEditWorkType() {
+    if (!editingWorkTypeId || !editWorkTypeName.trim()) return
+    setLoadingWorkType(true)
+    const res = await fetch('/api/work-types', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editingWorkTypeId, nameRu: editWorkTypeName.trim() }),
+    })
+    if (res.ok) {
+      const updated = (await res.json()) as WorkType
+      setWorkTypes((prev) =>
+        prev
+          .map((w) => (w.id === updated.id ? updated : w))
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.nameRu.localeCompare(b.nameRu, 'ru')),
+      )
+      cancelEditWorkType()
+    } else {
+      const data = await res.json()
+      alert(data.error || 'Не удалось сохранить')
+    }
+    setLoadingWorkType(false)
+  }
+
+  async function deleteWorkType(id: string) {
+    if (!confirm('Удалить этот тип работы?')) return
+    const res = await fetch('/api/work-types', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert((data as { error?: string }).error || 'Не удалось удалить')
+      return
+    }
+    setWorkTypes((prev) => prev.filter((w) => w.id !== id))
+    if (editingWorkTypeId === id) cancelEditWorkType()
+  }
+
   return (
     <div className="max-w-4xl">
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-full overflow-x-auto">
@@ -371,6 +456,19 @@ export default function ReferencesClient({
           🏷️ Бренды
           <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
             {brands.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('workTypes')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'workTypes'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          🔧 Типы работ
+          <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
+            {workTypes.length}
           </span>
         </button>
         <button onClick={() => setActiveTab('regulations')}
@@ -519,6 +617,168 @@ export default function ReferencesClient({
         </div>
       )}
 
+      {activeTab === 'workTypes' && (
+        <div className="bg-white border rounded-xl overflow-hidden">
+          <div className="p-4 border-b bg-gray-50">
+            <h2 className="font-semibold">Типы работ</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Используются при создании чек-листов в регламентах ТО
+            </p>
+          </div>
+
+          <div className="p-4 border-b bg-blue-50">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={newWorkType}
+                onChange={(e) => setNewWorkType(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addWorkType()}
+                placeholder="Название типа работы"
+                className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+              <button
+                onClick={addWorkType}
+                disabled={!newWorkType.trim() || loadingWorkType}
+                className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+              >
+                {loadingWorkType ? '...' : '+ Добавить'}
+              </button>
+            </div>
+          </div>
+
+          <div className="divide-y">
+            <div className="px-4 py-2 bg-gray-50">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                Системные (код нельзя изменить)
+              </p>
+            </div>
+            {workTypes
+              .filter((w) => w.isSystem)
+              .map((wt) => (
+                <div
+                  key={wt.id}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 gap-3"
+                >
+                  {editingWorkTypeId === wt.id ? (
+                    <div className="flex flex-1 flex-col sm:flex-row gap-2">
+                      <input
+                        value={editWorkTypeName}
+                        onChange={(e) => setEditWorkTypeName(e.target.value)}
+                        className="flex-1 border rounded-lg px-3 py-1.5 text-sm"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={saveEditWorkType}
+                          disabled={loadingWorkType}
+                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+                        >
+                          Сохранить
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditWorkType}
+                          className="text-xs border px-3 py-1.5 rounded-lg"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">{wt.nameRu}</div>
+                        <div className="text-xs text-gray-400 font-mono">{wt.code}</div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">
+                          Системный
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => startEditWorkType(wt)}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Изменить
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+
+            {workTypes.filter((w) => !w.isSystem).length > 0 && (
+              <>
+                <div className="px-4 py-2 bg-gray-50">
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Добавленные вручную
+                  </p>
+                </div>
+                {workTypes
+                  .filter((w) => !w.isSystem)
+                  .map((wt) => (
+                    <div
+                      key={wt.id}
+                      className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 gap-3"
+                    >
+                      {editingWorkTypeId === wt.id ? (
+                        <div className="flex flex-1 flex-col sm:flex-row gap-2">
+                          <input
+                            value={editWorkTypeName}
+                            onChange={(e) => setEditWorkTypeName(e.target.value)}
+                            className="flex-1 border rounded-lg px-3 py-1.5 text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={saveEditWorkType}
+                              disabled={loadingWorkType}
+                              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+                            >
+                              Сохранить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditWorkType}
+                              className="text-xs border px-3 py-1.5 rounded-lg"
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium">{wt.nameRu}</div>
+                            <div className="text-xs text-gray-400 font-mono">{wt.code}</div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => startEditWorkType(wt)}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Изменить
+                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => deleteWorkType(wt.id)}
+                                className="text-xs text-red-500 hover:underline"
+                              >
+                                Удалить
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === 'cities' && (
         <div className="bg-white border rounded-xl overflow-hidden">
           <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
@@ -637,9 +897,9 @@ export default function ReferencesClient({
                   onChange={(e) => setRegulationField('taskType', e.target.value)}
                   className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {Object.entries(taskLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
+                  {workTypes.map((wt) => (
+                    <option key={wt.code} value={wt.code}>
+                      {wt.nameRu}
                     </option>
                   ))}
                 </select>
@@ -687,7 +947,8 @@ export default function ReferencesClient({
                 <div>
                   <div className="font-semibold">{reg.name}</div>
                   <div className="text-xs text-gray-500 mt-0.5">
-                    {reg.equipmentType} · {reg.intervalHours > 0 ? `каждые ${reg.intervalHours} м/ч` : 'по необходимости'}
+                    {taskLabels[reg.taskType] ?? reg.taskType} · {reg.equipmentType}
+                    {reg.intervalHours > 0 ? ` · каждые ${reg.intervalHours} м/ч` : ' · по необходимости'}
                     {reg.description && ` · ${reg.description}`}
                   </div>
                 </div>

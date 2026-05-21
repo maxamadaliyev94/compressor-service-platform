@@ -46,6 +46,31 @@ async function seedCities() {
   console.log('✅ Cities seeded')
 }
 
+const WORK_TYPES_SEED = [
+  { code: 'PLANNED_MAINTENANCE', nameRu: 'Плановое ТО', sortOrder: 0 },
+  { code: 'DIAGNOSTICS', nameRu: 'Диагностика', sortOrder: 1 },
+  { code: 'WARRANTY_REPAIR', nameRu: 'Гарантийный ремонт', sortOrder: 2 },
+  { code: 'EMERGENCY', nameRu: 'Аварийный выезд', sortOrder: 3 },
+  { code: 'INSTALLATION', nameRu: 'Монтаж', sortOrder: 4 },
+  { code: 'COMMISSIONING', nameRu: 'Пусконаладка', sortOrder: 5 },
+] as const
+
+async function seedWorkTypes() {
+  for (const wt of WORK_TYPES_SEED) {
+    await prisma.workTypeRef.upsert({
+      where: { code: wt.code },
+      update: { nameRu: wt.nameRu, isSystem: true, sortOrder: wt.sortOrder, isActive: true },
+      create: {
+        code: wt.code,
+        nameRu: wt.nameRu,
+        isSystem: true,
+        sortOrder: wt.sortOrder,
+      },
+    })
+  }
+  console.log('✅ Work types seeded')
+}
+
 type PermissionDef = {
   key: string
   category: 'section' | 'action' | 'field'
@@ -174,6 +199,7 @@ async function seedRolePermissions() {
 async function main() {
   console.log('Seeding database...')
   await seedCities()
+  await seedWorkTypes()
 
   const hashedPassword = await bcrypt.hash('Admin123!', 10)
   const hashedPassword2 = await bcrypt.hash('Manager123!', 10)

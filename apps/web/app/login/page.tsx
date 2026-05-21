@@ -106,7 +106,6 @@ export default function LoginPage() {
               type="text"
               value={login}
               onChange={(e) => setLogin(e.target.value)}
-              placeholder="необязательно для Face ID"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoComplete="username"
             />
@@ -117,7 +116,6 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="необязательно для Face ID"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoComplete="current-password"
             />
@@ -141,20 +139,13 @@ export default function LoginPage() {
           {faceIdMessage && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm px-3 py-2 rounded-lg">{faceIdMessage}</div>
           )}
-          <p className="text-xs text-gray-400">
-            Для Face ID один раз войдите по паролю и включите биометрию в «Настройка аккаунта». Для кнопки Face ID логин и пароль не обязательны.
-          </p>
         </form>
-        <div className="mt-4 text-sm text-gray-500">
-          Нет аккаунта?{' '}
-          <a href="/register" className="text-blue-600 hover:underline">
-            Зарегистрироваться
+        <p className="mt-6 text-center text-sm text-gray-500">
+          Связаться с тех. поддержкой:{' '}
+          <a href="tel:+998901342145" className="text-blue-600 hover:underline whitespace-nowrap">
+            +998 90 134 21 45
           </a>
-        </div>
-        <div className="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
-          <p className="font-medium mb-1">Тестовые аккаунты (пароль — см. seed):</p>
-          <p>admin, manager, engineer1</p>
-        </div>
+        </p>
       </div>
     </div>
   )
