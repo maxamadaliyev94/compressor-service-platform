@@ -311,6 +311,7 @@ export default function TasksTable({
   statusLabels,
   priorityColors,
   isAdmin,
+  canCancelTask = false,
   currentUserId,
   role,
 }: {
@@ -320,9 +321,11 @@ export default function TasksTable({
   statusLabels: Record<string, string>
   priorityColors: Record<string, string>
   isAdmin: boolean
+  canCancelTask?: boolean
   currentUserId: string
   role: string
 }) {
+  const showActions = isAdmin || canCancelTask
   const router = useRouter()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<'status' | 'assignee'>(() => (role === 'ENGINEER' ? 'status' : 'assignee'))
@@ -404,7 +407,7 @@ export default function TasksTable({
     return list
   }, [filteredBundles, currentUserId])
 
-  const tableColSpan = isAdmin ? 8 : 7
+  const tableColSpan = showActions ? 8 : 7
   const sections = !canGroupByAssignee || groupBy === 'status' ? statusGroups : assigneeGroups
 
   const exportTasks = useMemo(() => filteredBundles.map(bundleToExportTask), [filteredBundles])
@@ -565,9 +568,9 @@ export default function TasksTable({
             📍 Маршрут в Яндекс
           </a>
         </div>
-        {isAdmin && (
+        {showActions && (
           <div className="mt-3 flex flex-col gap-2">
-            {!['DONE', 'CANCELLED'].includes(rep.status) && (
+            {canCancelTask && !['DONE', 'CANCELLED'].includes(rep.status) && (
               <button
                 type="button"
                 onClick={() => void cancelTask(rep.id)}
@@ -577,7 +580,7 @@ export default function TasksTable({
                 Отменить
               </button>
             )}
-            {!bundle.tasks.some((t) => t.report) && (
+            {isAdmin && !bundle.tasks.some((t) => t.report) && (
               <button
                 type="button"
                 onClick={() => void deleteTask(rep.id)}
@@ -672,10 +675,10 @@ export default function TasksTable({
             📍 Маршрут
           </a>
         </td>
-        {isAdmin && (
+        {showActions && (
           <td className="p-3">
             <div className="flex items-center gap-2">
-              {!['DONE', 'CANCELLED'].includes(rep.status) && (
+              {canCancelTask && !['DONE', 'CANCELLED'].includes(rep.status) && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -688,7 +691,7 @@ export default function TasksTable({
                   Отменить
                 </button>
               )}
-              {!bundle.tasks.some((t) => t.report) && (
+              {isAdmin && !bundle.tasks.some((t) => t.report) && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -869,7 +872,7 @@ export default function TasksTable({
                 <th className="text-left p-3 font-medium">Срок</th>
                 <th className="text-left p-3 font-medium">Статус</th>
                 <th className="text-left p-3 font-medium">Локация</th>
-                {isAdmin && <th className="text-left p-3 font-medium">Действия</th>}
+                {showActions && <th className="text-left p-3 font-medium">Действия</th>}
               </tr>
             </thead>
             {sections.map((section) => (

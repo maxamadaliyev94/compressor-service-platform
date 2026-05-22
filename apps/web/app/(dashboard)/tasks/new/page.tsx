@@ -12,6 +12,7 @@ export default function NewTaskPage() {
   const [equipmentSearch, setEquipmentSearch] = useState('')
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<string[]>([])
+  const [workTypes, setWorkTypes] = useState<{ code: string; nameRu: string }[]>([])
   const [form, setForm] = useState({
     equipmentId: '',
     assignedToId: '',
@@ -22,6 +23,18 @@ export default function NewTaskPage() {
   })
 
   useEffect(() => {
+    fetch('/api/work-types')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { code: string; nameRu: string }[]) => {
+        const items = Array.isArray(list) ? list : []
+        setWorkTypes(items)
+        if (items.length > 0) {
+          setForm((prev) => ({
+            ...prev,
+            type: prev.type && items.some((w) => w.code === prev.type) ? prev.type : items[0].code,
+          }))
+        }
+      })
     fetch('/api/equipment')
       .then((r) => r.json())
       .then(setEquipment)
@@ -55,15 +68,6 @@ export default function NewTaskPage() {
   const roleLabels: Record<string, string> = {
     CHIEF_ENGINEER: '👷 Главный инженер',
     ENGINEER: '🔧 Инженер',
-  }
-
-  const typeLabels: Record<string, string> = {
-    PLANNED_MAINTENANCE: 'Плановое ТО',
-    DIAGNOSTICS: 'Диагностика',
-    WARRANTY_REPAIR: 'Гарантийный ремонт',
-    EMERGENCY: 'Аварийный выезд',
-    INSTALLATION: 'Монтаж',
-    COMMISSIONING: 'Пусконаладка',
   }
 
   const normalizedEquipmentQuery = equipmentSearch.trim().toLowerCase()
@@ -265,9 +269,9 @@ export default function NewTaskPage() {
               onChange={(e) => set('type', e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {Object.entries(typeLabels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
+              {workTypes.map((wt) => (
+                <option key={wt.code} value={wt.code}>
+                  {wt.nameRu}
                 </option>
               ))}
             </select>

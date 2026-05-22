@@ -14,12 +14,7 @@ import ClientSignaturePanel from './ClientSignaturePanel'
 import ReportAttachmentsLightbox from './ReportAttachmentsLightbox'
 import type { Role } from '@prisma/client'
 import { formatMapSearchAddress } from '@/lib/location-display'
-
-const typeLabels: Record<string, string> = {
-  PLANNED_MAINTENANCE: 'Плановое ТО', DIAGNOSTICS: 'Диагностика',
-  WARRANTY_REPAIR: 'Гарантийный ремонт', EMERGENCY: 'Аварийный выезд',
-  INSTALLATION: 'Монтаж', COMMISSIONING: 'Пусконаладка',
-}
+import { fetchWorkTypeLabelMap } from '@/lib/work-types'
 const statusLabels: Record<string, string> = {
   NEW: 'Новая', ASSIGNED: 'Назначена', IN_PROGRESS: 'В работе',
   DONE: 'Выполнено', CANCELLED: 'Отменена', REVIEW: 'На проверке',
@@ -50,6 +45,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
   const session = await auth()
   if (!session) redirect('/login')
   const isAdmin = session?.user?.role === 'ADMIN'
+  const isManager = session?.user?.role === 'MANAGER'
+  const canCancelTask = isAdmin || isManager
   const canEditDone = ['ADMIN', 'MANAGER'].includes(session?.user?.role ?? '')
   const canExecute = ['ENGINEER', 'CHIEF_ENGINEER', 'ADMIN', 'MANAGER'].includes(
     session?.user?.role ?? ''
@@ -81,6 +78,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     },
   })
   if (!task || task.deletedAt) notFound()
+
+  const typeLabels = await fetchWorkTypeLabelMap()
 
   const client = task.equipment.object.branch.client
   if (session.user.role === 'CLIENT') {
@@ -229,13 +228,13 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           ← {session.user.role === 'CLIENT' ? 'Моя компания' : 'Задачи'}
         </a>
         <span className="text-gray-300">/</span>
-        <span className="font-medium">{typeLabels[task.type]}</span>
+        <span className="font-medium">{typeLabels[task.type] ?? task.type}</span>
       </div>
 
       <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-start mb-6">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold">№{task.requestNumber} · {typeLabels[task.type]}</h1>
+            <h1 className="text-2xl font-bold">№{task.requestNumber} · {typeLabels[task.type] ?? task.type}</h1>
             {task.taskType === 'LONG_TERM' && (
               <span
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-900 border border-amber-200"
@@ -263,11 +262,11 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               Без подписи клиента
             </span>
           )}
-          {isAdmin && (
+          {(canCancelTask || isAdmin) && (
             <TaskAdminActions
               taskId={task.id}
-              canCancel={!['DONE', 'CANCELLED'].includes(task.status)}
-              canDelete={!task.report}
+              canCancel={canCancelTask && !['DONE', 'CANCELLED'].includes(task.status)}
+              canDelete={isAdmin && !task.report}
             />
           )}
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[task.status]}`}>
@@ -383,7 +382,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               canEditScheduledAt={canEditScheduledAt}
               embedScheduleFields={canChiefSetWorkType}
             />
-            <div className="flex gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[task.type]}</span></div>
+            <div className="flex gap-2"><span className="text-gray-500 w-28">Тип:</span><span>{typeLabels[task.type] ?? task.type}</span></div>
             <div className="flex gap-2"><span className="text-gray-500 w-28">Приоритет:</span>
               <span className={`font-medium ${task.priority === 'EMERGENCY' ? 'text-red-600' : task.priority === 'HIGH' ? 'text-orange-600' : 'text-gray-700'}`}>
                 {task.priority === 'LOW' ? 'Низкий' : task.priority === 'MEDIUM' ? 'Средний' : task.priority === 'HIGH' ? 'Высокий' : 'Аварийный'}

@@ -4,6 +4,7 @@ import { auth } from '@/auth'
 import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskAssigned } from '@/lib/notifications'
 import { hasPermission } from '@/lib/permissions'
+import { assertActiveWorkTypeCode } from '@/lib/work-types'
 import { markEngineerBusy } from '@/lib/engineerPresence'
 import { announceNewTaskInGeneralChat } from '@/lib/internal-chat'
 import type { Role } from '@prisma/client'
@@ -88,6 +89,11 @@ export async function POST(req: NextRequest) {
   if (!selectedEquipment) {
     return NextResponse.json({ error: 'Оборудование не найдено' }, { status: 400 })
   }
+
+  const workTypeCode = String(body.type || 'PLANNED_MAINTENANCE')
+  if (!(await assertActiveWorkTypeCode(workTypeCode))) {
+    return NextResponse.json({ error: 'Неизвестный тип работы' }, { status: 400 })
+  }
   if (targetIds.length > 0) {
     const assigneeList = assignees ?? []
     if (assigneeList.length !== targetIds.length || assigneeList.some((user) => !user.isActive)) {
@@ -116,7 +122,7 @@ export async function POST(req: NextRequest) {
         equipmentId: body.equipmentId,
         createdById: creator.id,
         assignedToId: null,
-        type: body.type,
+        type: workTypeCode,
         taskType,
         managedByChiefId: null,
         priority: body.priority || 'MEDIUM',
@@ -134,7 +140,7 @@ export async function POST(req: NextRequest) {
         equipmentId: body.equipmentId,
         createdById: creator.id,
         assignedToId: assigneeId,
-        type: body.type,
+        type: workTypeCode,
         taskType,
         managedByChiefId: null,
         priority: body.priority || 'MEDIUM',
@@ -158,7 +164,7 @@ export async function POST(req: NextRequest) {
         equipmentId: body.equipmentId,
         createdById: creator.id,
         assignedToId: null,
-        type: body.type,
+        type: workTypeCode,
         taskType,
         managedByChiefId,
         priority: body.priority || 'MEDIUM',

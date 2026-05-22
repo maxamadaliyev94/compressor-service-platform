@@ -77,11 +77,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
-  if (status === 'CANCELLED' && session.user.role !== 'ADMIN') {
-    if (session.user.role === 'CHIEF_ENGINEER') {
+  if (status === 'CANCELLED') {
+    const role = session.user.role
+    if (role === 'ADMIN' || role === 'MANAGER') {
+      // полный доступ на отмену
+    } else if (role === 'CHIEF_ENGINEER') {
       const parentId = parseDelegationParentTaskId(task.comment)
       if (!parentId) {
-        return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+        return NextResponse.json({ error: 'Нет прав на отмену этой задачи' }, { status: 403 })
       }
       const parent = await db.serviceTask.findUnique({
         where: { id: parentId },
@@ -92,10 +95,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         parent.deletedAt ||
         (parent.assignedToId !== session.user.id && parent.managedByChiefId !== session.user.id)
       ) {
-        return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+        return NextResponse.json({ error: 'Нет прав на отмену этой задачи' }, { status: 403 })
       }
     } else {
-      return NextResponse.json({ error: 'Только администратор может отменять задачи' }, { status: 403 })
+      return NextResponse.json({ error: 'Нет прав на отмену задачи' }, { status: 403 })
     }
   }
 

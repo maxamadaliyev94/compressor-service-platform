@@ -408,7 +408,8 @@ model ServiceTask {
   equipmentId  String
   assignedToId String?
   createdById  String
-  type         TaskType
+  /// Код типа работы из справочника `WorkTypeRef.code`.
+  type         String
   /// Быстрая или долгосрочная задача (колонка в БД: task_type).
   taskType     TaskWorkType @default(QUICK) @map("task_type")
   /// Главный инженер, ответственный за долгосрочную задачу (назначение/переназначение исполнителей).

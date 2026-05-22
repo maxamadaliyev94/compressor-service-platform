@@ -8,18 +8,12 @@ interface Props {
   role?: string
 }
 
-const typeLabels: Record<string, string> = {
-  PLANNED_MAINTENANCE: 'Плановое ТО',
-  DIAGNOSTICS: 'Диагностика',
-  WARRANTY_REPAIR: 'Гарантийный ремонт',
-  EMERGENCY: 'Аварийный выезд',
-  INSTALLATION: 'Монтаж',
-  COMMISSIONING: 'Пусконаладка',
-}
+type WorkTypeOption = { code: string; nameRu: string }
 
 export default function QuickTaskButton({ equipmentId, createdById, role }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [workTypes, setWorkTypes] = useState<WorkTypeOption[]>([])
   const [regulations, setRegulations] = useState<any[]>([])
   const [engineers, setEngineers] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
@@ -34,6 +28,9 @@ export default function QuickTaskButton({ equipmentId, createdById, role }: Prop
 
   useEffect(() => {
     if (!open) return
+    fetch('/api/work-types')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: WorkTypeOption[]) => setWorkTypes(Array.isArray(list) ? list : []))
     fetch('/api/regulations').then(r => r.json()).then(setRegulations)
     fetch('/api/users').then(r => r.json()).then(data =>
       setEngineers(data.filter((u: any) => ['ENGINEER', 'CHIEF_ENGINEER'].includes(u.role)))
@@ -93,20 +90,20 @@ export default function QuickTaskButton({ equipmentId, createdById, role }: Prop
                   Тип работы / Регламент
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(typeLabels).map(([type, label]) => {
-                    const reg = regulations.find(r => r.taskType === type)
-                    const isSelected = form.type === type
+                  {workTypes.map((wt) => {
+                    const reg = regulations.find(r => r.taskType === wt.code)
+                    const isSelected = form.type === wt.code
                     return (
-                      <button key={type} type="button"
+                      <button key={wt.code} type="button"
                         onClick={() => {
-                          setForm(prev => ({ ...prev, type }))
+                          setForm(prev => ({ ...prev, type: wt.code }))
                           if (reg) selectRegulation(reg)
                           else setSelected(null)
                         }}
                         className={`text-left p-3 rounded-xl border-2 transition-colors ${
                           isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                         }`}>
-                        <div className="text-sm font-semibold">{label}</div>
+                        <div className="text-sm font-semibold">{wt.nameRu}</div>
                         {reg && (
                           <div className="text-xs text-gray-500 mt-0.5">
                             📋 {reg.items.length} пунктов чек-листа

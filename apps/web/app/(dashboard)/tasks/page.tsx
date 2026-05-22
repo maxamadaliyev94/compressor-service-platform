@@ -28,6 +28,7 @@ export default async function TasksPage({
   const session = await getSession()
   const role = session.user.role
   const isAdmin = role === 'ADMIN'
+  const canCancelTask = isAdmin || role === 'MANAGER'
   const canCreateTask = role !== 'ENGINEER' && (await hasPermission(role as Role, 'action:task.create'))
 
   /** Для персонала по умолчанию — только активные (без выполненных и отменённых). Вкладка ?completed=1 — только DONE. Клиенту — все задачи организации, кроме отменённых. */
@@ -59,14 +60,8 @@ export default async function TasksPage({
     tasks = await sanitizeTasksForClientPortal(tasks)
   }
 
-  const typeLabels: Record<string, string> = {
-    PLANNED_MAINTENANCE: 'Плановое ТО',
-    DIAGNOSTICS: 'Диагностика',
-    WARRANTY_REPAIR: 'Гарантийный ремонт',
-    EMERGENCY: 'Аварийный выезд',
-    INSTALLATION: 'Монтаж',
-    COMMISSIONING: 'Пусконаладка',
-  }
+  const { fetchWorkTypeLabelMap } = await import('@/lib/work-types')
+  const typeLabels = await fetchWorkTypeLabelMap()
   const statusColors: Record<string, string> = {
     NEW: 'bg-gray-100 text-gray-800',
     ASSIGNED: 'bg-blue-100 text-blue-800',
@@ -144,6 +139,7 @@ export default async function TasksPage({
           statusLabels={statusLabels}
           priorityColors={priorityColors}
           isAdmin={isAdmin}
+          canCancelTask={canCancelTask}
           currentUserId={session.user.id}
           role={role}
         />
