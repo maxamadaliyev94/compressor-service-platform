@@ -507,27 +507,12 @@ export default function TasksTable({
         className={`border rounded-lg p-3 bg-white ${multiShell} ${ageBorder}`}
       >
         <a href={`/tasks/${hrefId}`} className="block">
-          <div className="flex items-center justify-between gap-2">
-            <div className="font-medium text-sm flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-              <TaskAgeDot status={rep.status} createdAt={rep.createdAt} />
-              <span
-                className={`${priorityColors[rep.priority]}`}
-                title="Приоритет заявки"
-                aria-label={`Приоритет: ${rep.priority}`}
-              >
-                ●
-              </span>
-              <span>
-                №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
-              </span>
-              {rep.taskType === 'LONG_TERM' && (
-                <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-200" title="Долгосрочная">
-                  📅 Долгоср.
-                </span>
-              )}
-              {(multi || taskCoengineers(rep).length > 1) && <BundleEngineerCountBadge bundle={bundle} />}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-gray-900">{rep.equipment.object.branch.client.name}</div>
+              <div className="text-xs text-gray-500">{rep.equipment.object.branch.name}</div>
             </div>
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
               <span
                 className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[rep.status] || 'bg-gray-100 text-gray-800'}`}
               >
@@ -544,9 +529,24 @@ export default function TasksTable({
             {rep.equipment.brand} {rep.equipment.model}
           </div>
           <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
-          <div className="mt-2 text-xs text-gray-600">
-            Клиент: {rep.equipment.object.branch.client.name}
-            <div className="text-gray-500 font-normal">{rep.equipment.object.branch.name}</div>
+          <div className="mt-2 text-sm flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-gray-700">
+            <TaskAgeDot status={rep.status} createdAt={rep.createdAt} />
+            <span
+              className={priorityColors[rep.priority]}
+              title="Приоритет заявки"
+              aria-label={`Приоритет: ${rep.priority}`}
+            >
+              ●
+            </span>
+            <span>
+              №{rep.requestNumber} · {typeLabels[rep.type] || rep.type}
+            </span>
+            {rep.taskType === 'LONG_TERM' && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-200" title="Долгосрочная">
+                📅 Долгоср.
+              </span>
+            )}
+            {(multi || taskCoengineers(rep).length > 1) && <BundleEngineerCountBadge bundle={bundle} />}
           </div>
           <div className="mt-1 text-xs text-gray-700 space-y-0.5">
             <div className="font-medium text-gray-800">Инженеры</div>
@@ -613,6 +613,16 @@ export default function TasksTable({
           window.location.href = `/tasks/${hrefId}`
         }}
       >
+        <td className="p-3 text-gray-700">
+          <div className="font-semibold text-gray-900">{rep.equipment.object.branch.client.name}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{rep.equipment.object.branch.name}</div>
+        </td>
+        <td className="p-3">
+          <div>
+            {rep.equipment.brand} {rep.equipment.model}
+          </div>
+          <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
+        </td>
         <td className="p-3">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <TaskAgeDot status={rep.status} createdAt={rep.createdAt} />
@@ -635,16 +645,6 @@ export default function TasksTable({
             </span>
             {(multi || taskCoengineers(rep).length > 1) && <BundleEngineerCountBadge bundle={bundle} />}
           </div>
-        </td>
-        <td className="p-3">
-          <div>
-            {rep.equipment.brand} {rep.equipment.model}
-          </div>
-          <div className="text-xs text-gray-500">{rep.equipment.serialNumber}</div>
-        </td>
-        <td className="p-3 text-gray-600">
-          <div>{rep.equipment.object.branch.client.name}</div>
-          <div className="text-xs text-gray-500">{rep.equipment.object.branch.name}</div>
         </td>
         <td className="p-3 text-gray-600 max-w-[14rem]">{renderEngineersCell(bundle)}</td>
         <td className={`p-3 ${isTaskEndDateOverdue(rep) ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
@@ -865,9 +865,9 @@ export default function TasksTable({
           <table className="hidden md:table w-full min-w-[900px] text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="text-left p-3 font-medium">Тип</th>
-                <th className="text-left p-3 font-medium">Оборудование</th>
                 <th className="text-left p-3 font-medium">Клиент / филиал</th>
+                <th className="text-left p-3 font-medium">Оборудование</th>
+                <th className="text-left p-3 font-medium">Тип работы</th>
                 <th className="text-left p-3 font-medium">Инженер</th>
                 <th className="text-left p-3 font-medium">Срок</th>
                 <th className="text-left p-3 font-medium">Статус</th>
