@@ -8,7 +8,6 @@ import KanbanBoard from './KanbanBoard'
 import {
   prismaWhereClientPortalTaskList,
   prismaWhereEngineerTaskAssignment,
-  prismaWhereManagerTasks,
 } from '@/lib/api-access'
 import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
 
@@ -31,7 +30,6 @@ export default async function KanbanPage() {
             status: { not: 'CANCELLED' },
             deletedAt: null,
             ...(role === 'ENGINEER' ? prismaWhereEngineerTaskAssignment(session.user.id) : {}),
-            ...(role === 'MANAGER' ? prismaWhereManagerTasks(session.user.id) : {}),
           },
     include: {
       equipment: { include: { object: { include: { branch: { include: { client: true } } } } } },

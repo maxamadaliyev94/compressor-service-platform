@@ -105,6 +105,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (task.status === 'DONE' || task.status === 'CANCELLED') {
     return NextResponse.json({ error: 'Задача уже закрыта' }, { status: 400 })
   }
+
+  if (task.status === status) {
+    return NextResponse.json(task)
+  }
+
   const canMoveTo = ALLOWED_TRANSITIONS[task.status]?.includes(status) ?? false
   if (!canMoveTo) {
     return NextResponse.json(

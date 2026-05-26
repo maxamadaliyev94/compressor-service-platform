@@ -7,7 +7,6 @@ import TasksTable from './TasksTable'
 import {
   prismaWhereClientPortalTaskList,
   prismaWhereEngineerTaskAssignment,
-  prismaWhereManagerTasks,
 } from '@/lib/api-access'
 import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
 
@@ -41,9 +40,7 @@ export default async function TasksPage({
     where:
       role === 'ENGINEER'
         ? { deletedAt: null, ...staffStatusWhere, ...prismaWhereEngineerTaskAssignment(session.user.id) }
-        : role === 'MANAGER'
-          ? { deletedAt: null, ...prismaWhereManagerTasks(session.user.id), ...staffStatusWhere }
-          : role === 'CLIENT'
+        : role === 'CLIENT'
             ? prismaWhereClientPortalTaskList(session.user.clientId)
             : { deletedAt: null, ...staffStatusWhere },
     include: {

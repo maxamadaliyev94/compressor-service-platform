@@ -203,7 +203,9 @@ export default function ExecuteTaskClient({
   const eq = task.equipment
   const client = eq.object.branch.client
 
-  const [step, setStep] = useState<'start' | 'checklist' | 'hours' | 'parts' | 'notes' | 'complete'>('start')
+  const [step, setStep] = useState<'start' | 'checklist' | 'hours' | 'parts' | 'notes' | 'complete'>(
+    () => (task.status === 'IN_PROGRESS' ? 'checklist' : 'start'),
+  )
   const [loading, setLoading] = useState(false)
 
   const [currentHours, setCurrentHours] = useState(String(eq.currentHours))
@@ -349,6 +351,10 @@ export default function ExecuteTaskClient({
   }
 
   async function startTask() {
+    if (task.status === 'IN_PROGRESS') {
+      setStep('checklist')
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/tasks/${task.id}/status`, {
@@ -464,7 +470,11 @@ export default function ExecuteTaskClient({
           ← Задачи
         </a>
         <span>/</span>
-        <span className="text-gray-900 font-medium">{typeLabels[task.type]}</span>
+        <a href={`/tasks/${task.id}`} className="hover:text-gray-700">
+          Задача №{task.requestNumber}
+        </a>
+        <span>/</span>
+        <span className="text-gray-900 font-medium">{typeLabels[task.type] ?? task.type}</span>
       </div>
 
       <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
@@ -592,7 +602,11 @@ export default function ExecuteTaskClient({
             disabled={loading}
             className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? 'Запуск...' : '▶ Приступить к работе'}
+            {loading
+              ? 'Запуск...'
+              : task.status === 'IN_PROGRESS'
+                ? '▶ Продолжить работу'
+                : '▶ Приступить к работе'}
           </button>
         </div>
       )}

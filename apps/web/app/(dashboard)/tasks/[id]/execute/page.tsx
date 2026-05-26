@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { auth } from '@/auth'
 import { notFound, redirect } from 'next/navigation'
 import ExecuteTaskClient from './ExecuteTaskClient'
+import { canReadTask, type AuthedSession } from '@/lib/api-access'
 
 export default async function ExecuteTaskPage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -58,12 +59,10 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
   })
 
   const role = session.user.role
-  const isParticipant =
-    task.assignedToId === session.user.id ||
-    task.longTermEngineers.some((r) => r.engineerId === session.user.id)
 
-  if (role === 'ENGINEER' && !isParticipant) {
-    redirect('/')
+  if (role === 'ENGINEER') {
+    const canRead = await canReadTask(session as AuthedSession, params.id)
+    if (!canRead) redirect(`/tasks/${params.id}`)
   }
 
   const signerProfile = await db.user.findUnique({

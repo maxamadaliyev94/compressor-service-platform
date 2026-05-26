@@ -15,6 +15,7 @@ import ReportAttachmentsLightbox from './ReportAttachmentsLightbox'
 import type { Role } from '@prisma/client'
 import { formatMapSearchAddress } from '@/lib/location-display'
 import { fetchWorkTypeLabelMap } from '@/lib/work-types'
+import { canReadTask, type AuthedSession } from '@/lib/api-access'
 const statusLabels: Record<string, string> = {
   NEW: 'Новая', ASSIGNED: 'Назначена', IN_PROGRESS: 'В работе',
   DONE: 'Выполнено', CANCELLED: 'Отменена', REVIEW: 'На проверке',
@@ -89,10 +90,8 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
     }
   }
   if (session.user.role === 'ENGINEER') {
-    const onTask =
-      task.assignedToId === session.user.id ||
-      task.longTermEngineers.some((r) => r.engineerId === session.user.id)
-    if (!onTask) notFound()
+    const canRead = await canReadTask(session as AuthedSession, task.id)
+    if (!canRead) notFound()
   }
 
   const isNotDone = !['DONE', 'CANCELLED'].includes(task.status)
@@ -285,7 +284,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
               href={`/tasks/${task.id}/execute`}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 flex items-center gap-2"
             >
-              ▶ Приступить к работе
+              {task.status === 'IN_PROGRESS' ? '▶ Продолжить работу' : '▶ Приступить к работе'}
             </a>
           )}
           <a
