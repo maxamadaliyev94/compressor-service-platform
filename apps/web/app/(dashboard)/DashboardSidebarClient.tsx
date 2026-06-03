@@ -8,9 +8,9 @@ import { LogoutButton } from '@/components/LogoutButton'
 type NavItem = { href: string; label: string; icon: string }
 
 const navLinkClassDesktop =
-  'flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-100'
+  'flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-blue-100/70'
 const navLinkClassMobile =
-  'flex items-center gap-2 px-3 py-3 rounded-md text-sm text-gray-700 hover:bg-gray-100 w-full'
+  'flex items-center gap-2 px-3 py-3 rounded-md text-sm text-gray-700 hover:bg-blue-100/70 w-full'
 
 export default function DashboardSidebarClient({
   navItems,
@@ -121,7 +121,7 @@ export default function DashboardSidebarClient({
         onChange={onAvatarPick}
         className="hidden"
       />
-      <div className="md:hidden bg-white border-b sticky top-0 z-40">
+      <div className="md:hidden bg-sky-50 border-b border-sky-100 sticky top-0 z-40">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="min-w-0">
             <h1 className="font-bold text-sm truncate">Compressor Service</h1>
@@ -149,8 +149,8 @@ export default function DashboardSidebarClient({
             onClick={() => setMobileOpen(false)}
             aria-label="Закрыть меню"
           />
-          <aside className="absolute inset-y-0 left-0 w-[86%] max-w-xs bg-white border-r shadow-xl flex flex-col">
-            <div className="p-4 border-b flex items-center justify-between">
+          <aside className="absolute inset-y-0 left-0 w-[86%] max-w-xs bg-sky-50 border-r border-sky-100 shadow-xl flex flex-col">
+            <div className="p-4 border-b border-sky-100 flex items-center justify-between">
               <div>
                 <h2 className="font-bold text-sm">Compressor Service</h2>
                 <p className="text-xs text-gray-500">Platform</p>
@@ -167,7 +167,7 @@ export default function DashboardSidebarClient({
             <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
               {navItems.map((item) => renderNavItem(item, true, () => setMobileOpen(false)))}
             </nav>
-            <div className="p-3 border-t">
+            <div className="p-3 border-t border-sky-100">
               <div className="flex items-center gap-2 px-3 py-2 mb-2">
                 {renderAvatar('w-7 h-7', 'text-xs')}
                 <div className="overflow-hidden">
@@ -189,8 +189,8 @@ export default function DashboardSidebarClient({
         </div>
       )}
 
-      <aside className="hidden md:flex w-56 bg-white border-r flex-col">
-        <div className="p-4 border-b flex items-center justify-between">
+      <aside className="hidden md:flex w-56 bg-sky-50 border-r border-sky-100 flex-col">
+        <div className="p-4 border-b border-sky-100 flex items-center justify-between">
           <div>
             <h1 className="font-bold text-sm">Compressor Service</h1>
             <p className="text-xs text-gray-500">Platform</p>
@@ -200,7 +200,7 @@ export default function DashboardSidebarClient({
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => renderNavItem(item, false))}
         </nav>
-        <div className="p-3 border-t">
+        <div className="p-3 border-t border-sky-100">
           <div className="flex items-center gap-2 px-3 py-2 mb-1">
             {renderAvatar('w-7 h-7', 'text-xs')}
             <div className="overflow-hidden">
