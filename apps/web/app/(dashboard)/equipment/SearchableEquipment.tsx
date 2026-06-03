@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 
 export default function SearchableEquipment({
   equipment,
+  equipmentTypes,
   canViewWarranty,
   canManageEquipment,
   managerFilterUI = null,
@@ -11,6 +12,7 @@ export default function SearchableEquipment({
   managerOptions = [],
 }: {
   equipment: any[]
+  equipmentTypes: { name: string; nameRu: string }[]
   canViewWarranty: boolean
   canManageEquipment: boolean
   managerFilterUI?: 'manager-buttons' | 'admin-dropdown' | null
@@ -55,14 +57,13 @@ export default function SearchableEquipment({
     EXPIRED: 'Истекла',
     VOIDED: 'Аннулирована',
   }
-  const typeLabels: Record<string, string> = {
-    COMPRESSOR: 'Компрессор',
-    DRYER: 'Осушитель',
-    RECEIVER: 'Ресивер',
-    FILTER: 'Фильтр',
-    NITROGEN_GENERATOR: 'Азотный генератор',
-    OTHER: 'Другое',
-  }
+  const typeLabels = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const t of equipmentTypes) {
+      map[t.name] = t.nameRu
+    }
+    return map
+  }, [equipmentTypes])
 
   function getMS(eq: any) {
     if (!eq.nextServiceHours) return 'NORMAL'
@@ -308,10 +309,11 @@ export default function SearchableEquipment({
           className="w-full md:w-auto border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="ALL">Все типы</option>
-          <option value="COMPRESSOR">Компрессор</option>
-          <option value="DRYER">Осушитель</option>
-          <option value="RECEIVER">Ресивер</option>
-          <option value="FILTER">Фильтр</option>
+          {equipmentTypes.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.nameRu}
+            </option>
+          ))}
         </select>
         <select
           value={filterWarranty}
@@ -428,7 +430,7 @@ export default function SearchableEquipment({
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${msColors[ms]}`}>{msLabels[ms]}</span>
               </div>
               <div className="mt-2 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Тип</span><span className="text-gray-700">{typeLabels[eq.type]}</span></div>
+                <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Тип</span><span className="text-gray-700">{typeLabels[eq.type] ?? eq.type}</span></div>
                 <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Клиент</span><span className="text-gray-700 text-right">{eq.object?.branch?.client?.name || '—'}</span></div>
                 <div className="flex items-center justify-between gap-2"><span className="text-gray-500">Филиал</span><span className="text-gray-700 text-right">{eq.object?.branch?.name || '—'}</span></div>
                 {eq.object?.name &&
@@ -529,7 +531,7 @@ export default function SearchableEquipment({
                       <div className="text-xs text-red-400 font-medium">Остановлен</div>
                     )}
                   </td>
-                  <td className="p-3 text-gray-600">{typeLabels[eq.type]}</td>
+                  <td className="p-3 text-gray-600">{typeLabels[eq.type] ?? eq.type}</td>
                   <td className="p-3">
                     <div>{eq.object?.branch?.client?.name}</div>
                     <div className="text-xs text-gray-500">{eq.object?.branch?.name || '—'}</div>

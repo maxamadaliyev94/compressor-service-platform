@@ -61,18 +61,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const checkedItems = report?.checklistItems?.filter((item) => item.checked) ?? []
 
-  const reportNotesSection =
-    task.taskType !== 'LONG_TERM' &&
-    report?.notes &&
-    report.notes.trim().length > 0
-      ? `
-<div class="section">
-  <div class="section-title">Заметки и сводный журнал</div>
-  <p style="white-space:pre-wrap">${esc(report.notes)}</p>
-</div>
-`
-      : ''
-
   const roomCondition = report?.roomCondition ?? ''
   const extractMetric = (re: RegExp) => {
     const m = roomCondition.match(re)
@@ -215,8 +203,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       : '<p style="color:#888">Выполненные позиции не отмечены</p>'
   }
 </div>
-
-${reportNotesSection}
 
 <div class="section">
   <div class="section-title">Показатели</div>

@@ -103,6 +103,7 @@ enum ChatRoomType {
   GENERAL
   DIRECT
   TASK
+  COMMENTS
 }
 
 enum ChecklistItemType {
@@ -493,6 +494,7 @@ model ChatMessage {
   authorId  String
   body      String   @db.Text
   isSystem  Boolean  @default(false)
+  metadata  Json?
   createdAt DateTime @default(now())
   deletedAt DateTime?
   editedAt  DateTime?

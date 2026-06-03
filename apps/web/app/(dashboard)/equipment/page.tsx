@@ -103,6 +103,12 @@ export default async function EquipmentPage() {
 
   const serialized = JSON.parse(JSON.stringify(equipment)) as any[]
 
+  const equipmentTypes = await db.equipmentTypeRef.findMany({
+    where: { isActive: true },
+    orderBy: [{ isSystem: 'desc' }, { nameRu: 'asc' }],
+    select: { name: true, nameRu: true },
+  })
+
   const managerFilterUI =
     role === 'ADMIN' ? 'admin-dropdown' : role === 'MANAGER' ? 'manager-buttons' : null
 
@@ -144,6 +150,7 @@ export default async function EquipmentPage() {
       </div>
       <SearchableEquipment
         equipment={serialized}
+        equipmentTypes={equipmentTypes}
         canViewWarranty={canViewWarranty}
         canManageEquipment={canManageEquipment}
         managerFilterUI={managerFilterUI}

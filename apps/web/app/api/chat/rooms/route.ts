@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import type { Role } from '@prisma/client'
 import {
   getDmPeer,
+  getOrCreateCommentsRoom,
   getOrCreateGeneralRoom,
   getUnreadCountsForRooms,
   isStaffRole,
@@ -25,6 +26,7 @@ export async function GET() {
   const hiddenIds = hiddenRows.map((h) => h.roomId)
 
   const general = await getOrCreateGeneralRoom()
+  const comments = await getOrCreateCommentsRoom()
 
   const dmRooms = await db.chatRoom.findMany({
     where: {
@@ -92,8 +94,15 @@ export async function GET() {
     include: { author: { select: { id: true, name: true } } },
   })
 
+  const commentsLast = await db.chatMessage.findFirst({
+    where: { roomId: comments.id, deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    include: { author: { select: { id: true, name: true } } },
+  })
+
   const roomIdsForUnread = [
     general.id,
+    comments.id,
     ...dmRooms.map((r) => r.id),
     ...taskRooms.map((r) => r.id),
   ]
@@ -112,6 +121,20 @@ export async function GET() {
             createdAt: generalLast.createdAt.toISOString(),
             authorName: generalLast.author.name,
             isSystem: generalLast.isSystem,
+          }
+        : null,
+    },
+    comments: {
+      id: comments.id,
+      type: 'COMMENTS',
+      title: 'Комментарии',
+      unreadCount: unreadMap.get(comments.id) ?? 0,
+      lastMessage: commentsLast
+        ? {
+            body: commentsLast.body,
+            createdAt: commentsLast.createdAt.toISOString(),
+            authorName: commentsLast.author.name,
+            isSystem: commentsLast.isSystem,
           }
         : null,
     },

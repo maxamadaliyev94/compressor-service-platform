@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { MoreVertical } from 'lucide-react'
+import { MoreVertical, X } from 'lucide-react'
 
 type LastMsg = {
   body: string
@@ -15,6 +15,7 @@ type StaffUser = { id: string; name: string; role: string }
 
 type RoomsPayload = {
   general: { id: string; type: string; title: string; unreadCount?: number; lastMessage: LastMsg }
+  comments: { id: string; type: string; title: string; unreadCount?: number; lastMessage: LastMsg }
   direct: {
     id: string
     type: string
@@ -36,14 +37,37 @@ type RoomsPayload = {
   currentUserRole?: string
 }
 
+type EngineerInternalCommentMetadata = {
+  kind: 'ENGINEER_INTERNAL'
+  taskId: string
+  taskNumber: number
+  branchName: string
+  equipmentBrand: string
+  equipmentModel: string
+  serialNumber: string
+  commentText: string
+  acknowledged?: {
+    userId: string
+    userName: string
+    at: string
+  }
+}
+
 type ChatMessage = {
   id: string
   body: string
   isSystem: boolean
+  metadata?: EngineerInternalCommentMetadata | null
   deletedAt: string | null
   editedAt: string | null
   createdAt: string
   author: { id: string; name: string; role: string; avatarUrl?: string | null }
+}
+
+function isEngineerInternalComment(
+  metadata: EngineerInternalCommentMetadata | null | undefined
+): metadata is EngineerInternalCommentMetadata {
+  return metadata?.kind === 'ENGINEER_INTERNAL'
 }
 
 function dispatchChatRead() {
@@ -154,6 +178,32 @@ function DirectChatRowMenu({
   )
 }
 
+function formatTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+const SCROLL_BOTTOM_THRESHOLD_PX = 80
+
+function isScrollNearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_BOTTOM_THRESHOLD_PX
+}
+
+function messageMatchesSearch(m: ChatMessage, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  if (m.deletedAt) return false
+  return m.body.toLowerCase().includes(q)
+}
+
 export default function ChatPageClient({ initialRoomId }: { initialRoomId: string | null }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -169,7 +219,12 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [directMenuRoomId, setDirectMenuRoomId] = useState<string | null>(null)
+  const [messageSearch, setMessageSearch] = useState('')
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null)
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const shouldStickToBottomRef = useRef(true)
+  const prevLastMessageIdRef = useRef<string | null>(null)
 
   const loadRooms = useCallback(async () => {
     const res = await fetch('/api/chat/rooms')
@@ -214,12 +269,41 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
   }, [selectedRoomId, loadMessages])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    shouldStickToBottomRef.current = true
+    prevLastMessageIdRef.current = null
+    setMessageSearch('')
+  }, [selectedRoomId])
+
+  useEffect(() => {
+    if (loadingMessages || messages.length === 0) return
+    if (messageSearch.trim()) return
+
+    const lastId = messages[messages.length - 1]?.id ?? null
+    const isFirstLoad = prevLastMessageIdRef.current === null
+    const hasNewMessage = lastId !== prevLastMessageIdRef.current && !isFirstLoad
+
+    if (!shouldStickToBottomRef.current && !isFirstLoad) return
+    if (!isFirstLoad && !hasNewMessage) return
+
+    prevLastMessageIdRef.current = lastId
+
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: isFirstLoad || !hasNewMessage ? 'auto' : 'smooth' })
+    })
+  }, [messages, loadingMessages, messageSearch])
+
+  function handleMessagesScroll() {
+    const el = messagesScrollRef.current
+    if (!el) return
+    shouldStickToBottomRef.current = isScrollNearBottom(el)
+  }
 
   function selectRoom(roomId: string) {
     setSelectedRoomId(roomId)
     setEditingId(null)
+    setMessageSearch('')
+    shouldStickToBottomRef.current = true
+    prevLastMessageIdRef.current = null
     router.replace(`/chat?room=${encodeURIComponent(roomId)}`, { scroll: false })
   }
 
@@ -336,36 +420,55 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
     }
   }
 
-  function formatTime(iso: string) {
+  async function acknowledgeComment(messageId: string) {
+    if (!selectedRoomId || acknowledgingId) return
+    setAcknowledgingId(messageId)
     try {
-      return new Date(iso).toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } catch {
-      return iso
+      const res = await fetch(
+        `/api/chat/rooms/${selectedRoomId}/messages/${messageId}/ack`,
+        { method: 'POST' }
+      )
+      if (res.ok) {
+        await loadMessages(selectedRoomId)
+      } else {
+        const d = await res.json().catch(() => ({}))
+        alert((d as { error?: string }).error || 'Не удалось принять комментарий')
+      }
+    } finally {
+      setAcknowledgingId(null)
     }
   }
 
+  const filteredMessages = useMemo(() => {
+    const q = messageSearch.trim()
+    if (!q) return messages
+    return messages.filter((m) => messageMatchesSearch(m, q))
+  }, [messages, messageSearch])
+
   const general = rooms?.general
+  const comments = rooms?.comments
   const role = rooms?.currentUserRole ?? ''
-  const roomKind: 'GENERAL' | 'DIRECT' | 'TASK' | null =
+  const roomKind: 'GENERAL' | 'COMMENTS' | 'DIRECT' | 'TASK' | null =
     general && selectedRoomId === general.id
       ? 'GENERAL'
-      : rooms?.direct.some((d) => d.id === selectedRoomId)
-        ? 'DIRECT'
-        : rooms?.tasks.some((t) => t.id === selectedRoomId)
-          ? 'TASK'
-          : null
+      : comments && selectedRoomId === comments.id
+        ? 'COMMENTS'
+        : rooms?.direct.some((d) => d.id === selectedRoomId)
+          ? 'DIRECT'
+          : rooms?.tasks.some((t) => t.id === selectedRoomId)
+            ? 'TASK'
+            : null
 
   const canClearGeneral = role === 'ADMIN'
+  const canAckComments = role === 'ADMIN' || role === 'MANAGER' || role === 'CHIEF_ENGINEER'
   const showClear =
     selectedRoomId &&
-    (roomKind === 'DIRECT' || roomKind === 'TASK' || (roomKind === 'GENERAL' && canClearGeneral))
+    (roomKind === 'DIRECT' ||
+      roomKind === 'TASK' ||
+      ((roomKind === 'GENERAL' || roomKind === 'COMMENTS') && canClearGeneral))
   const showHide = selectedRoomId && (roomKind === 'DIRECT' || roomKind === 'TASK')
   const isGeneralRoom = roomKind === 'GENERAL'
+  const isCommentsRoom = roomKind === 'COMMENTS'
 
   return (
     <div className="flex flex-col md:flex-row gap-4 min-h-[calc(100vh-8rem)]">
@@ -413,6 +516,25 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
               </div>
               {general.lastMessage && (
                 <div className="text-xs text-gray-500 truncate mt-0.5">{general.lastMessage.body}</div>
+              )}
+            </button>
+          )}
+          {comments && (
+            <button
+              type="button"
+              onClick={() => selectRoom(comments.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                selectedRoomId === comments.id ? 'bg-blue-50 border-blue-200' : 'border-transparent hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center gap-2 w-full min-w-0">
+                <span className="font-medium text-gray-900 truncate flex-1 min-w-0 text-left">
+                  📝 {comments.title}
+                </span>
+                <RoomUnreadBadge count={comments.unreadCount} />
+              </div>
+              {comments.lastMessage && (
+                <div className="text-xs text-gray-500 truncate mt-0.5">{comments.lastMessage.body}</div>
               )}
             </button>
           )}
@@ -493,6 +615,7 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
             <div className="border-b px-4 py-3 bg-gray-50 flex flex-wrap items-center gap-2 justify-between">
               <div className="text-sm font-medium text-gray-800 min-w-0">
                 {general && selectedRoomId === general.id && general.title}
+                {comments && selectedRoomId === comments.id && comments.title}
                 {rooms?.direct.find((d) => d.id === selectedRoomId) && (
                   <>👤 {rooms.direct.find((d) => d.id === selectedRoomId)?.title}</>
                 )}
@@ -521,11 +644,38 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
                 )}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
+            <div className="border-b px-4 py-2 bg-white">
+              <div className="relative">
+                <input
+                  type="search"
+                  value={messageSearch}
+                  onChange={(e) => setMessageSearch(e.target.value)}
+                  placeholder="Поиск по сообщениям…"
+                  className="w-full border rounded-lg pl-3 pr-9 py-2 text-sm"
+                />
+                {messageSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setMessageSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                    aria-label="Очистить поиск"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div
+              ref={messagesScrollRef}
+              onScroll={handleMessagesScroll}
+              className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50"
+            >
               {loadingMessages && messages.length === 0 ? (
                 <div className="text-gray-400 text-sm">Загрузка сообщений…</div>
+              ) : messageSearch.trim() && filteredMessages.length === 0 ? (
+                <div className="text-gray-400 text-sm text-center py-8">Сообщения не найдены</div>
               ) : (
-                messages.map((m) => {
+                filteredMessages.map((m) => {
                   const isOwnAuthor =
                     Boolean(currentUserId && m.author.id === currentUserId) && !m.isSystem
                   const isDeleted = Boolean(m.deletedAt)
@@ -602,6 +752,52 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
                     )
                   }
 
+                  if (isCommentsRoom && isEngineerInternalComment(m.metadata)) {
+                    const meta = m.metadata
+                    const ack = meta.acknowledged
+                    return (
+                      <div key={m.id} className="flex justify-start w-full">
+                        <div className="w-full max-w-[95%] rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 text-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1 min-w-0 flex-1">
+                              <div className="font-semibold text-violet-950">Внутренний комментарий инженера</div>
+                              <div className="text-xs text-violet-900/80 space-y-0.5">
+                                <div>Филиал: {meta.branchName}</div>
+                                <div>
+                                  Оборудование: {meta.equipmentBrand} {meta.equipmentModel} ({meta.serialNumber})
+                                </div>
+                                <div>Задача №{meta.taskNumber}</div>
+                                <div>Инженер: {m.author.name}</div>
+                                <div>{formatTime(m.createdAt)}</div>
+                              </div>
+                              <div className="pt-2 whitespace-pre-wrap break-words text-gray-900">
+                                {meta.commentText}
+                              </div>
+                            </div>
+                            <div className="shrink-0">
+                              {ack ? (
+                                <div className="text-xs text-green-800 bg-green-50 border border-green-200 rounded-lg px-2 py-1.5 whitespace-nowrap">
+                                  Принял: {ack.userName} в {formatTime(ack.at)}
+                                </div>
+                              ) : canAckComments ? (
+                                <button
+                                  type="button"
+                                  disabled={acknowledgingId === m.id}
+                                  onClick={() => void acknowledgeComment(m.id)}
+                                  className="text-xs px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  {acknowledgingId === m.id ? '…' : 'Принято'}
+                                </button>
+                              ) : (
+                                <div className="text-xs text-gray-500 italic">Ожидает принятия</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   if (isGeneralRoom) {
                     return (
                       <div key={m.id} className="flex gap-2 items-start w-full">
@@ -645,22 +841,24 @@ export default function ChatPageClient({ initialRoomId }: { initialRoomId: strin
               )}
               <div ref={bottomRef} />
             </div>
-            <form onSubmit={sendMessage} className="border-t p-3 flex gap-2 bg-white">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Сообщение…"
-                className="flex-1 border rounded-lg px-3 py-2 text-sm"
-                disabled={sending}
-              />
-              <button
-                type="submit"
-                disabled={sending || !draft.trim()}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-40"
-              >
-                Отправить
-              </button>
-            </form>
+            {!isCommentsRoom && (
+              <form onSubmit={sendMessage} className="border-t p-3 flex gap-2 bg-white">
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Сообщение…"
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                  disabled={sending}
+                />
+                <button
+                  type="submit"
+                  disabled={sending || !draft.trim()}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-40"
+                >
+                  Отправить
+                </button>
+              </form>
+            )}
           </>
         )}
       </section>

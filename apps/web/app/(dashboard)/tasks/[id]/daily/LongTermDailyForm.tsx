@@ -1,34 +1,84 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
-
-type CheckRow = { label: string; checked: boolean }
+import { useEffect, useMemo, useState } from 'react'
+import {
+  mergeChecklistWithSaved,
+  parseDailyWorkChecklist,
+  splitDescriptionAndNotes,
+  type DailyWorkChecklistRow,
+} from '@/lib/daily-work-checklist'
 
 export default function LongTermDailyForm({
   taskId,
-  initialChecklist,
+  engineerId,
+  workCatalog,
   initialDate,
 }: {
   taskId: string
-  initialChecklist: CheckRow[]
+  engineerId: string
+  workCatalog: DailyWorkChecklistRow[]
   initialDate: string
 }) {
   const router = useRouter()
   const [date, setDate] = useState(initialDate)
-  const [description, setDescription] = useState('')
-  const [checklist, setChecklist] = useState<CheckRow[]>(() => initialChecklist.map((c) => ({ ...c })))
+  const [optionalNotes, setOptionalNotes] = useState('')
+  const [checklist, setChecklist] = useState<DailyWorkChecklistRow[]>(() =>
+    workCatalog.map((c) => ({ ...c, checked: false }))
+  )
   const [busy, setBusy] = useState(false)
+  const [loadingEntry, setLoadingEntry] = useState(false)
 
-  const canSubmit = useMemo(() => description.trim().length > 0, [description])
+  const canSubmit = useMemo(
+    () => checklist.some((row) => row.checked),
+    [checklist]
+  )
 
-  function toggle(idx: number) {
-    setChecklist((prev) => prev.map((row, i) => (i === idx ? { ...row, checked: !row.checked } : row)))
+  useEffect(() => {
+    let cancelled = false
+    setLoadingEntry(true)
+    fetch(`/api/tasks/${taskId}/daily-work`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return
+        const entries = Array.isArray(data?.entries) ? data.entries : []
+        const entry = entries.find(
+          (e: { date?: string; engineer?: { id?: string } }) =>
+            e.date === date && e.engineer?.id === engineerId
+        )
+        if (entry) {
+          const saved = parseDailyWorkChecklist(entry.checklist)
+          setChecklist(mergeChecklistWithSaved(workCatalog, saved))
+          const { optionalNotes: notes } = splitDescriptionAndNotes(entry.description || '')
+          setOptionalNotes(notes)
+        } else {
+          setChecklist(workCatalog.map((c) => ({ ...c, checked: false })))
+          setOptionalNotes('')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setChecklist(workCatalog.map((c) => ({ ...c, checked: false })))
+          setOptionalNotes('')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingEntry(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [date, taskId, engineerId, workCatalog])
+
+  function toggle(itemId: string) {
+    setChecklist((prev) =>
+      prev.map((row) => (row.itemId === itemId ? { ...row, checked: !row.checked } : row))
+    )
   }
 
   async function save() {
     if (!canSubmit) {
-      alert('Заполните описание работ за день')
+      alert('Отметьте хотя бы одну выполненную работу из списка')
       return
     }
     setBusy(true)
@@ -37,8 +87,12 @@ export default function LongTermDailyForm({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         date,
-        description: description.trim(),
-        checklist: checklist.map((c) => ({ label: c.label, checked: c.checked })),
+        optionalNotes: optionalNotes.trim(),
+        checklist: checklist.map((c) => ({
+          itemId: c.itemId,
+          label: c.label,
+          checked: c.checked,
+        })),
       }),
     })
     setBusy(false)
@@ -47,7 +101,6 @@ export default function LongTermDailyForm({
       alert((d as { error?: string }).error || 'Не удалось сохранить')
       return
     }
-    setDescription('')
     router.refresh()
   }
 
@@ -65,35 +118,47 @@ export default function LongTermDailyForm({
           />
         </label>
       </div>
+      <div>
+        <div className="text-sm font-medium text-gray-800 mb-1">
+          Выполненные работы за день *
+        </div>
+        <p className="text-xs text-gray-500 mb-2">
+          Список из справочника регламентов для данного типа работ и оборудования
+        </p>
+        {loadingEntry ? (
+          <div className="text-sm text-gray-400 border rounded-lg px-3 py-4">Загрузка…</div>
+        ) : (
+          <div className="border rounded-lg divide-y max-h-72 overflow-y-auto">
+            {checklist.map((row) => (
+              <label
+                key={row.itemId}
+                className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={row.checked}
+                  onChange={() => toggle(row.itemId)}
+                  className="w-4 h-4 accent-indigo-600 shrink-0"
+                />
+                <span>{row.label}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
       <label className="block text-sm">
-        <span className="text-gray-500 block mb-1">Что сделано за день *</span>
+        <span className="text-gray-500 block mb-1">Дополнительные заметки</span>
         <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
+          value={optionalNotes}
+          onChange={(e) => setOptionalNotes(e.target.value)}
+          rows={3}
           className="w-full border rounded-lg px-3 py-2"
-          placeholder="Кратко опишите выполненные работы…"
+          placeholder="Необязательно: особые условия, отклонения, комментарии…"
         />
       </label>
-      <div>
-        <div className="text-sm font-medium text-gray-800 mb-2">Чек-лист</div>
-        <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
-          {checklist.map((row, idx) => (
-            <label key={`${row.label}-${idx}`} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={row.checked}
-                onChange={() => toggle(idx)}
-                className="w-4 h-4 accent-indigo-600 shrink-0"
-              />
-              <span>{row.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
       <button
         type="button"
-        disabled={busy || !canSubmit}
+        disabled={busy || !canSubmit || loadingEntry}
         onClick={() => void save()}
         className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
       >

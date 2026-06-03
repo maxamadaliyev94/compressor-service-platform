@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { notifyClientSubscriberForEquipmentWork, notifyTaskCompletedForUser } from '@/lib/notifications'
 import { announceTaskCompletedInGeneralChat } from '@/lib/internal-chat'
+import { postEngineerInternalComment } from '@/lib/engineer-internal-comments'
+import { collectUniqueCheckedDailyWorkItems, parseDailyWorkChecklist } from '@/lib/daily-work-checklist'
 import { syncEngineerFreeIfNoActiveTasks } from '@/lib/engineerPresence'
 import { parsePngDataUrlSignature } from '@/lib/signature-png'
 import type { Role } from '@prisma/client'
@@ -122,34 +124,37 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const journalLines: string[] = []
   for (const dw of dailyWorks) {
     const ds = new Date(dw.date).toLocaleDateString('ru-RU')
-    journalLines.push(`--- ${ds} · ${dw.engineer.name} ---\n${dw.description}`)
-    const arr = dw.checklist as { label?: string; checked?: boolean }[]
-    if (Array.isArray(arr)) {
-      for (const c of arr) {
-        if (c.checked && typeof c.label === 'string') {
-          journalLines.push(`  ✓ ${c.label}`)
-        }
+    const checked = parseDailyWorkChecklist(dw.checklist).filter((c) => c.checked)
+    if (checked.length > 0) {
+      journalLines.push(`--- ${ds} · ${dw.engineer.name} ---`)
+      for (const c of checked) {
+        journalLines.push(`  ✓ ${c.label}`)
       }
+      if (dw.description.trim()) {
+        journalLines.push(dw.description.trim())
+      }
+    } else if (dw.description.trim()) {
+      journalLines.push(`--- ${ds} · ${dw.engineer.name} ---\n${dw.description.trim()}`)
     }
     journalLines.push('')
   }
   const journalText = journalLines.join('\n').trim()
   const notesCombined = [chiefNotes || null, journalText || 'Журнал работ пуст.'].filter(Boolean).join('\n\n')
 
-  const checklistCreates: { label: string; checked: boolean; order: number; performedAction: null }[] = []
-  let order = 0
-  checklistCreates.push({
-    label: 'Долгосрочная задача: сводный журнал работ по дням (см. раздел «Заметки»)',
-    checked: true,
-    order: order++,
-    performedAction: null,
-  })
-  for (const dw of dailyWorks) {
-    const ds = new Date(dw.date).toLocaleDateString('ru-RU')
-    checklistCreates.push({
-      label: `${ds} — ${dw.engineer.name}: ${dw.description.slice(0, 400)}${dw.description.length > 400 ? '…' : ''}`,
+  const uniqueWorks = collectUniqueCheckedDailyWorkItems(dailyWorks)
+  const checklistCreates: { label: string; checked: boolean; order: number; performedAction: null }[] =
+    uniqueWorks.map((work, index) => ({
+      label: work.label,
       checked: true,
-      order: order++,
+      order: index,
+      performedAction: null,
+    }))
+
+  if (checklistCreates.length === 0 && dailyWorks.length > 0) {
+    checklistCreates.push({
+      label: 'Работы по долгосрочной задаче (см. журнал)',
+      checked: true,
+      order: 0,
       performedAction: null,
     })
   }
@@ -226,6 +231,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await announceTaskCompletedInGeneralChat(task.id, session.user.id)
+
+  if (chiefNotes) {
+    await postEngineerInternalComment({
+      taskId: task.id,
+      authorId: session.user.id,
+      commentText: chiefNotes,
+    })
+  }
 
   const completionRecipients = new Set<string>()
   if (task.createdById) completionRecipients.add(task.createdById)

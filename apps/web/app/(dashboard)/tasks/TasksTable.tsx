@@ -427,23 +427,6 @@ export default function TasksTable({
     return `https://yandex.ru/maps/?text=${encodeURIComponent(destinationText)}`
   }
 
-  async function cancelTask(taskId: string) {
-    if (!confirm('Отменить задачу?')) return
-    setBusyId(taskId)
-    const res = await fetch(`/api/tasks/${taskId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'CANCELLED' }),
-    })
-    setBusyId(null)
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      alert((data as { error?: string }).error || 'Не удалось отменить задачу')
-      return
-    }
-    router.refresh()
-  }
-
   async function deleteTask(taskId: string) {
     if (!confirm('Удалить задачу безвозвратно?')) return
     setBusyId(taskId)
@@ -571,14 +554,13 @@ export default function TasksTable({
         {showActions && (
           <div className="mt-3 flex flex-col gap-2">
             {canCancelTask && !['DONE', 'CANCELLED'].includes(rep.status) && (
-              <button
-                type="button"
-                onClick={() => void cancelTask(rep.id)}
-                disabled={busy}
-                className="w-full min-h-11 border border-orange-200 text-orange-700 px-2.5 py-1 rounded text-xs hover:bg-orange-50 disabled:opacity-50"
+              <a
+                href={`/tasks/${rep.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full min-h-11 border border-blue-200 text-blue-700 px-2.5 py-1 rounded text-xs hover:bg-blue-50 inline-flex items-center justify-center"
               >
-                Отменить
-              </button>
+                Изменить
+              </a>
             )}
             {isAdmin && !bundle.tasks.some((t) => t.report) && (
               <button
@@ -679,17 +661,13 @@ export default function TasksTable({
           <td className="p-3">
             <div className="flex items-center gap-2">
               {canCancelTask && !['DONE', 'CANCELLED'].includes(rep.status) && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void cancelTask(rep.id)
-                  }}
-                  disabled={busy}
-                  className="border border-orange-200 text-orange-700 px-2 py-1 rounded text-xs hover:bg-orange-50 disabled:opacity-50"
+                <a
+                  href={`/tasks/${rep.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="border border-blue-200 text-blue-700 px-2 py-1 rounded text-xs hover:bg-blue-50"
                 >
-                  Отменить
-                </button>
+                  Изменить
+                </a>
               )}
               {isAdmin && !bundle.tasks.some((t) => t.report) && (
                 <button
@@ -805,7 +783,7 @@ export default function TasksTable({
           </div>
         </div>
         <p className="text-[11px] text-slate-500 leading-relaxed m-0 pb-0.5 border-t border-slate-100/90 pt-2 sm:border-t sm:pt-2">
-          <span className="font-medium text-slate-600">Дата создания</span> — для статусов «Назначена» и «В работе»
+          <span className="font-medium text-slate-600">Дата создания</span> — для статусов «Назначена» и «в работе»
           цветная точка у номера показывает давность:{' '}
           <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
             <span className="inline-block w-2 h-2 rounded-full bg-green-500 shrink-0" aria-hidden />

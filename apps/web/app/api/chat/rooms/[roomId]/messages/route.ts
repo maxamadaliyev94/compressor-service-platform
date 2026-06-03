@@ -26,6 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: { roomId: str
       id: m.id,
       body: m.body,
       isSystem: m.isSystem,
+      metadata: m.metadata ?? null,
       deletedAt: m.deletedAt?.toISOString() ?? null,
       editedAt: m.editedAt?.toISOString() ?? null,
       createdAt: m.createdAt.toISOString(),

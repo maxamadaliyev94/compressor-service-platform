@@ -11,6 +11,7 @@ import { MAX_REPORT_PHOTOS } from '@/lib/photo-limits'
 
 import { collectParticipantEngineerIdsForAct, participantEngineerIdsJson } from '@/lib/task-participation'
 import { announceTaskCompletedInGeneralChat } from '@/lib/internal-chat'
+import { postEngineerInternalComment } from '@/lib/engineer-internal-comments'
 
 function canExecuteServiceTask(
   role: Role,
@@ -324,6 +325,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await announceTaskCompletedInGeneralChat(task.id, session.user.id)
+
+  if (notes?.trim()) {
+    await postEngineerInternalComment({
+      taskId: task.id,
+      authorId: session.user.id,
+      commentText: notes,
+    })
+  }
 
   await notifyClientSubscriberForEquipmentWork(
     task.equipmentId,

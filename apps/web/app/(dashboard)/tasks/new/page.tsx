@@ -13,6 +13,20 @@ export default function NewTaskPage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<string[]>([])
   const [workTypes, setWorkTypes] = useState<{ code: string; nameRu: string }[]>([])
+  const [branchComments, setBranchComments] = useState<{
+    branchName: string
+    comments: {
+      id: string
+      commentText: string
+      createdAt: string
+      engineerName: string
+      taskNumber: number
+      equipmentBrand: string
+      equipmentModel: string
+      serialNumber: string
+    }[]
+  } | null>(null)
+  const [loadingBranchComments, setLoadingBranchComments] = useState(false)
   const [form, setForm] = useState({
     equipmentId: '',
     assignedToId: '',
@@ -49,6 +63,25 @@ export default function NewTaskPage() {
           })
       })
   }, [])
+
+  useEffect(() => {
+    if (!form.equipmentId) {
+      setBranchComments(null)
+      return
+    }
+    setLoadingBranchComments(true)
+    fetch(`/api/equipment/${form.equipmentId}/internal-comments`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.comments)) {
+          setBranchComments({ branchName: data.branchName, comments: data.comments })
+        } else {
+          setBranchComments(null)
+        }
+      })
+      .catch(() => setBranchComments(null))
+      .finally(() => setLoadingBranchComments(false))
+  }, [form.equipmentId])
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -255,6 +288,40 @@ export default function NewTaskPage() {
                 </div>
               ) : (
                 <div className="text-xs text-red-500">Выберите оборудование</div>
+              )}
+            </div>
+          )}
+          {form.equipmentId && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+              <div className="text-sm font-medium text-amber-950">
+                Последние 5 внутренних комментариев по филиалу
+                {branchComments?.branchName ? `: ${branchComments.branchName}` : ''}
+              </div>
+              {loadingBranchComments ? (
+                <div className="text-xs text-gray-500">Загрузка…</div>
+              ) : !branchComments || branchComments.comments.length === 0 ? (
+                <div className="text-xs text-gray-500">Комментариев пока нет</div>
+              ) : (
+                <ul className="space-y-2">
+                  {branchComments.comments.map((c) => (
+                    <li key={c.id} className="text-xs bg-white border rounded-lg p-2">
+                      <div className="text-gray-500 mb-1">
+                        {new Date(c.createdAt).toLocaleString('ru-RU', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}{' '}
+                        · {c.engineerName} · Задача №{c.taskNumber}
+                      </div>
+                      <div className="text-gray-700 mb-1">
+                        {c.equipmentBrand} {c.equipmentModel} ({c.serialNumber})
+                      </div>
+                      <div className="text-gray-900 whitespace-pre-wrap">{c.commentText}</div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}

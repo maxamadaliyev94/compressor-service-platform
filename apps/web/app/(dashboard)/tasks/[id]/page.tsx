@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { checklistActionLabelRu } from '@/lib/checklist-diagnostics'
+import { parseDailyWorkChecklist } from '@/lib/daily-work-checklist'
 import { parseDelegationParentTaskId } from '@/lib/task-delegation'
 import { hasPermission } from '@/lib/permissions'
 import TaskAdminActions from './TaskAdminActions'
@@ -474,10 +475,7 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
           ) : (
             <ul className="space-y-4">
               {task.dailyWorks.map((dw) => {
-                const items = Array.isArray(dw.checklist)
-                  ? (dw.checklist as { label?: string; checked?: boolean }[])
-                  : []
-                const checkedItems = items.filter((c) => c.checked && typeof c.label === 'string')
+                const checkedItems = parseDailyWorkChecklist(dw.checklist).filter((c) => c.checked)
                 return (
                   <li key={dw.id} className="border-l-2 border-indigo-200 pl-4 ml-0.5">
                     <div className="text-xs font-semibold text-indigo-700">
@@ -489,13 +487,14 @@ export default async function TaskDetailPage({ params }: { params: { id: string 
                       })}
                     </div>
                     <div className="text-sm font-medium text-gray-900 mt-0.5">{dw.engineer.name}</div>
-                    <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{dw.description}</p>
-                    {checkedItems.length > 0 && (
-                      <ul className="mt-2 text-xs text-gray-600 list-disc pl-4 space-y-0.5">
-                        {checkedItems.map((c, idx) => (
-                          <li key={idx}>{c.label}</li>
+                    {checkedItems.length > 0 ? (
+                      <ul className="mt-2 text-sm text-gray-700 list-disc pl-4 space-y-0.5">
+                        {checkedItems.map((c) => (
+                          <li key={c.itemId}>{c.label}</li>
                         ))}
                       </ul>
+                    ) : (
+                      <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{dw.description}</p>
                     )}
                   </li>
                 )

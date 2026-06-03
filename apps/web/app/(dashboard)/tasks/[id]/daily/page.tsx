@@ -2,20 +2,21 @@ import { db } from '@/lib/db'
 import { auth } from '@/auth'
 import { notFound, redirect } from 'next/navigation'
 import LongTermDailyForm from './LongTermDailyForm'
+import { parseDailyWorkChecklist } from '@/lib/daily-work-checklist'
 
-function buildInitialChecklist(
+function buildWorkCatalog(
   regulation: {
     name: string | null
     items: { id: string; label: string }[]
   } | null,
-): { label: string; checked: boolean }[] {
+): { itemId: string; label: string; checked: boolean }[] {
   if (regulation?.items?.length) {
-    return regulation.items.map((i) => ({ label: i.label, checked: false }))
+    return regulation.items.map((i) => ({ itemId: i.id, label: i.label, checked: false }))
   }
   return [
-    { label: 'Осмотр оборудования', checked: false },
-    { label: 'Работы по заданию', checked: false },
-    { label: 'Контроль параметров / безопасность', checked: false },
+    { itemId: 'default:inspection', label: 'Осмотр оборудования', checked: false },
+    { itemId: 'default:task-work', label: 'Работы по заданию', checked: false },
+    { itemId: 'default:safety', label: 'Контроль параметров / безопасность', checked: false },
   ]
 }
 
@@ -62,7 +63,7 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
     include: { items: { orderBy: { order: 'asc' } } },
   })
 
-  const initialChecklist = buildInitialChecklist(regulation)
+  const workCatalog = buildWorkCatalog(regulation)
   const initialDate = new Date().toISOString().slice(0, 10)
 
   const entries = await db.dailyWork.findMany({
@@ -83,21 +84,36 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
       <p className="text-sm text-gray-600">
         {task.equipment.brand} {task.equipment.model} · {task.equipment.object.branch.client.name}
       </p>
-      <LongTermDailyForm taskId={task.id} initialChecklist={initialChecklist} initialDate={initialDate} />
+      <LongTermDailyForm
+        taskId={task.id}
+        engineerId={session.user.id}
+        workCatalog={workCatalog}
+        initialDate={initialDate}
+      />
       <div className="bg-gray-50 border rounded-xl p-4">
         <h2 className="font-semibold text-gray-900 mb-2 text-sm">Недавние записи</h2>
         {entries.length === 0 ? (
           <p className="text-sm text-gray-500">Пока нет сохранённых записей</p>
         ) : (
           <ul className="space-y-2 text-sm">
-            {entries.map((e) => (
+            {entries.map((e) => {
+              const checked = parseDailyWorkChecklist(e.checklist).filter((c) => c.checked)
+              return (
               <li key={e.id} className="border-b border-gray-200 pb-2 last:border-0">
                 <div className="font-medium text-gray-800">
                   {new Date(e.date).toLocaleDateString('ru-RU')} · {e.engineer.name}
                 </div>
-                <p className="text-gray-600 whitespace-pre-wrap mt-0.5">{e.description}</p>
+                {checked.length > 0 ? (
+                  <ul className="text-gray-700 mt-1 list-disc pl-4 space-y-0.5">
+                    {checked.map((c) => (
+                      <li key={c.itemId}>{c.label}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-600 whitespace-pre-wrap mt-0.5">{e.description}</p>
+                )}
               </li>
-            ))}
+            )})}
           </ul>
         )}
       </div>

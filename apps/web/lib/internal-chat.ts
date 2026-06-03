@@ -1,6 +1,10 @@
 import { db } from '@/lib/db'
 import { createNotification } from '@/lib/notifications'
-import type { ChatRoomType, Role } from '@prisma/client'
+import type { ChatRoomType, Prisma, Role } from '@prisma/client'
+import {
+  isEngineerInternalCommentMetadata,
+  type EngineerInternalCommentMetadata,
+} from '@/lib/engineer-internal-comments'
 
 export const STAFF_ROLES: Role[] = ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER', 'ENGINEER']
 
@@ -24,6 +28,14 @@ export async function getOrCreateGeneralRoom() {
   let room = await db.chatRoom.findFirst({ where: { type: 'GENERAL' } })
   if (!room) {
     room = await db.chatRoom.create({ data: { type: 'GENERAL' } })
+  }
+  return room
+}
+
+export async function getOrCreateCommentsRoom() {
+  let room = await db.chatRoom.findFirst({ where: { type: 'COMMENTS' } })
+  if (!room) {
+    room = await db.chatRoom.create({ data: { type: 'COMMENTS' } })
   }
   return room
 }
@@ -84,7 +96,7 @@ export async function assertStaffCanAccessRoom(
     select: { id: true, type: true, dmKey: true, taskId: true },
   })
   if (!room || !isStaffRole(role)) return null
-  if (room.type === 'GENERAL') return room
+  if (room.type === 'GENERAL' || room.type === 'COMMENTS') return room
   if (room.type === 'DIRECT' && room.dmKey) {
     return getDmPeer(room.dmKey, userId) ? room : null
   }
@@ -110,6 +122,7 @@ export async function markRoomRead(userId: string, roomId: string) {
 
 async function collectAccessibleRoomIds(userId: string, role: Role): Promise<string[]> {
   const general = await getOrCreateGeneralRoom()
+  const comments = await getOrCreateCommentsRoom()
   const hiddenRows = await db.chatRoomHidden.findMany({
     where: { userId },
     select: { roomId: true },
@@ -145,6 +158,7 @@ async function collectAccessibleRoomIds(userId: string, role: Role): Promise<str
 
   const ids: string[] = []
   if (!hidden.has(general.id)) ids.push(general.id)
+  if (!hidden.has(comments.id)) ids.push(comments.id)
   for (const r of dmRooms) {
     if (!hidden.has(r.id)) ids.push(r.id)
   }
@@ -234,25 +248,27 @@ async function notifyChatRecipients(
     return
   }
 
-  const recipients = await db.user.findMany({
-    where: {
-      role: { in: [...STAFF_ROLES] },
-      isActive: true,
-      id: { not: authorId },
-    },
-    select: { id: true },
-  })
-  await Promise.all(
-    recipients.map((u) =>
-      createNotification({
-        userId: u.id,
-        title,
-        message,
-        type: 'CHAT',
-        link,
-      })
+  if (room.type === 'GENERAL' || room.type === 'COMMENTS' || room.type === 'TASK') {
+    const recipients = await db.user.findMany({
+      where: {
+        role: { in: [...STAFF_ROLES] },
+        isActive: true,
+        id: { not: authorId },
+      },
+      select: { id: true },
+    })
+    await Promise.all(
+      recipients.map((u) =>
+        createNotification({
+          userId: u.id,
+          title,
+          message,
+          type: 'CHAT',
+          link,
+        })
+      )
     )
-  )
+  }
 }
 
 export async function postChatMessage(roomId: string, authorId: string, body: string, isSystem = false) {
@@ -285,6 +301,84 @@ export async function postChatMessage(roomId: string, authorId: string, body: st
   await markRoomRead(authorId, roomId)
 
   return msg
+}
+
+export async function postEngineerInternalCommentMessage(
+  roomId: string,
+  authorId: string,
+  body: string,
+  metadata: Prisma.InputJsonValue
+) {
+  const trimmed = body.trim()
+  if (!trimmed) throw new Error('empty_body')
+
+  const msg = await db.chatMessage.create({
+    data: {
+      roomId,
+      authorId,
+      body: trimmed,
+      isSystem: false,
+      metadata,
+    },
+    include: {
+      author: { select: { id: true, name: true, avatarUrl: true } },
+      room: { select: { id: true, type: true, dmKey: true } },
+    },
+  })
+
+  await db.chatRoom.update({
+    where: { id: roomId },
+    data: { updatedAt: new Date() },
+  })
+
+  await db.chatRoomHidden.deleteMany({ where: { roomId } })
+
+  const preview = `Внутренний комментарий: ${trimmed}`
+  await notifyChatRecipients(msg.room, authorId, preview)
+  await markRoomRead(authorId, roomId)
+
+  return msg
+}
+
+const ACK_ROLES: Role[] = ['ADMIN', 'MANAGER', 'CHIEF_ENGINEER']
+
+export function canAckEngineerInternalComment(role: Role | string): boolean {
+  return ACK_ROLES.includes(role as Role)
+}
+
+export async function acknowledgeEngineerInternalComment(
+  messageId: string,
+  userId: string,
+  role: Role
+): Promise<EngineerInternalCommentMetadata | null> {
+  if (!canAckEngineerInternalComment(role)) throw new Error('forbidden')
+
+  const msg = await db.chatMessage.findUnique({
+    where: { id: messageId },
+    include: { room: { select: { type: true } } },
+  })
+  if (!msg || msg.deletedAt || msg.room.type !== 'COMMENTS') throw new Error('not_found')
+  if (!isEngineerInternalCommentMetadata(msg.metadata)) throw new Error('invalid_message')
+  if (msg.metadata.acknowledged) throw new Error('already_acknowledged')
+
+  const user = await db.user.findUnique({ where: { id: userId }, select: { name: true } })
+  if (!user) throw new Error('not_found')
+
+  const updated: EngineerInternalCommentMetadata = {
+    ...msg.metadata,
+    acknowledged: {
+      userId,
+      userName: user.name,
+      at: new Date().toISOString(),
+    },
+  }
+
+  await db.chatMessage.update({
+    where: { id: messageId },
+    data: { metadata: updated as Prisma.InputJsonValue },
+  })
+
+  return updated
 }
 
 function assigneeDescription(task: {

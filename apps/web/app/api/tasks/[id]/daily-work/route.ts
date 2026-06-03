@@ -2,20 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { canReadTask, type AuthedSession } from '@/lib/api-access'
-import type { Prisma } from '@prisma/client'
-
-function parseChecklist(raw: unknown): Prisma.InputJsonValue {
-  if (!Array.isArray(raw)) return []
-  const out: { label: string; checked: boolean }[] = []
-  for (const row of raw) {
-    if (typeof row !== 'object' || row === null) continue
-    const label = (row as { label?: unknown }).label
-    const checked = (row as { checked?: unknown }).checked
-    if (typeof label !== 'string' || typeof checked !== 'boolean') continue
-    out.push({ label, checked })
-  }
-  return out
-}
+import {
+  buildDailyWorkDescription,
+  dailyChecklistToJson,
+  parseDailyWorkChecklist,
+} from '@/lib/daily-work-checklist'
 
 function parseDay(value: unknown): Date | null {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -67,6 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const body = (await req.json().catch(() => null)) as {
     date?: string
     description?: string
+    optionalNotes?: string
     checklist?: unknown
   } | null
   if (!body || typeof body !== 'object') {
@@ -76,13 +68,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const day = parseDay(body.date) ?? parseDay(new Date().toISOString().slice(0, 10))
   if (!day) return NextResponse.json({ error: 'Некорректная дата' }, { status: 400 })
 
-  const description =
-    typeof body.description === 'string' ? body.description.trim() : ''
-  if (!description) {
-    return NextResponse.json({ error: 'Опишите выполненные работы за день' }, { status: 400 })
+  const checklist = parseDailyWorkChecklist(body.checklist)
+  const checkedCount = checklist.filter((r) => r.checked).length
+  if (checkedCount === 0) {
+    return NextResponse.json({ error: 'Отметьте хотя бы одну выполненную работу из списка' }, { status: 400 })
   }
 
-  const checklist = parseChecklist(body.checklist)
+  const optionalNotes =
+    typeof body.optionalNotes === 'string'
+      ? body.optionalNotes.trim()
+      : typeof body.description === 'string'
+        ? body.description.trim()
+        : ''
+  const description = buildDailyWorkDescription(checklist, optionalNotes)
+  const checklistJson = dailyChecklistToJson(checklist)
 
   const task = await db.serviceTask.findUnique({
     where: { id: params.id },
@@ -128,9 +127,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       engineerId: session.user.id,
       date: day,
       description,
-      checklist,
+      checklist: checklistJson,
     },
-    update: { description, checklist },
+    update: { description, checklist: checklistJson },
   })
 
   return NextResponse.json({

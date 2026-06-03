@@ -42,7 +42,9 @@ export default async function ChatPage({
     <div className="p-4 md:p-8">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold">Чат сотрудников</h1>
-        <p className="text-sm text-gray-500 mt-1">Общий чат, личные сообщения и обсуждения по задачам</p>
+        <p className="text-sm text-gray-500 mt-1">
+          Общий чат, комментарии инженеров, личные сообщения и обсуждения по задачам
+        </p>
       </div>
       <Suspense fallback={<div className="text-gray-500 text-sm">Загрузка чата…</div>}>
         <ChatPageClient initialRoomId={initialRoomId} />
