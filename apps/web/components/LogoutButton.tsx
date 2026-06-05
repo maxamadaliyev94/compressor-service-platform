@@ -1,8 +1,15 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { signOut } from 'next-auth/react'
 
-export function LogoutButton({ className }: { className?: string }) {
+export function LogoutButton({
+  className,
+  icon,
+}: {
+  className?: string
+  icon?: ReactNode
+}) {
   return (
     <button
       type="button"
@@ -16,7 +23,8 @@ export function LogoutButton({ className }: { className?: string }) {
         await signOut({ callbackUrl: '/login' })
       }}
     >
-      <span>→</span> Выйти
+      {icon ?? <span aria-hidden>→</span>}
+      Выйти
     </button>
   )
 }

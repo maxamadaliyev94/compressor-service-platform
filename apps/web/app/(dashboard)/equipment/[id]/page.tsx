@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation'
 import { hasPermission, requirePermission } from '@/lib/permissions'
 import type { Role } from '@prisma/client'
 import { sanitizeTasksForClientPortal } from '@/lib/client-portal-tasks'
+import { fetchEquipmentTypeLabelMap } from '@/lib/equipment-types'
 
 export default async function EquipmentPage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -104,11 +105,7 @@ export default async function EquipmentPage({ params }: { params: { id: string }
     ACTIVE: 'На гарантии', EXPIRING: 'Истекает',
     EXPIRED: 'Истекла', VOIDED: 'Аннулирована',
   }
-  const typeLabels: Record<string, string> = {
-    COMPRESSOR: 'Компрессор', DRYER: 'Осушитель',
-    RECEIVER: 'Ресивер', FILTER: 'Фильтр',
-    NITROGEN_GENERATOR: 'Азотный генератор', OTHER: 'Другое',
-  }
+  const typeLabels = await fetchEquipmentTypeLabelMap()
   const statusLabels: Record<string, string> = {
     WORKING: 'Работает', STOPPED: 'Остановлен',
     REPAIR: 'В ремонте', PRESERVED: 'Консервация',

@@ -5,6 +5,7 @@ import { getEquipmentClientId } from '@/lib/api-access'
 import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
 import { MAX_EQUIPMENT_PHOTOS } from '@/lib/photo-limits'
 import { Prisma } from '@prisma/client'
+import { assertActiveEquipmentTypeCode } from '@/lib/equipment-types'
 
 async function assertCanMutateEquipment(session: {
   user: { id: string; role: string }
@@ -83,13 +84,18 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           return Number.isFinite(n) ? n : null
         })()
 
+  const typeCode = typeof body.type === 'string' ? body.type.trim() : ''
+  if (!typeCode || !(await assertActiveEquipmentTypeCode(typeCode))) {
+    return NextResponse.json({ error: 'Выберите тип оборудования из справочника' }, { status: 400 })
+  }
+
   try {
     const equipment = await db.equipment.update({
       where: { id: params.id },
       data: {
         brand: String(body.brand ?? ''),
         model: String(body.model ?? ''),
-        type: body.type,
+        type: typeCode,
         serialNumber: String(body.serialNumber ?? ''),
         yearOfManufacture,
         installDate: body.installDate ? new Date(body.installDate) : null,

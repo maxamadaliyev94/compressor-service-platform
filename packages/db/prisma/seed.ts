@@ -494,6 +494,7 @@ async function main() {
     { name: 'RECEIVER', nameRu: 'Ресивер', isSystem: true },
     { name: 'FILTER', nameRu: 'Фильтр', isSystem: true },
     { name: 'NITROGEN_GENERATOR', nameRu: 'Азотный генератор', isSystem: true },
+    { name: 'OTHER', nameRu: 'Другое', isSystem: true },
   ]
   for (const type of equipmentTypes) {
     await prisma.equipmentTypeRef.upsert({

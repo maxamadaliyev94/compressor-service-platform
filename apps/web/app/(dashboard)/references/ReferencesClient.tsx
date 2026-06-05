@@ -882,12 +882,11 @@ export default function ReferencesClient({
                   onChange={(e) => setRegulationField('equipmentType', e.target.value)}
                   className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="COMPRESSOR">Компрессор</option>
-                  <option value="DRYER">Осушитель</option>
-                  <option value="RECEIVER">Ресивер</option>
-                  <option value="FILTER">Фильтр</option>
-                  <option value="NITROGEN_GENERATOR">Азотный генератор</option>
-                  <option value="OTHER">Другое</option>
+                  {types.map((t) => (
+                    <option key={t.id} value={t.name}>
+                      {t.nameRu}
+                    </option>
+                  ))}
                 </select>
               </div>
 

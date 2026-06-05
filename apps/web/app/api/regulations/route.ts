@@ -1,6 +1,7 @@
 import { db } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { assertActiveEquipmentTypeCode } from '@/lib/equipment-types'
 import { assertActiveWorkTypeCode } from '@/lib/work-types'
 
 export async function GET() {
@@ -29,13 +30,17 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json()
   const taskType = String(body.taskType || 'PLANNED_MAINTENANCE')
+  const equipmentType = String(body.equipmentType || 'COMPRESSOR')
   if (!(await assertActiveWorkTypeCode(taskType))) {
     return NextResponse.json({ error: 'Неизвестный тип работы' }, { status: 400 })
+  }
+  if (!(await assertActiveEquipmentTypeCode(equipmentType))) {
+    return NextResponse.json({ error: 'Неизвестный тип оборудования' }, { status: 400 })
   }
   const regulation = await db.maintenanceRegulation.create({
     data: {
       name: body.name,
-      equipmentType: body.equipmentType || 'COMPRESSOR',
+      equipmentType,
       intervalHours: parseInt(body.intervalHours) || 0,
       taskType,
       description: body.description || null,
@@ -79,13 +84,19 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Неизвестный тип работы' }, { status: 400 })
     }
   }
+  if (body.equipmentType !== undefined) {
+    const equipmentType = String(body.equipmentType)
+    if (!(await assertActiveEquipmentTypeCode(equipmentType))) {
+      return NextResponse.json({ error: 'Неизвестный тип оборудования' }, { status: 400 })
+    }
+  }
 
   const updated = await db.$transaction(async (tx) => {
     const regulation = await tx.maintenanceRegulation.update({
       where: { id: body.id },
       data: {
         name: body.name,
-        equipmentType: body.equipmentType as any,
+        equipmentType: body.equipmentType === undefined ? undefined : String(body.equipmentType),
         intervalHours:
           body.intervalHours === undefined ? undefined : parseInt(String(body.intervalHours), 10) || 0,
         taskType: body.taskType === undefined ? undefined : String(body.taskType),

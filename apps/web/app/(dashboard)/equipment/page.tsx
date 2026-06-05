@@ -103,11 +103,20 @@ export default async function EquipmentPage() {
 
   const serialized = JSON.parse(JSON.stringify(equipment)) as any[]
 
-  const equipmentTypes = await db.equipmentTypeRef.findMany({
+  const refTypes = await db.equipmentTypeRef.findMany({
     where: { isActive: true },
     orderBy: [{ isSystem: 'desc' }, { nameRu: 'asc' }],
     select: { name: true, nameRu: true },
   })
+  const knownNames = new Set(refTypes.map((t) => t.name))
+  const equipmentTypes = [...refTypes]
+  for (const eq of serialized) {
+    const code = eq.type as string | undefined
+    if (code && !knownNames.has(code)) {
+      equipmentTypes.push({ name: code, nameRu: code })
+      knownNames.add(code)
+    }
+  }
 
   const managerFilterUI =
     role === 'ADMIN' ? 'admin-dropdown' : role === 'MANAGER' ? 'manager-buttons' : null

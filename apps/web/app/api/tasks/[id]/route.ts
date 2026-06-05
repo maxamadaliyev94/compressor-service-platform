@@ -12,7 +12,8 @@ import {
 } from '@/lib/notifications'
 import { formatDateRu, formatLongTermNotifyPeriod } from '@/lib/task-schedule-display'
 import { logUserActivity, UserActivityAction } from '@/lib/user-activity-log'
-import type { Role, TaskWorkType } from '@prisma/client'
+import type { Role, TaskPriority, TaskWorkType } from '@prisma/client'
+import { assertActiveWorkTypeCode } from '@/lib/work-types'
 
 function utcDateOnlyFromDate(d: Date): Date {
   const x = new Date(d)
@@ -33,13 +34,17 @@ function canEditLongTermPlanDates(
   task: { taskType: TaskWorkType; managedByChiefId: string | null; assignedToId: string | null }
 ): boolean {
   if (task.taskType !== 'LONG_TERM') return false
-  if (role === 'ADMIN') return true
+  if (role === 'ADMIN' || role === 'MANAGER') return true
   if (role === 'CHIEF_ENGINEER') {
     if (task.managedByChiefId === userId) return true
     if (!task.managedByChiefId && task.assignedToId === userId) return true
     return false
   }
   return false
+}
+
+function canManagerEditActiveTask(role: Role): boolean {
+  return role === 'ADMIN' || role === 'MANAGER'
 }
 
 /** ГИ владеет родительской заявкой для этой дочерней распределённой задачи. */
@@ -67,6 +72,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     taskType?: TaskWorkType
     startDate?: string | null
     endDate?: string | null
+    equipmentId?: string
+    type?: string
+    priority?: TaskPriority
+    comment?: string | null
   } | null
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'Некорректное тело запроса' }, { status: 400 })
@@ -76,11 +85,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const hasAssignee = 'assignedToId' in body
   const hasTaskType = 'taskType' in body
   const hasLtDates = 'startDate' in body || 'endDate' in body
-  if (!hasScheduled && !hasAssignee && !hasTaskType && !hasLtDates) {
-    return NextResponse.json(
-      { error: 'Укажите scheduledAt, assignedToId, taskType, startDate или endDate' },
-      { status: 400 }
-    )
+  const hasEquipment = 'equipmentId' in body
+  const hasWorkType = 'type' in body
+  const hasPriority = 'priority' in body
+  const hasComment = 'comment' in body
+  if (
+    !hasScheduled &&
+    !hasAssignee &&
+    !hasTaskType &&
+    !hasLtDates &&
+    !hasEquipment &&
+    !hasWorkType &&
+    !hasPriority &&
+    !hasComment
+  ) {
+    return NextResponse.json({ error: 'Нет полей для обновления' }, { status: 400 })
   }
 
   const role = session.user.role as Role
@@ -168,13 +187,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         { status: 400 }
       )
     }
-    if (role !== 'ADMIN' && role !== 'CHIEF_ENGINEER') {
+    if (role !== 'ADMIN' && role !== 'MANAGER' && role !== 'CHIEF_ENGINEER') {
       return NextResponse.json({ error: 'Нет прав на изменение срока' }, { status: 403 })
     }
     if (role === 'CHIEF_ENGINEER') {
-      const own = task.assignedToId === session.user.id
       const subtree = await chiefOwnsDelegationParent(task, session.user.id)
-      if (!own && !subtree) {
+      const allowed =
+        task.assignedToId === session.user.id ||
+        task.managedByChiefId === session.user.id ||
+        subtree
+      if (!allowed) {
         return NextResponse.json({ error: 'Нет прав на изменение срока' }, { status: 403 })
       }
     }
@@ -228,9 +250,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   let newEngineerId: string | undefined
   let parentForNotify: { assignedToId: string | null } | null = null
+  let managerChiefReassign = false
 
   if (hasAssignee) {
-    if (role !== 'ADMIN' && role !== 'CHIEF_ENGINEER') {
+    if (role !== 'ADMIN' && role !== 'MANAGER' && role !== 'CHIEF_ENGINEER') {
       return NextResponse.json({ error: 'Нет прав на переназначение' }, { status: 403 })
     }
     if (task.report) {
@@ -242,6 +265,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'Укажите инженера' }, { status: 400 })
     }
 
+    const delegationParentId = parseDelegationParentTaskId(task.comment)
+
+    if (canManagerEditActiveTask(role) && !delegationParentId) {
+      const chief = await db.user.findFirst({
+        where: { id: rawId, role: 'CHIEF_ENGINEER', isActive: true },
+        select: { id: true, name: true },
+      })
+      if (!chief) {
+        return NextResponse.json({ error: 'Главный инженер не найден' }, { status: 400 })
+      }
+      newEngineerId = chief.id
+      managerChiefReassign = true
+      parentForNotify = null
+    } else {
     const engineer = await db.user.findFirst({
       where: { id: rawId, role: 'ENGINEER', isActive: true },
       select: { id: true, name: true },
@@ -302,6 +339,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       newEngineerId = engineer.id
       parentForNotify = parent
     }
+    }
   }
 
   const previousAssigneeId = task.assignedToId
@@ -312,9 +350,57 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     managedByChiefId?: string | null
     startDate?: Date | null
     endDate?: Date | null
+    equipmentId?: string
+    type?: string
+    priority?: TaskPriority
+    comment?: string | null
+    status?: typeof task.status
   } = {}
+
+  if (hasEquipment || hasWorkType || hasPriority || hasComment) {
+    if (!canManagerEditActiveTask(role)) {
+      return NextResponse.json({ error: 'Нет прав на изменение задачи' }, { status: 403 })
+    }
+    if (hasEquipment) {
+      const equipmentId = typeof body.equipmentId === 'string' ? body.equipmentId.trim() : ''
+      if (!equipmentId) {
+        return NextResponse.json({ error: 'Укажите оборудование' }, { status: 400 })
+      }
+      const eq = await db.equipment.findUnique({ where: { id: equipmentId }, select: { id: true } })
+      if (!eq) return NextResponse.json({ error: 'Оборудование не найдено' }, { status: 400 })
+      data.equipmentId = equipmentId
+    }
+    if (hasWorkType) {
+      const workType = typeof body.type === 'string' ? body.type.trim() : ''
+      if (!workType || !(await assertActiveWorkTypeCode(workType))) {
+        return NextResponse.json({ error: 'Неизвестный тип работы' }, { status: 400 })
+      }
+      data.type = workType
+    }
+    if (hasPriority) {
+      const p = body.priority
+      if (!p || !['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'].includes(p)) {
+        return NextResponse.json({ error: 'Некорректный приоритет' }, { status: 400 })
+      }
+      data.priority = p
+    }
+    if (hasComment) {
+      data.comment =
+        typeof body.comment === 'string'
+          ? body.comment.trim() || null
+          : body.comment === null
+            ? null
+            : undefined
+    }
+  }
   if (hasScheduled) data.scheduledAt = nextScheduledAt!
-  if (hasAssignee) data.assignedToId = newEngineerId!
+  if (hasAssignee) {
+    data.assignedToId = newEngineerId!
+    if (managerChiefReassign) {
+      data.managedByChiefId = null
+      if (task.status === 'NEW') data.status = 'ASSIGNED'
+    }
+  }
   if (hasTaskType) {
     data.taskType = nextTaskType!
     data.managedByChiefId = nextManagedByChiefId ?? null
@@ -390,7 +476,32 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     await markEngineerBusy(updated.assignedToId)
   }
 
-  if (hasAssignee && task.taskType === 'LONG_TERM' && newEngineerId) {
+  if (hasAssignee && managerChiefReassign && newEngineerId && previousAssigneeId !== newEngineerId) {
+    if (previousAssigneeId) await syncEngineerFreeIfNoActiveTasks(previousAssigneeId)
+    await markEngineerBusy(newEngineerId)
+    const chiefUser = await db.user.findUnique({
+      where: { id: newEngineerId },
+      select: { id: true, name: true },
+    })
+    const creator = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, name: true },
+    })
+    if (chiefUser && creator) {
+      await notifyTaskAssigned(
+        {
+          id: updated.id,
+          type: updated.type,
+          priority: updated.priority,
+          comment: updated.comment,
+        },
+        chiefUser,
+        creator
+      )
+    }
+  }
+
+  if (hasAssignee && task.taskType === 'LONG_TERM' && newEngineerId && !managerChiefReassign) {
     await db.longTermTaskEngineer.deleteMany({ where: { taskId: params.id } })
     await db.longTermTaskEngineer.create({
       data: { taskId: params.id, engineerId: newEngineerId },

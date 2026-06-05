@@ -359,7 +359,8 @@ model Object {
 model Equipment {
   id                 String              @id @default(cuid())
   objectId           String
-  type               EquipmentType
+  /// Код типа из справочника `EquipmentTypeRef.name`.
+  type               String
   brand              String
   model              String
   serialNumber       String              @unique
@@ -618,7 +619,8 @@ model Attachment {
 model MaintenanceRegulation {
   id            String        @id @default(cuid())
   name          String
-  equipmentType EquipmentType
+  /// Код типа оборудования из справочника `EquipmentTypeRef.name`.
+  equipmentType String        @default("COMPRESSOR")
   intervalHours Int
   /// Код типа работы из справочника `WorkTypeRef.code`.
   taskType      String        @default("PLANNED_MAINTENANCE")

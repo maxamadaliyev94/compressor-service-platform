@@ -5,6 +5,7 @@ import { MAX_EQUIPMENT_PHOTOS } from '@/lib/photo-limits'
 import { hasPermission } from '@/lib/permissions'
 import { canReadClientScope, prismaWhereEngineerTaskAssignment, type AuthedSession } from '@/lib/api-access'
 import type { Role } from '@prisma/client'
+import { assertActiveEquipmentTypeCode } from '@/lib/equipment-types'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -97,6 +98,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const typeCode = typeof body.type === 'string' ? body.type.trim() : ''
+  if (!typeCode || !(await assertActiveEquipmentTypeCode(typeCode))) {
+    return NextResponse.json({ error: 'Выберите тип оборудования из справочника' }, { status: 400 })
+  }
+
   const photos = Array.isArray(body.photos)
     ? body.photos
         .filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)
@@ -115,7 +121,7 @@ export async function POST(req: NextRequest) {
   const equipment = await db.equipment.create({
     data: {
       objectId,
-      type: body.type,
+      type: typeCode,
       brand: body.brand,
       model: body.model,
       serialNumber: body.serialNumber,

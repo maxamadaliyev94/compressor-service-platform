@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import BrandSelect from './BrandSelect'
 import ClientSelect from './ClientSelect'
-import EquipmentTypeSelect from './EquipmentTypeSelect'
+import EquipmentTypeSelect from '@/components/EquipmentTypeSelect'
 import { MAX_EQUIPMENT_PHOTOS } from '@/lib/photo-limits'
 
 export default function NewEquipmentPage() {
@@ -277,7 +277,12 @@ export default function NewEquipmentPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Тип *</label>
-                <EquipmentTypeSelect value={form.type} onChange={val => set('type', val)} />
+                <EquipmentTypeSelect
+                  value={form.type}
+                  onChange={(val) => set('type', val)}
+                  allowEmpty
+                  required
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Бренд *</label>

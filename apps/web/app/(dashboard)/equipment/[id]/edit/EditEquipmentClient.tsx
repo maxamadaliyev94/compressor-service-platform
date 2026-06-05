@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import EquipmentTypeSelect from '@/components/EquipmentTypeSelect'
 
 export default function EditEquipmentClient({ equipment }: { equipment: any }) {
   const router = useRouter()
@@ -65,14 +66,7 @@ export default function EditEquipmentClient({ equipment }: { equipment: any }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">Тип</label>
-          <select value={form.type} onChange={(e) => set('type', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm">
-            <option value="COMPRESSOR">Компрессор</option>
-            <option value="DRYER">Осушитель</option>
-            <option value="RECEIVER">Ресивер</option>
-            <option value="FILTER">Фильтр</option>
-            <option value="NITROGEN_GENERATOR">Азотный генератор</option>
-            <option value="OTHER">Другое</option>
-          </select>
+          <EquipmentTypeSelect value={form.type} onChange={(val) => set('type', val)} required />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Статус</label>

@@ -555,7 +555,7 @@ export default function TasksTable({
           <div className="mt-3 flex flex-col gap-2">
             {canCancelTask && !['DONE', 'CANCELLED'].includes(rep.status) && (
               <a
-                href={`/tasks/${rep.id}`}
+                href={`/tasks/${rep.id}/edit`}
                 onClick={(e) => e.stopPropagation()}
                 className="w-full min-h-11 border border-blue-200 text-blue-700 px-2.5 py-1 rounded text-xs hover:bg-blue-50 inline-flex items-center justify-center"
               >
@@ -662,7 +662,7 @@ export default function TasksTable({
             <div className="flex items-center gap-2">
               {canCancelTask && !['DONE', 'CANCELLED'].includes(rep.status) && (
                 <a
-                  href={`/tasks/${rep.id}`}
+                  href={`/tasks/${rep.id}/edit`}
                   onClick={(e) => e.stopPropagation()}
                   className="border border-blue-200 text-blue-700 px-2 py-1 rounded text-xs hover:bg-blue-50"
                 >

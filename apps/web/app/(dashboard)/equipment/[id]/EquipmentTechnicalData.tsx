@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { getWarrantyStatus } from '@csp/shared'
+import EquipmentTypeSelect from '@/components/EquipmentTypeSelect'
 
 type Initial = {
   type: string
@@ -18,15 +19,6 @@ type Initial = {
   currentHours: number
   nextServiceHours: number | null
   notes: string | null
-}
-
-const typeLabels: Record<string, string> = {
-  COMPRESSOR: 'Компрессор',
-  DRYER: 'Осушитель',
-  RECEIVER: 'Ресивер',
-  FILTER: 'Фильтр',
-  NITROGEN_GENERATOR: 'Азотный генератор',
-  OTHER: 'Другое',
 }
 
 const statusLabels: Record<string, string> = {
@@ -67,6 +59,26 @@ export default function EquipmentTechnicalData({
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [snap, setSnap] = useState(initial)
+  const [typeLabels, setTypeLabels] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    fetch('/api/equipment-types')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (!Array.isArray(data)) return
+        const map: Record<string, string> = {}
+        for (const row of data as { name: string; nameRu: string }[]) {
+          map[row.name] = row.nameRu
+        }
+        setTypeLabels(map)
+      })
+      .catch(() => {})
+  }, [])
+
+  const typeLabel = useMemo(
+    () => typeLabels[snap.type] ?? snap.type,
+    [typeLabels, snap.type]
+  )
 
   const [form, setForm] = useState(() => ({
     type: initial.type,
@@ -205,19 +217,14 @@ export default function EquipmentTechnicalData({
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-2">
           <span className="text-gray-500 w-28 shrink-0">Тип:</span>
           {editing ? (
-            <select
+            <EquipmentTypeSelect
               value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+              onChange={(val) => setForm((f) => ({ ...f, type: val }))}
               className="flex-1 min-w-0 border rounded-lg px-2 py-1.5 text-sm"
-            >
-              {Object.entries(typeLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              required
+            />
           ) : (
-            <span>{typeLabels[snap.type] ?? snap.type}</span>
+            <span>{typeLabel}</span>
           )}
         </div>
 
