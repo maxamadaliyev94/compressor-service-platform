@@ -9,6 +9,10 @@ import {
   prismaWhereClientEquipment,
   prismaWhereEngineerTaskAssignment,
 } from '@/lib/api-access'
+import {
+  buildEquipmentTypeFilterOptions,
+  fetchActiveEquipmentTypes,
+} from '@/lib/equipment-types'
 
 export default async function EquipmentPage() {
   await requirePermission('section:equipment')
@@ -103,20 +107,9 @@ export default async function EquipmentPage() {
 
   const serialized = JSON.parse(JSON.stringify(equipment)) as any[]
 
-  const refTypes = await db.equipmentTypeRef.findMany({
-    where: { isActive: true },
-    orderBy: [{ isSystem: 'desc' }, { nameRu: 'asc' }],
-    select: { name: true, nameRu: true },
-  })
-  const knownNames = new Set(refTypes.map((t) => t.name))
-  const equipmentTypes = [...refTypes]
-  for (const eq of serialized) {
-    const code = eq.type as string | undefined
-    if (code && !knownNames.has(code)) {
-      equipmentTypes.push({ name: code, nameRu: code })
-      knownNames.add(code)
-    }
-  }
+  const refTypes = await fetchActiveEquipmentTypes()
+  const equipmentCodes = serialized.map((eq) => eq.type as string | undefined).filter(Boolean) as string[]
+  const equipmentTypes = buildEquipmentTypeFilterOptions(refTypes, equipmentCodes)
 
   const managerFilterUI =
     role === 'ADMIN' ? 'admin-dropdown' : role === 'MANAGER' ? 'manager-buttons' : null
@@ -160,6 +153,7 @@ export default async function EquipmentPage() {
       <SearchableEquipment
         equipment={serialized}
         equipmentTypes={equipmentTypes}
+        equipmentTypeRefs={refTypes}
         canViewWarranty={canViewWarranty}
         canManageEquipment={canManageEquipment}
         managerFilterUI={managerFilterUI}

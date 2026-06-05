@@ -1,10 +1,12 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { equipmentTypesMatch, type EquipmentTypeRefRow } from '@/lib/equipment-types'
 
 export default function SearchableEquipment({
   equipment,
   equipmentTypes,
+  equipmentTypeRefs,
   canViewWarranty,
   canManageEquipment,
   managerFilterUI = null,
@@ -13,6 +15,7 @@ export default function SearchableEquipment({
 }: {
   equipment: any[]
   equipmentTypes: { name: string; nameRu: string }[]
+  equipmentTypeRefs: EquipmentTypeRefRow[]
   canViewWarranty: boolean
   canManageEquipment: boolean
   managerFilterUI?: 'manager-buttons' | 'admin-dropdown' | null
@@ -137,7 +140,7 @@ export default function SearchableEquipment({
       eq.object?.branch?.name?.toLowerCase().includes(q) ||
       eq.object?.name?.toLowerCase().includes(q)
     const matchStatus = filterStatus === 'ALL' || ms === filterStatus
-    const matchType = filterType === 'ALL' || eq.type === filterType
+    const matchType = equipmentTypesMatch(eq.type ?? '', filterType, equipmentTypeRefs)
     const matchWarranty =
       filterWarranty === 'ALL' ||
       (filterWarranty === 'ACTIVE' && (ws === 'ACTIVE' || ws === 'EXPIRING')) ||
