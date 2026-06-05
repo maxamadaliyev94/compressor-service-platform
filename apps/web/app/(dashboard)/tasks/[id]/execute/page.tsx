@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { notFound, redirect } from 'next/navigation'
 import ExecuteTaskClient from './ExecuteTaskClient'
 import { canReadTask, type AuthedSession } from '@/lib/api-access'
+import { findMaintenanceRegulation } from '@/lib/maintenance-regulations'
 
 export default async function ExecuteTaskPage({ params }: { params: { id: string } }) {
   const session = await auth()
@@ -49,13 +50,10 @@ export default async function ExecuteTaskPage({ params }: { params: { id: string
     redirect(`/tasks/${params.id}`)
   }
 
-  const regulation = await db.maintenanceRegulation.findFirst({
-    where: {
-      taskType: task.type,
-      equipmentType: task.equipment.type,
-      isActive: true,
-    },
-    include: { items: { orderBy: { order: 'asc' } } }
+  const regulation = await findMaintenanceRegulation({
+    taskType: task.type,
+    equipmentType: task.equipment.type,
+    taskScope: 'QUICK',
   })
 
   const role = session.user.role

@@ -13,11 +13,13 @@ export default function LongTermDailyForm({
   taskId,
   engineerId,
   workCatalog,
+  regulationName,
   initialDate,
 }: {
   taskId: string
   engineerId: string
   workCatalog: DailyWorkChecklistRow[]
+  regulationName?: string | null
   initialDate: string
 }) {
   const router = useRouter()
@@ -123,7 +125,9 @@ export default function LongTermDailyForm({
           Выполненные работы за день *
         </div>
         <p className="text-xs text-gray-500 mb-2">
-          Список из справочника регламентов для данного типа работ и оборудования
+          {regulationName
+            ? `Чек-лист «${regulationName}» из справочника`
+            : 'Список из справочника для данного типа работ и оборудования'}
         </p>
         {loadingEntry ? (
           <div className="text-sm text-gray-400 border rounded-lg px-3 py-4">Загрузка…</div>

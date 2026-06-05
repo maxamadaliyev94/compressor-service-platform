@@ -1,6 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { workTypeLabelMap } from '@/lib/work-types'
+import { regulationTaskScopeLabels } from '@/lib/maintenance-regulations'
 
 type RegulationItem = {
   id?: string
@@ -14,6 +15,7 @@ type Regulation = {
   equipmentType: string
   intervalHours: number
   taskType: string
+  taskScope?: 'QUICK' | 'LONG_TERM'
   description?: string | null
   items: RegulationItem[]
 }
@@ -33,6 +35,7 @@ interface Props {
   initialCities: { id: string; name: string; sortOrder: number }[]
   initialWorkTypes: WorkType[]
   isAdmin: boolean
+  canManageRegulations: boolean
 }
 
 export default function ReferencesClient({
@@ -42,6 +45,7 @@ export default function ReferencesClient({
   initialCities,
   initialWorkTypes,
   isAdmin,
+  canManageRegulations,
 }: Props) {
   const [types, setTypes] = useState(initialTypes)
   const [brands, setBrands] = useState(initialBrands)
@@ -71,6 +75,7 @@ export default function ReferencesClient({
     name: '',
     equipmentType: 'COMPRESSOR',
     taskType: 'PLANNED_MAINTENANCE',
+    taskScope: 'QUICK' as 'QUICK' | 'LONG_TERM',
     intervalHours: '2000',
     description: '',
     itemsText: '',
@@ -154,6 +159,7 @@ export default function ReferencesClient({
       name: '',
       equipmentType: 'COMPRESSOR',
       taskType: defaultTaskTypeCode,
+      taskScope: 'QUICK',
       intervalHours: '2000',
       description: '',
       itemsText: '',
@@ -166,6 +172,7 @@ export default function ReferencesClient({
       name: regulation.name,
       equipmentType: regulation.equipmentType,
       taskType: regulation.taskType,
+      taskScope: regulation.taskScope === 'LONG_TERM' ? 'LONG_TERM' : 'QUICK',
       intervalHours: String(regulation.intervalHours ?? 0),
       description: regulation.description ?? '',
       itemsText: regulation.items.map((i) => i.label).join('\n'),
@@ -193,6 +200,7 @@ export default function ReferencesClient({
         name: regulationForm.name.trim(),
         equipmentType: regulationForm.equipmentType,
         taskType: regulationForm.taskType,
+        taskScope: regulationForm.taskScope,
         intervalHours: parseInt(regulationForm.intervalHours, 10) || 0,
         description: regulationForm.description.trim() || null,
         items,
@@ -839,7 +847,7 @@ export default function ReferencesClient({
 
       {activeTab === 'regulations' && (
         <div className="space-y-4">
-          {isAdmin && (
+          {canManageRegulations && (
             <div className="bg-white border rounded-xl p-4 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <h2 className="font-semibold">
@@ -890,7 +898,17 @@ export default function ReferencesClient({
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <select
+                  value={regulationForm.taskScope}
+                  onChange={(e) =>
+                    setRegulationField('taskScope', e.target.value as 'QUICK' | 'LONG_TERM')
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="QUICK">{regulationTaskScopeLabels.QUICK}</option>
+                  <option value="LONG_TERM">{regulationTaskScopeLabels.LONG_TERM}</option>
+                </select>
                 <select
                   value={regulationForm.taskType}
                   onChange={(e) => setRegulationField('taskType', e.target.value)}
@@ -902,6 +920,9 @@ export default function ReferencesClient({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <input
                   type="number"
                   value={regulationForm.intervalHours}
@@ -946,6 +967,7 @@ export default function ReferencesClient({
                 <div>
                   <div className="font-semibold">{reg.name}</div>
                   <div className="text-xs text-gray-500 mt-0.5">
+                    {regulationTaskScopeLabels[reg.taskScope === 'LONG_TERM' ? 'LONG_TERM' : 'QUICK']} ·{' '}
                     {taskLabels[reg.taskType] ?? reg.taskType} · {reg.equipmentType}
                     {reg.intervalHours > 0 ? ` · каждые ${reg.intervalHours} м/ч` : ' · по необходимости'}
                     {reg.description && ` · ${reg.description}`}
@@ -955,7 +977,7 @@ export default function ReferencesClient({
                   {reg.items.length} пунктов
                 </span>
               </div>
-              {isAdmin && (
+              {canManageRegulations && (
                 <div className="px-4 py-2 border-b bg-white flex gap-2">
                   <button
                     onClick={() => startEditRegulation(reg)}
@@ -984,9 +1006,9 @@ export default function ReferencesClient({
             </div>
           ))}
 
-          {!isAdmin && (
+          {!canManageRegulations && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-sm text-blue-600">
-              Для добавления или изменения чек-листов обратитесь к администратору
+              Для добавления или изменения чек-листов обратитесь к менеджеру или администратору
             </div>
           )}
         </div>

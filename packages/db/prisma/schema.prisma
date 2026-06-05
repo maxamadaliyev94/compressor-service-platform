@@ -616,17 +616,24 @@ model Attachment {
   @@map("attachments")
 }
 
+enum RegulationTaskScope {
+  QUICK
+  LONG_TERM
+}
+
 model MaintenanceRegulation {
-  id            String        @id @default(cuid())
+  id            String              @id @default(cuid())
   name          String
   /// Код типа оборудования из справочника `EquipmentTypeRef.name`.
-  equipmentType String        @default("COMPRESSOR")
+  equipmentType String              @default("COMPRESSOR")
   intervalHours Int
   /// Код типа работы из справочника `WorkTypeRef.code`.
-  taskType      String        @default("PLANNED_MAINTENANCE")
+  taskType      String              @default("PLANNED_MAINTENANCE")
+  /// Быстрые задачи (акт) или долгосрочные (дневной журнал).
+  taskScope     RegulationTaskScope @default(QUICK)
   description   String?
-  isActive      Boolean       @default(true)
-  createdAt     DateTime      @default(now())
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
   items         MaintenanceRegulationItem[]
 
   @@map("maintenance_regulations")

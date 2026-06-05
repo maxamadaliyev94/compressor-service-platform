@@ -20,7 +20,7 @@ export async function GET() {
 }
 
 function canManageRegulations(role?: string) {
-  return role === 'ADMIN'
+  return role === 'ADMIN' || role === 'MANAGER'
 }
 
 export async function POST(req: NextRequest) {
@@ -37,12 +37,15 @@ export async function POST(req: NextRequest) {
   if (!(await assertActiveEquipmentTypeCode(equipmentType))) {
     return NextResponse.json({ error: 'Неизвестный тип оборудования' }, { status: 400 })
   }
+  const taskScope = body.taskScope === 'LONG_TERM' ? 'LONG_TERM' : 'QUICK'
+
   const regulation = await db.maintenanceRegulation.create({
     data: {
       name: body.name,
       equipmentType,
       intervalHours: parseInt(body.intervalHours) || 0,
       taskType,
+      taskScope,
       description: body.description || null,
       items: {
         create: (body.items || []).map((item: any, i: number) => ({
@@ -70,6 +73,7 @@ export async function PATCH(req: NextRequest) {
     equipmentType?: string
     intervalHours?: number | string
     taskType?: string
+    taskScope?: string
     description?: string | null
     items?: Array<{ label: string; itemType?: string; isRequired?: boolean }>
   }
@@ -100,6 +104,12 @@ export async function PATCH(req: NextRequest) {
         intervalHours:
           body.intervalHours === undefined ? undefined : parseInt(String(body.intervalHours), 10) || 0,
         taskType: body.taskType === undefined ? undefined : String(body.taskType),
+        taskScope:
+          body.taskScope === undefined
+            ? undefined
+            : body.taskScope === 'LONG_TERM'
+              ? 'LONG_TERM'
+              : 'QUICK',
         description: body.description ?? null,
       },
     })

@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { notFound, redirect } from 'next/navigation'
 import LongTermDailyForm from './LongTermDailyForm'
 import { parseDailyWorkChecklist } from '@/lib/daily-work-checklist'
+import { findMaintenanceRegulation } from '@/lib/maintenance-regulations'
 
 function buildWorkCatalog(
   regulation: {
@@ -54,16 +55,14 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
     redirect(`/tasks/${params.id}`)
   }
 
-  const regulation = await db.maintenanceRegulation.findFirst({
-    where: {
-      taskType: task.type,
-      equipmentType: task.equipment.type,
-      isActive: true,
-    },
-    include: { items: { orderBy: { order: 'asc' } } },
+  const regulation = await findMaintenanceRegulation({
+    taskType: task.type,
+    equipmentType: task.equipment.type,
+    taskScope: 'LONG_TERM',
   })
 
   const workCatalog = buildWorkCatalog(regulation)
+  const usingDefaultCatalog = !regulation?.items?.length
   const initialDate = new Date().toISOString().slice(0, 10)
 
   const entries = await db.dailyWork.findMany({
@@ -84,10 +83,20 @@ export default async function LongTermDailyPage({ params }: { params: { id: stri
       <p className="text-sm text-gray-600">
         {task.equipment.brand} {task.equipment.model} · {task.equipment.object.branch.client.name}
       </p>
+      {usingDefaultCatalog && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
+          Чек-лист для долгосрочных работ не настроен. Менеджер или администратор может добавить его в{' '}
+          <a href="/references" className="underline font-medium">
+            Справочники → Чек-листы
+          </a>{' '}
+          (тип «Долгосрочные задачи»).
+        </div>
+      )}
       <LongTermDailyForm
         taskId={task.id}
         engineerId={session.user.id}
         workCatalog={workCatalog}
+        regulationName={regulation?.name ?? null}
         initialDate={initialDate}
       />
       <div className="bg-gray-50 border rounded-xl p-4">

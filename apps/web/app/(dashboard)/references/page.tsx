@@ -4,7 +4,9 @@ import ReferencesClient from './ReferencesClient'
 
 export default async function ReferencesPage() {
   const session = await auth()
-  const isAdmin = session?.user?.role === 'ADMIN'
+  const role = session?.user?.role
+  const isAdmin = role === 'ADMIN'
+  const canManageRegulations = role === 'ADMIN' || role === 'MANAGER'
 
   const [equipmentTypes, brands, regulations, cities, workTypes] = await Promise.all([
     db.equipmentTypeRef.findMany({
@@ -34,7 +36,7 @@ export default async function ReferencesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Справочники</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Типы оборудования, бренды, города и типы работ — в формах и чек-листах
+          Типы оборудования, бренды, города, типы работ и чек-листы для быстрых и долгосрочных задач
         </p>
       </div>
       <ReferencesClient
@@ -44,6 +46,7 @@ export default async function ReferencesPage() {
         initialCities={cities}
         initialWorkTypes={workTypes}
         isAdmin={isAdmin}
+        canManageRegulations={canManageRegulations}
       />
     </div>
   )
